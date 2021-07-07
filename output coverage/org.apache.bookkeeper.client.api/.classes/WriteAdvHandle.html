@@ -1,0 +1,227 @@
+
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html id="htmlId">
+<head>
+  <title>Coverage Report :: WriteAdvHandle</title>
+  <style type="text/css">
+    @import "../../.css/coverage.css";
+  </style>
+</head>
+
+<body>
+<div class="header"></div>
+
+<div class="content">
+<div class="breadCrumbs">
+    [ <a href="../../index.html">all classes</a> ]
+    [ <a href="../index.html">org.apache.bookkeeper.client.api</a> ]
+</div>
+
+<h1>Coverage Summary for Class: WriteAdvHandle (org.apache.bookkeeper.client.api)</h1>
+
+<table class="coverageStats">
+<tr>
+  <th class="name">Class</th>
+<th class="coverageStat 
+">
+  Class, %
+</th>
+<th class="coverageStat 
+">
+  Method, %
+</th>
+<th class="coverageStat 
+">
+  Line, %
+</th>
+</tr>
+<tr>
+  <td class="name">WriteAdvHandle</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 1)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 7)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 7)
+  </span>
+</td>
+</tr>
+
+</table>
+
+<br/>
+<br/>
+
+
+<div class="sourceCode"><i>1</i>&nbsp;/**
+<i>2</i>&nbsp; *
+<i>3</i>&nbsp; * Licensed to the Apache Software Foundation (ASF) under one
+<i>4</i>&nbsp; * or more contributor license agreements.  See the NOTICE file
+<i>5</i>&nbsp; * distributed with this work for additional information
+<i>6</i>&nbsp; * regarding copyright ownership.  The ASF licenses this file
+<i>7</i>&nbsp; * to you under the Apache License, Version 2.0 (the
+<i>8</i>&nbsp; * &quot;License&quot;); you may not use this file except in compliance
+<i>9</i>&nbsp; * with the License.  You may obtain a copy of the License at
+<i>10</i>&nbsp; *
+<i>11</i>&nbsp; *   http://www.apache.org/licenses/LICENSE-2.0
+<i>12</i>&nbsp; *
+<i>13</i>&nbsp; * Unless required by applicable law or agreed to in writing,
+<i>14</i>&nbsp; * software distributed under the License is distributed on an
+<i>15</i>&nbsp; * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+<i>16</i>&nbsp; * KIND, either express or implied.  See the License for the
+<i>17</i>&nbsp; * specific language governing permissions and limitations
+<i>18</i>&nbsp; * under the License.
+<i>19</i>&nbsp; *
+<i>20</i>&nbsp; */
+<i>21</i>&nbsp;package org.apache.bookkeeper.client.api;
+<i>22</i>&nbsp;
+<i>23</i>&nbsp;import io.netty.buffer.ByteBuf;
+<i>24</i>&nbsp;import io.netty.buffer.Unpooled;
+<i>25</i>&nbsp;import java.nio.ByteBuffer;
+<i>26</i>&nbsp;import java.util.concurrent.CompletableFuture;
+<i>27</i>&nbsp;import org.apache.bookkeeper.common.annotation.InterfaceAudience.Public;
+<i>28</i>&nbsp;import org.apache.bookkeeper.common.annotation.InterfaceStability.Unstable;
+<i>29</i>&nbsp;import org.apache.bookkeeper.common.concurrent.FutureUtils;
+<i>30</i>&nbsp;
+<i>31</i>&nbsp;/**
+<i>32</i>&nbsp; * Provide write access to a ledger. Using WriteAdvHandler the writer MUST explictly set an entryId. Beware that the
+<i>33</i>&nbsp; * write for a given entryId will be acknowledged if and only if all entries up to entryId - 1 have been acknowledged
+<i>34</i>&nbsp; * too (expected from entryId 0)
+<i>35</i>&nbsp; *
+<i>36</i>&nbsp; * @see WriteHandle
+<i>37</i>&nbsp; *
+<i>38</i>&nbsp; * @since 4.6
+<i>39</i>&nbsp; */
+<i>40</i>&nbsp;@Public
+<i>41</i>&nbsp;@Unstable
+<i>42</i>&nbsp;public interface WriteAdvHandle extends ReadHandle, ForceableHandle {
+<i>43</i>&nbsp;
+<i>44</i>&nbsp;    /**
+<i>45</i>&nbsp;     * Add entry asynchronously to an open ledger.
+<i>46</i>&nbsp;     *
+<i>47</i>&nbsp;     * @param entryId entryId to be added
+<i>48</i>&nbsp;     * @param data array of bytes to be written
+<i>49</i>&nbsp;     *             do not reuse the buffer, bk-client will release it appropriately.
+<i>50</i>&nbsp;     * @return an handle to the result, in case of success it will return the same value of param entryId.
+<i>51</i>&nbsp;     */
+<i>52</i>&nbsp;    default CompletableFuture&lt;Long&gt; writeAsync(final long entryId, final ByteBuffer data) {
+<b class="nc"><i>53</i>&nbsp;        return writeAsync(entryId, Unpooled.wrappedBuffer(data));</b>
+<i>54</i>&nbsp;    }
+<i>55</i>&nbsp;
+<i>56</i>&nbsp;    /**
+<i>57</i>&nbsp;     * Add entry synchronously to an open ledger.
+<i>58</i>&nbsp;     *
+<i>59</i>&nbsp;     * @param entryId entryId to be added
+<i>60</i>&nbsp;     * @param data array of bytes to be written
+<i>61</i>&nbsp;     *             do not reuse the buffer, bk-client will release it appropriately.
+<i>62</i>&nbsp;     * @return the same value of param entryId.
+<i>63</i>&nbsp;     */
+<i>64</i>&nbsp;    default long write(final long entryId, final ByteBuffer data)
+<i>65</i>&nbsp;            throws BKException, InterruptedException {
+<b class="nc"><i>66</i>&nbsp;        return write(entryId, Unpooled.wrappedBuffer(data));</b>
+<i>67</i>&nbsp;    }
+<i>68</i>&nbsp;
+<i>69</i>&nbsp;    /**
+<i>70</i>&nbsp;     * Add entry asynchronously to an open ledger.
+<i>71</i>&nbsp;     *
+<i>72</i>&nbsp;     * @param entryId entryId to be added.
+<i>73</i>&nbsp;     * @param data array of bytes to be written
+<i>74</i>&nbsp;     *             do not reuse the buffer, bk-client will release it appropriately.
+<i>75</i>&nbsp;     * @return an handle to the result, in case of success it will return the same value of param {@code entryId}.
+<i>76</i>&nbsp;     */
+<i>77</i>&nbsp;    default CompletableFuture&lt;Long&gt; writeAsync(final long entryId, final byte[] data) {
+<b class="nc"><i>78</i>&nbsp;        return writeAsync(entryId, Unpooled.wrappedBuffer(data));</b>
+<i>79</i>&nbsp;    }
+<i>80</i>&nbsp;
+<i>81</i>&nbsp;    /**
+<i>82</i>&nbsp;     * Add entry synchronously to an open ledger.
+<i>83</i>&nbsp;     *
+<i>84</i>&nbsp;     * @param entryId entryId to be added.
+<i>85</i>&nbsp;     * @param data array of bytes to be written
+<i>86</i>&nbsp;     *             do not reuse the buffer, bk-client will release it appropriately.
+<i>87</i>&nbsp;     * @return same value of param {@code entryId}.
+<i>88</i>&nbsp;     */
+<i>89</i>&nbsp;    default long write(final long entryId, final byte[] data)
+<i>90</i>&nbsp;            throws BKException, InterruptedException {
+<b class="nc"><i>91</i>&nbsp;        return write(entryId, Unpooled.wrappedBuffer(data));</b>
+<i>92</i>&nbsp;    }
+<i>93</i>&nbsp;
+<i>94</i>&nbsp;    /**
+<i>95</i>&nbsp;     * Add entry asynchronously to an open ledger.
+<i>96</i>&nbsp;     *
+<i>97</i>&nbsp;     * @param entryId entryId to  be added.
+<i>98</i>&nbsp;     * @param data array of bytes to be written
+<i>99</i>&nbsp;     *             do not reuse the buffer, bk-client will release it appropriately.
+<i>100</i>&nbsp;     * @param offset the offset of the bytes array
+<i>101</i>&nbsp;     * @param length the length to data to write
+<i>102</i>&nbsp;     * @return an handle to the result, in case of success it will return the same value of param {@code entryId}.
+<i>103</i>&nbsp;     */
+<i>104</i>&nbsp;    default CompletableFuture&lt;Long&gt; writeAsync(final long entryId, final byte[] data, int offset, int length) {
+<b class="nc"><i>105</i>&nbsp;        return writeAsync(entryId, Unpooled.wrappedBuffer(data, offset, length));</b>
+<i>106</i>&nbsp;    }
+<i>107</i>&nbsp;
+<i>108</i>&nbsp;    /**
+<i>109</i>&nbsp;     * Add entry synchronously to an open ledger.
+<i>110</i>&nbsp;     *
+<i>111</i>&nbsp;     * @param entryId entryId to  be added.
+<i>112</i>&nbsp;     * @param data array of bytes to be written
+<i>113</i>&nbsp;     *             do not reuse the buffer, bk-client will release it appropriately.
+<i>114</i>&nbsp;     * @param offset the offset of the bytes array
+<i>115</i>&nbsp;     * @param length the length to data to write
+<i>116</i>&nbsp;     * @return the same value of param {@code entryId}.
+<i>117</i>&nbsp;     */
+<i>118</i>&nbsp;    default long write(final long entryId, final byte[] data, int offset, int length)
+<i>119</i>&nbsp;            throws BKException, InterruptedException {
+<b class="nc"><i>120</i>&nbsp;        return write(entryId, Unpooled.wrappedBuffer(data, offset, length));</b>
+<i>121</i>&nbsp;    }
+<i>122</i>&nbsp;
+<i>123</i>&nbsp;    /**
+<i>124</i>&nbsp;     * Add entry asynchronously to an open ledger.
+<i>125</i>&nbsp;     *
+<i>126</i>&nbsp;     * @param entryId entryId to be added
+<i>127</i>&nbsp;     * @param data array of bytes to be written
+<i>128</i>&nbsp;     *             do not reuse the buffer, bk-client will release it appropriately.
+<i>129</i>&nbsp;     * @return an handle to the result, in case of success it will return the same value of param entryId
+<i>130</i>&nbsp;     */
+<i>131</i>&nbsp;    CompletableFuture&lt;Long&gt; writeAsync(long entryId, ByteBuf data);
+<i>132</i>&nbsp;
+<i>133</i>&nbsp;    /**
+<i>134</i>&nbsp;     * Add entry asynchronously to an open ledger.
+<i>135</i>&nbsp;     *
+<i>136</i>&nbsp;     * @param entryId entryId to be added
+<i>137</i>&nbsp;     * @param data array of bytes to be written
+<i>138</i>&nbsp;     *             do not reuse the buffer, bk-client will release it appropriately.
+<i>139</i>&nbsp;     * @return the same value of param entryId
+<i>140</i>&nbsp;     */
+<i>141</i>&nbsp;    default long write(long entryId, ByteBuf data) throws BKException, InterruptedException {
+<b class="nc"><i>142</i>&nbsp;        return FutureUtils.&lt;Long, BKException&gt;result(writeAsync(entryId, data), BKException.HANDLER);</b>
+<i>143</i>&nbsp;    }
+<i>144</i>&nbsp;}
+</div>
+</div>
+
+<div class="footer">
+    
+    <div style="float:right;">generated on 2021-06-28 15:57</div>
+</div>
+</body>
+</html>

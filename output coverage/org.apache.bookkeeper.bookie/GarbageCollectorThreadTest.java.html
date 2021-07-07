@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>GarbageCollectorThreadTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$myBookieFenceLedgerTest.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.bookie</a> &gt; <span class="el_source">GarbageCollectorThreadTest.java</span></div><h1>GarbageCollectorThreadTest.java</h1><pre class="source lang-java linenums">/*
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.bookie;
+
+import static org.junit.Assert.assertFalse;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.when;
+import static org.mockito.MockitoAnnotations.initMocks;
+
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicBoolean;
+import org.apache.bookkeeper.conf.ServerConfiguration;
+import org.apache.bookkeeper.meta.LedgerManager;
+import org.apache.bookkeeper.stats.StatsLogger;
+import org.junit.Before;
+import org.junit.Test;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.Spy;
+import org.powermock.reflect.Whitebox;
+
+/**
+ * Unit test for {@link GarbageCollectorThread}.
+ */
+<span class="nc" id="L45">public class GarbageCollectorThreadTest {</span>
+
+    @InjectMocks
+    @Spy
+    private GarbageCollectorThread mockGCThread;
+
+    @Mock
+    private LedgerManager ledgerManager;
+    @Mock
+    private StatsLogger statsLogger;
+    @Mock
+    private ScheduledExecutorService gcExecutor;
+
+<span class="nc" id="L58">    private ServerConfiguration conf = spy(new ServerConfiguration().setAllowLoopback(true));</span>
+<span class="nc" id="L59">    private CompactableLedgerStorage ledgerStorage = mock(CompactableLedgerStorage.class);</span>
+
+    @Before
+    public void setUp() throws Exception {
+<span class="nc" id="L63">        when(ledgerStorage.getEntryLogger()).thenReturn(mock(EntryLogger.class));</span>
+<span class="nc" id="L64">        initMocks(this);</span>
+<span class="nc" id="L65">    }</span>
+
+    @Test
+    public void testCompactEntryLogWithException() throws Exception {
+<span class="nc" id="L69">        AbstractLogCompactor mockCompactor = mock(AbstractLogCompactor.class);</span>
+<span class="nc" id="L70">        when(mockCompactor.compact(any(EntryLogMetadata.class)))</span>
+<span class="nc" id="L71">                .thenThrow(new RuntimeException(&quot;Unexpected compaction error&quot;));</span>
+<span class="nc" id="L72">        Whitebox.setInternalState(mockGCThread, &quot;compactor&quot;, mockCompactor);</span>
+
+        // Although compaction of an entry log fails due to an unexpected error,
+        // the `compacting` flag should return to false
+<span class="nc" id="L76">        AtomicBoolean compacting = Whitebox.getInternalState(mockGCThread, &quot;compacting&quot;);</span>
+<span class="nc" id="L77">        assertFalse(compacting.get());</span>
+<span class="nc" id="L78">        mockGCThread.compactEntryLog(new EntryLogMetadata(9999));</span>
+<span class="nc" id="L79">        assertFalse(compacting.get());</span>
+<span class="nc" id="L80">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

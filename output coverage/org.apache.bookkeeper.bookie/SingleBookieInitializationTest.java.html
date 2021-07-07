@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SingleBookieInitializationTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$myBookieFenceLedgerTest.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.bookie</a> &gt; <span class="el_source">SingleBookieInitializationTest.java</span></div><h1>SingleBookieInitializationTest.java</h1><pre class="source lang-java linenums">/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+package org.apache.bookkeeper.bookie;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import java.io.File;
+import java.io.IOException;
+import java.util.concurrent.CompletableFuture;
+import org.apache.bookkeeper.bookie.BookieException.Code;
+import org.apache.bookkeeper.bookie.LedgerDirsManager.NoWritableLedgerDirException;
+import org.apache.bookkeeper.conf.ServerConfiguration;
+import org.apache.bookkeeper.conf.TestBKConfiguration;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
+
+/**
+ * Test a single bookie at readonly mode.
+ */
+<span class="nc" id="L43">public class SingleBookieInitializationTest {</span>
+
+<span class="nc" id="L45">    @Rule</span>
+    public final TemporaryFolder testDir = new TemporaryFolder();
+
+    private File journalDir;
+    private File ledgerDir;
+    private ServerConfiguration conf;
+    private Bookie bookie;
+
+    @Before
+    public void setUp() throws Exception {
+<span class="nc" id="L55">        this.journalDir = testDir.newFolder(&quot;journal&quot;);</span>
+<span class="nc" id="L56">        this.ledgerDir = testDir.newFolder(&quot;ledgers&quot;);</span>
+
+<span class="nc" id="L58">        this.conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L59">        this.conf.setJournalDirsName(new String[] { journalDir.getAbsolutePath() });</span>
+<span class="nc" id="L60">        this.conf.setLedgerDirNames(new String[] { ledgerDir.getAbsolutePath() });</span>
+<span class="nc" id="L61">        this.conf.setMetadataServiceUri(null);</span>
+<span class="nc" id="L62">    }</span>
+
+    @After
+    public void tearDown() throws Exception {
+<span class="nc bnc" id="L66" title="All 2 branches missed.">        if (null != this.bookie) {</span>
+<span class="nc" id="L67">            this.bookie.shutdown();</span>
+        }
+<span class="nc" id="L69">    }</span>
+
+    private static String generateDataString(long ledger, long entry) {
+<span class="nc" id="L72">        return (&quot;ledger-&quot; + ledger + &quot;-&quot; + entry);</span>
+    }
+
+    private static ByteBuf generateEntry(long ledger, long entry) {
+<span class="nc" id="L76">        byte[] data = generateDataString(ledger, entry).getBytes();</span>
+<span class="nc" id="L77">        ByteBuf bb = Unpooled.buffer(8 + 8 + data.length);</span>
+<span class="nc" id="L78">        bb.writeLong(ledger);</span>
+<span class="nc" id="L79">        bb.writeLong(entry);</span>
+<span class="nc" id="L80">        bb.writeBytes(data);</span>
+<span class="nc" id="L81">        return bb;</span>
+    }
+
+    @Test
+    public void testInitBookieNoWritableDirsButHasEnoughSpaces() throws Exception {
+<span class="nc" id="L86">        float usage = 1.0f - ((float) ledgerDir.getUsableSpace()) / ledgerDir.getTotalSpace();</span>
+<span class="nc" id="L87">        conf.setDiskUsageThreshold(usage / 2);</span>
+<span class="nc" id="L88">        conf.setDiskUsageWarnThreshold(usage / 3);</span>
+<span class="nc" id="L89">        conf.setMinUsableSizeForEntryLogCreation(Long.MIN_VALUE);</span>
+<span class="nc" id="L90">        conf.setLedgerStorageClass(InterleavedLedgerStorage.class.getName());</span>
+
+<span class="nc" id="L92">        bookie = new Bookie(conf);</span>
+<span class="nc" id="L93">        bookie.start();</span>
+
+<span class="nc" id="L95">        CompletableFuture&lt;Integer&gt; writeFuture = new CompletableFuture&lt;&gt;();</span>
+<span class="nc" id="L96">        bookie.addEntry(</span>
+<span class="nc" id="L97">            generateEntry(1L, 2L),</span>
+            false,
+<span class="nc" id="L99">            (rc, ledgerId, entryId, addr, ctx) -&gt; writeFuture.complete(rc),</span>
+            null,
+            new byte[0]
+        );
+<span class="nc" id="L103">        assertEquals(Code.OK, writeFuture.get().intValue());</span>
+<span class="nc" id="L104">    }</span>
+
+    @Test
+    public void testInitBookieNoWritableDirsAndNoEnoughSpaces() throws Exception {
+<span class="nc" id="L108">        float usage = 1.0f - ((float) ledgerDir.getUsableSpace()) / ledgerDir.getTotalSpace();</span>
+<span class="nc" id="L109">        conf.setDiskUsageThreshold(usage / 2);</span>
+<span class="nc" id="L110">        conf.setDiskUsageWarnThreshold(usage / 3);</span>
+<span class="nc" id="L111">        conf.setMinUsableSizeForEntryLogCreation(Long.MAX_VALUE);</span>
+<span class="nc" id="L112">        conf.setLedgerStorageClass(InterleavedLedgerStorage.class.getName());</span>
+
+<span class="nc" id="L114">        bookie = new Bookie(conf);</span>
+<span class="nc" id="L115">        bookie.start();</span>
+
+        try {
+<span class="nc" id="L118">            bookie.addEntry(</span>
+<span class="nc" id="L119">                generateEntry(1L, 2L),</span>
+                false,
+<span class="nc" id="L121">                (rc, ledgerId, entryId, addr, ctx) -&gt; {},</span>
+                null,
+                new byte[0]
+            );
+<span class="nc" id="L125">            fail(&quot;Should fail on creating new entry log file&quot;</span>
+                + &quot; since there is no enough disk space to accommodate writes&quot;);
+<span class="nc" id="L127">        } catch (IOException ioe) {</span>
+            // expected
+<span class="nc" id="L129">            assertTrue(ioe.getCause() instanceof NoWritableLedgerDirException);</span>
+<span class="nc" id="L130">        }</span>
+<span class="nc" id="L131">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

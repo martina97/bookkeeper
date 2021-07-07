@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TestAddEntryQuorumTimeout.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">TestAddEntryQuorumTimeout.java</span></div><h1>TestAddEntryQuorumTimeout.java</h1><pre class="source lang-java linenums">/*
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.client;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
+
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+
+import org.apache.bookkeeper.client.AsyncCallback.AddCallback;
+import org.apache.bookkeeper.client.BookKeeper.DigestType;
+import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.junit.Before;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Test a quorum timeout for add entry operations.
+ */
+public class TestAddEntryQuorumTimeout extends BookKeeperClusterTestCase implements AddCallback {
+
+<span class="nc" id="L43">    private static final Logger logger = LoggerFactory.getLogger(TestAddEntryQuorumTimeout.class);</span>
+
+    final DigestType digestType;
+<span class="nc" id="L46">    final byte[] testPasswd = &quot;&quot;.getBytes();</span>
+
+    public TestAddEntryQuorumTimeout() {
+<span class="nc" id="L49">        super(3);</span>
+<span class="nc" id="L50">        baseClientConf.setAddEntryTimeout(10);</span>
+<span class="nc" id="L51">        baseClientConf.setAddEntryQuorumTimeout(1);</span>
+<span class="nc" id="L52">        this.digestType = DigestType.CRC32;</span>
+<span class="nc" id="L53">    }</span>
+
+    @Before
+    @Override
+    public void setUp() throws Exception {
+<span class="nc" id="L58">        super.setUp();</span>
+<span class="nc" id="L59">        baseConf.setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+<span class="nc" id="L60">    }</span>
+
+    private static class SyncObj {
+<span class="nc" id="L63">        volatile int counter = 0;</span>
+<span class="nc" id="L64">        volatile int rc = -1;</span>
+<span class="nc" id="L65">        public SyncObj() {</span>
+<span class="nc" id="L66">            counter = 0;</span>
+<span class="nc" id="L67">        }</span>
+    }
+
+    @Override
+    public void addComplete(int rc, LedgerHandle lh, long entryId, Object ctx) {
+<span class="nc" id="L72">        SyncObj x = (SyncObj) ctx;</span>
+<span class="nc" id="L73">        synchronized (x) {</span>
+<span class="nc" id="L74">            x.rc = rc;</span>
+<span class="nc" id="L75">            x.counter++;</span>
+<span class="nc" id="L76">            x.notify();</span>
+<span class="nc" id="L77">        }</span>
+<span class="nc" id="L78">    }</span>
+
+    @Test
+    public void testBasicTimeout() throws Exception {
+<span class="nc" id="L82">        BookKeeperTestClient bkc = new BookKeeperTestClient(baseClientConf);</span>
+<span class="nc" id="L83">        LedgerHandle lh = bkc.createLedger(3, 3, 3, digestType, testPasswd);</span>
+<span class="nc" id="L84">        List&lt;BookieSocketAddress&gt; curEns = lh.getCurrentEnsemble();</span>
+<span class="nc" id="L85">        byte[] data = &quot;foobar&quot;.getBytes();</span>
+<span class="nc" id="L86">        lh.addEntry(data);</span>
+<span class="nc" id="L87">        sleepBookie(curEns.get(0), 5).await();</span>
+        try {
+<span class="nc" id="L89">            lh.addEntry(data);</span>
+<span class="nc" id="L90">            fail(&quot;should have thrown&quot;);</span>
+<span class="nc" id="L91">        } catch (BKException.BKAddEntryQuorumTimeoutException ex) {</span>
+<span class="nc" id="L92">        }</span>
+<span class="nc" id="L93">    }</span>
+
+    private void waitForSyncObj(SyncObj syncObj) throws Exception {
+<span class="nc" id="L96">        synchronized (syncObj) {</span>
+<span class="nc bnc" id="L97" title="All 2 branches missed.">            while (syncObj.counter &lt; 1) {</span>
+<span class="nc" id="L98">                logger.debug(&quot;Entries counter = &quot; + syncObj.counter);</span>
+<span class="nc" id="L99">                syncObj.wait();</span>
+            }
+<span class="nc" id="L101">        }</span>
+<span class="nc" id="L102">    }</span>
+
+    @Test
+    public void testTimeoutWithPendingOps() throws Exception {
+<span class="nc" id="L106">        BookKeeperTestClient bkc = new BookKeeperTestClient(baseClientConf);</span>
+<span class="nc" id="L107">        LedgerHandle lh = bkc.createLedger(3, 3, 3, digestType, testPasswd);</span>
+<span class="nc" id="L108">        List&lt;BookieSocketAddress&gt; curEns = lh.getCurrentEnsemble();</span>
+<span class="nc" id="L109">        byte[] data = &quot;foobar&quot;.getBytes();</span>
+
+<span class="nc" id="L111">        SyncObj syncObj1 = new SyncObj();</span>
+<span class="nc" id="L112">        SyncObj syncObj2 = new SyncObj();</span>
+<span class="nc" id="L113">        SyncObj syncObj3 = new SyncObj();</span>
+
+<span class="nc" id="L115">        lh.addEntry(data);</span>
+<span class="nc" id="L116">        sleepBookie(curEns.get(0), 5).await();</span>
+<span class="nc" id="L117">        lh.asyncAddEntry(data, this, syncObj1);</span>
+<span class="nc" id="L118">        lh.asyncAddEntry(data, this, syncObj2);</span>
+<span class="nc" id="L119">        lh.asyncAddEntry(data, this, syncObj3);</span>
+
+<span class="nc" id="L121">        waitForSyncObj(syncObj1);</span>
+<span class="nc" id="L122">        assertEquals(BKException.Code.AddEntryQuorumTimeoutException, syncObj1.rc);</span>
+<span class="nc" id="L123">        waitForSyncObj(syncObj2);</span>
+<span class="nc" id="L124">        assertEquals(BKException.Code.AddEntryQuorumTimeoutException, syncObj2.rc);</span>
+<span class="nc" id="L125">        waitForSyncObj(syncObj3);</span>
+<span class="nc" id="L126">        assertEquals(BKException.Code.AddEntryQuorumTimeoutException, syncObj3.rc);</span>
+<span class="nc" id="L127">    }</span>
+
+    @Test
+    public void testLedgerClosedAfterTimeout() throws Exception {
+<span class="nc" id="L131">        BookKeeperTestClient bkc = new BookKeeperTestClient(baseClientConf);</span>
+<span class="nc" id="L132">        LedgerHandle lh = bkc.createLedger(3, 3, 3, digestType, testPasswd);</span>
+<span class="nc" id="L133">        List&lt;BookieSocketAddress&gt; curEns = lh.getCurrentEnsemble();</span>
+<span class="nc" id="L134">        byte[] data = &quot;foobar&quot;.getBytes();</span>
+<span class="nc" id="L135">        CountDownLatch b0latch = sleepBookie(curEns.get(0), 5);</span>
+        try {
+<span class="nc" id="L137">            lh.addEntry(data);</span>
+<span class="nc" id="L138">            fail(&quot;should have thrown&quot;);</span>
+<span class="nc" id="L139">        } catch (BKException.BKAddEntryQuorumTimeoutException ex) {</span>
+<span class="nc" id="L140">        }</span>
+<span class="nc" id="L141">        b0latch.await();</span>
+        try {
+<span class="nc" id="L143">            lh.addEntry(data);</span>
+<span class="nc" id="L144">            fail(&quot;should have thrown&quot;);</span>
+<span class="nc" id="L145">        } catch (BKException.BKLedgerClosedException ex) {</span>
+<span class="nc" id="L146">        }</span>
+<span class="nc" id="L147">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

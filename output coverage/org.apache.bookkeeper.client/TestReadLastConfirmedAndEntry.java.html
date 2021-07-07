@@ -1,0 +1,295 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TestReadLastConfirmedAndEntry.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">TestReadLastConfirmedAndEntry.java</span></div><h1>TestReadLastConfirmedAndEntry.java</h1><pre class="source lang-java linenums">/**
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.client;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+
+import io.netty.buffer.ByteBuf;
+
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Enumeration;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
+
+import org.apache.bookkeeper.bookie.Bookie;
+import org.apache.bookkeeper.bookie.BookieException;
+import org.apache.bookkeeper.bookie.InterleavedLedgerStorage;
+import org.apache.bookkeeper.bookie.LedgerStorage;
+import org.apache.bookkeeper.bookie.SortedLedgerStorage;
+import org.apache.bookkeeper.bookie.storage.ldb.DbLedgerStorage;
+import org.apache.bookkeeper.conf.ClientConfiguration;
+import org.apache.bookkeeper.conf.ServerConfiguration;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.apache.zookeeper.KeeperException;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameters;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Test reading the last confirmed and entry.
+ */
+@RunWith(Parameterized.class)
+public class TestReadLastConfirmedAndEntry extends BookKeeperClusterTestCase {
+
+<span class="nc" id="L61">    private static final Logger logger = LoggerFactory.getLogger(TestReadLastConfirmedAndEntry.class);</span>
+
+    final BookKeeper.DigestType digestType;
+
+    public TestReadLastConfirmedAndEntry(Class&lt;? extends LedgerStorage&gt; storageClass) {
+<span class="nc" id="L66">        super(3);</span>
+<span class="nc" id="L67">        this.digestType = BookKeeper.DigestType.CRC32;</span>
+<span class="nc" id="L68">        this.baseConf.setAllowEphemeralPorts(false);</span>
+<span class="nc" id="L69">        this.baseConf.setLedgerStorageClass(storageClass.getName());</span>
+<span class="nc" id="L70">    }</span>
+
+    @Parameters
+    public static Collection&lt;Object[]&gt; configs() {
+<span class="nc" id="L74">        return Arrays.asList(new Object[][] {</span>
+            { InterleavedLedgerStorage.class },
+            { SortedLedgerStorage.class },
+            { DbLedgerStorage.class },
+        });
+    }
+
+    static class FakeBookie extends Bookie {
+
+        final long expectedEntryToFail;
+        final boolean stallOrRespondNull;
+
+        public FakeBookie(ServerConfiguration conf, long expectedEntryToFail, boolean stallOrRespondNull)
+                throws InterruptedException, BookieException, KeeperException, IOException {
+<span class="nc" id="L88">            super(conf);</span>
+<span class="nc" id="L89">            this.expectedEntryToFail = expectedEntryToFail;</span>
+<span class="nc" id="L90">            this.stallOrRespondNull = stallOrRespondNull;</span>
+<span class="nc" id="L91">        }</span>
+
+        @Override
+        public ByteBuf readEntry(long ledgerId, long entryId)
+                throws IOException, NoLedgerException {
+<span class="nc bnc" id="L96" title="All 2 branches missed.">            if (entryId == expectedEntryToFail) {</span>
+<span class="nc bnc" id="L97" title="All 2 branches missed.">                if (stallOrRespondNull) {</span>
+                    try {
+<span class="nc" id="L99">                        Thread.sleep(600000);</span>
+<span class="nc" id="L100">                    } catch (InterruptedException e) {</span>
+<span class="nc" id="L101">                        Thread.currentThread().interrupt();</span>
+                        // ignore
+<span class="nc" id="L103">                    }</span>
+                } else {
+<span class="nc" id="L105">                    throw new NoEntryException(ledgerId, entryId);</span>
+                }
+            }
+<span class="nc" id="L108">            return super.readEntry(ledgerId, entryId);</span>
+        }
+    }
+
+    @Test
+    public void testAdvancedLacWithEmptyResponse() throws Exception {
+<span class="nc" id="L114">        byte[] passwd = &quot;advanced-lac-with-empty-response&quot;.getBytes(UTF_8);</span>
+
+<span class="nc" id="L116">        ClientConfiguration newConf = new ClientConfiguration();</span>
+<span class="nc" id="L117">        newConf.addConfiguration(baseClientConf);</span>
+<span class="nc" id="L118">        newConf.setAddEntryTimeout(9999999);</span>
+<span class="nc" id="L119">        newConf.setReadEntryTimeout(9999999);</span>
+
+        // stop existing bookies
+<span class="nc" id="L122">        stopAllBookies();</span>
+        // add fake bookies
+<span class="nc" id="L124">        long expectedEntryIdToFail = 2;</span>
+<span class="nc bnc" id="L125" title="All 2 branches missed.">        for (int i = 0; i &lt; numBookies; i++) {</span>
+<span class="nc" id="L126">            ServerConfiguration conf = newServerConfiguration();</span>
+<span class="nc bnc" id="L127" title="All 2 branches missed.">            Bookie b = new FakeBookie(conf, expectedEntryIdToFail, i != 0);</span>
+<span class="nc" id="L128">            bs.add(startBookie(conf, b));</span>
+<span class="nc" id="L129">            bsConfs.add(conf);</span>
+        }
+
+        // create bookkeeper
+<span class="nc" id="L133">        BookKeeper newBk = new BookKeeper(newConf);</span>
+        // create ledger to write some data
+<span class="nc" id="L135">        LedgerHandle lh = newBk.createLedger(3, 3, 2, digestType, passwd);</span>
+<span class="nc bnc" id="L136" title="All 2 branches missed.">        for (int i = 0; i &lt;= expectedEntryIdToFail; i++) {</span>
+<span class="nc" id="L137">            lh.addEntry(&quot;test&quot;.getBytes(UTF_8));</span>
+        }
+
+        // open ledger to tail reading
+<span class="nc" id="L141">        LedgerHandle newLh = newBk.openLedgerNoRecovery(lh.getId(), digestType, passwd);</span>
+<span class="nc" id="L142">        long lac = newLh.readLastConfirmed();</span>
+<span class="nc" id="L143">        assertEquals(expectedEntryIdToFail - 1, lac);</span>
+<span class="nc" id="L144">        Enumeration&lt;LedgerEntry&gt; entries = newLh.readEntries(0, lac);</span>
+
+<span class="nc" id="L146">        int numReads = 0;</span>
+<span class="nc" id="L147">        long expectedEntryId = 0L;</span>
+<span class="nc bnc" id="L148" title="All 2 branches missed.">        while (entries.hasMoreElements()) {</span>
+<span class="nc" id="L149">            LedgerEntry entry = entries.nextElement();</span>
+<span class="nc" id="L150">            assertEquals(expectedEntryId++, entry.getEntryId());</span>
+<span class="nc" id="L151">            ++numReads;</span>
+<span class="nc" id="L152">        }</span>
+<span class="nc" id="L153">        assertEquals(lac + 1, numReads);</span>
+
+<span class="nc" id="L155">        final AtomicInteger rcHolder = new AtomicInteger(-12345);</span>
+<span class="nc" id="L156">        final AtomicLong lacHolder = new AtomicLong(lac);</span>
+<span class="nc" id="L157">        final AtomicReference&lt;LedgerEntry&gt; entryHolder = new AtomicReference&lt;LedgerEntry&gt;(null);</span>
+<span class="nc" id="L158">        final CountDownLatch latch = new CountDownLatch(1);</span>
+
+<span class="nc" id="L160">        newLh.asyncReadLastConfirmedAndEntry(newLh.getLastAddConfirmed() + 1, 99999, false,</span>
+<span class="nc" id="L161">                new AsyncCallback.ReadLastConfirmedAndEntryCallback() {</span>
+            @Override
+            public void readLastConfirmedAndEntryComplete(int rc, long lastConfirmed, LedgerEntry entry, Object ctx) {
+<span class="nc" id="L164">                rcHolder.set(rc);</span>
+<span class="nc" id="L165">                lacHolder.set(lastConfirmed);</span>
+<span class="nc" id="L166">                entryHolder.set(entry);</span>
+<span class="nc" id="L167">                latch.countDown();</span>
+<span class="nc" id="L168">            }</span>
+        }, null);
+
+<span class="nc" id="L171">        lh.addEntry(&quot;another test&quot;.getBytes(UTF_8));</span>
+
+<span class="nc" id="L173">        latch.await();</span>
+<span class="nc" id="L174">        assertEquals(expectedEntryIdToFail, lacHolder.get());</span>
+<span class="nc" id="L175">        assertNull(entryHolder.get());</span>
+<span class="nc" id="L176">        assertEquals(BKException.Code.OK, rcHolder.get());</span>
+<span class="nc" id="L177">    }</span>
+
+    static class SlowReadLacBookie extends Bookie {
+
+        private final long lacToSlowRead;
+        private final CountDownLatch readLatch;
+
+        public SlowReadLacBookie(ServerConfiguration conf,
+                                 long lacToSlowRead, CountDownLatch readLatch)
+                throws IOException, KeeperException, InterruptedException, BookieException {
+<span class="nc" id="L187">            super(conf);</span>
+<span class="nc" id="L188">            this.lacToSlowRead = lacToSlowRead;</span>
+<span class="nc" id="L189">            this.readLatch = readLatch;</span>
+<span class="nc" id="L190">        }</span>
+
+        @Override
+        public long readLastAddConfirmed(long ledgerId) throws IOException {
+<span class="nc" id="L194">            long lac = super.readLastAddConfirmed(ledgerId);</span>
+<span class="nc" id="L195">            logger.info(&quot;Last Add Confirmed for ledger {} is {}&quot;, ledgerId, lac);</span>
+<span class="nc bnc" id="L196" title="All 2 branches missed.">            if (lacToSlowRead == lac) {</span>
+<span class="nc" id="L197">                logger.info(&quot;Suspend returning lac {} for ledger {}&quot;, lac, ledgerId);</span>
+                try {
+<span class="nc" id="L199">                    readLatch.await();</span>
+<span class="nc" id="L200">                } catch (InterruptedException e) {</span>
+<span class="nc" id="L201">                    Thread.currentThread().interrupt();</span>
+                    // no-op
+<span class="nc" id="L203">                }</span>
+            }
+<span class="nc" id="L205">            return super.readLastAddConfirmed(ledgerId);</span>
+        }
+    }
+
+<span class="nc" id="L209">    static class ReadLastConfirmedAndEntryResult implements AsyncCallback.ReadLastConfirmedAndEntryCallback {</span>
+
+<span class="nc" id="L211">        int rc = -1234;</span>
+<span class="nc" id="L212">        long lac = -1234L;</span>
+<span class="nc" id="L213">        LedgerEntry entry = null;</span>
+<span class="nc" id="L214">        final CountDownLatch doneLatch = new CountDownLatch(1);</span>
+
+        @Override
+        public void readLastConfirmedAndEntryComplete(int rc, long lastConfirmed, LedgerEntry entry, Object ctx) {
+<span class="nc" id="L218">            this.rc = rc;</span>
+<span class="nc" id="L219">            this.lac = lastConfirmed;</span>
+<span class="nc" id="L220">            this.entry = entry;</span>
+<span class="nc" id="L221">            doneLatch.countDown();</span>
+<span class="nc" id="L222">        }</span>
+
+        void await() throws InterruptedException {
+<span class="nc" id="L225">            doneLatch.await();</span>
+<span class="nc" id="L226">        }</span>
+    }
+
+    @Test
+    public void testRaceOnLastAddConfirmed() throws Exception {
+<span class="nc" id="L231">        byte[] passwd = &quot;race-on-last-add-confirmed&quot;.getBytes(UTF_8);</span>
+
+<span class="nc" id="L233">        ClientConfiguration newConf = new ClientConfiguration();</span>
+<span class="nc" id="L234">        newConf.addConfiguration(baseClientConf);</span>
+<span class="nc" id="L235">        newConf.setAddEntryTimeout(9999999);</span>
+<span class="nc" id="L236">        newConf.setReadEntryTimeout(9999999);</span>
+
+<span class="nc" id="L238">        final long lacToSlowRead = 0L;</span>
+<span class="nc" id="L239">        final CountDownLatch readLatch = new CountDownLatch(1);</span>
+
+        // stop first bookie
+<span class="nc" id="L242">        ServerConfiguration bsConf = killBookie(0);</span>
+        // start it with a slow bookie
+<span class="nc" id="L244">        Bookie b = new SlowReadLacBookie(bsConf, lacToSlowRead, readLatch);</span>
+<span class="nc" id="L245">        bs.add(startBookie(bsConf, b));</span>
+<span class="nc" id="L246">        bsConfs.add(bsConf);</span>
+
+        // create bookkeeper
+<span class="nc" id="L249">        BookKeeper newBk = new BookKeeper(newConf);</span>
+        // create ledger
+<span class="nc" id="L251">        LedgerHandle lh = newBk.createLedger(3, 3, 3, digestType, passwd);</span>
+        // 0) write entry 0
+<span class="nc" id="L253">        lh.addEntry(&quot;entry-0&quot;.getBytes(UTF_8));</span>
+
+        // open ledger to read
+<span class="nc" id="L256">        LedgerHandle readLh = newBk.openLedgerNoRecovery(lh.getId(), digestType, passwd);</span>
+
+        // 1) wait entry 0 to be committed
+<span class="nc" id="L259">        ReadLastConfirmedAndEntryResult readResult = new ReadLastConfirmedAndEntryResult();</span>
+<span class="nc" id="L260">        readLh.asyncReadLastConfirmedAndEntry(0L, 9999999, true, readResult, null);</span>
+
+        // 2) write entry 1 to commit entry 0 =&gt; lac = 0
+<span class="nc" id="L263">        lh.addEntry(&quot;entry-1&quot;.getBytes(UTF_8));</span>
+<span class="nc" id="L264">        readResult.await();</span>
+<span class="nc" id="L265">        assertEquals(BKException.Code.OK, readResult.rc);</span>
+<span class="nc" id="L266">        assertEquals(0L, readResult.lac);</span>
+<span class="nc" id="L267">        assertEquals(0L, readResult.entry.getEntryId());</span>
+<span class="nc" id="L268">        assertEquals(&quot;entry-0&quot;, new String(readResult.entry.getEntry(), UTF_8));</span>
+
+        // 3) write entry 2 to commit entry 1 =&gt; lac = 1
+<span class="nc" id="L271">        lh.addEntry(&quot;entry-2&quot;.getBytes(UTF_8));</span>
+        // 4) count down read latch to trigger previous readLacAndEntry request
+<span class="nc" id="L273">        readLatch.countDown();</span>
+        // 5) due to piggyback, the lac is updated to lac = 1
+<span class="nc bnc" id="L275" title="All 2 branches missed.">        while (readLh.getLastAddConfirmed() &lt; 1L) {</span>
+<span class="nc" id="L276">            Thread.sleep(100);</span>
+        }
+        // 6) write entry 3 to commit entry 2 =&gt; lac = 2
+<span class="nc" id="L279">        lh.addEntry(&quot;entry-3&quot;.getBytes(UTF_8));</span>
+        // 7) readLastConfirmedAndEntry for next entry (we are expecting to read entry 1)
+<span class="nc" id="L281">        readResult = new ReadLastConfirmedAndEntryResult();</span>
+<span class="nc" id="L282">        readLh.asyncReadLastConfirmedAndEntry(1L, 9999999, true, readResult, null);</span>
+<span class="nc" id="L283">        readResult.await();</span>
+<span class="nc" id="L284">        assertEquals(BKException.Code.OK, readResult.rc);</span>
+<span class="nc" id="L285">        assertEquals(2L, readResult.lac);</span>
+<span class="nc" id="L286">        assertEquals(1L, readResult.entry.getEntryId());</span>
+<span class="nc" id="L287">        assertEquals(&quot;entry-1&quot;, new String(readResult.entry.getEntry(), UTF_8));</span>
+
+<span class="nc" id="L289">        lh.close();</span>
+<span class="nc" id="L290">        readLh.close();</span>
+
+<span class="nc" id="L292">        newBk.close();</span>
+<span class="nc" id="L293">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

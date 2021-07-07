@@ -1,0 +1,615 @@
+
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html id="htmlId">
+<head>
+  <title>Coverage Report :: EnsemblePlacementPolicy</title>
+  <style type="text/css">
+    @import "../../.css/coverage.css";
+  </style>
+</head>
+
+<body>
+<div class="header"></div>
+
+<div class="content">
+<div class="breadCrumbs">
+    [ <a href="../../index.html">all classes</a> ]
+    [ <a href="../index.html">org.apache.bookkeeper.client</a> ]
+</div>
+
+<h1>Coverage Summary for Class: EnsemblePlacementPolicy (org.apache.bookkeeper.client)</h1>
+
+<table class="coverageStats">
+
+<tr>
+  <th class="name">Class</th>
+<th class="coverageStat 
+">
+  Method, %
+</th>
+<th class="coverageStat 
+">
+  Line, %
+</th>
+</tr>
+<tr>
+  <td class="name">EnsemblePlacementPolicy</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 4)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 6)
+  </span>
+</td>
+</tr>
+  <tr>
+    <td class="name">EnsemblePlacementPolicy$PlacementPolicyAdherence</td>
+<td class="coverageStat">
+  <span class="percent">
+    50%
+  </span>
+  <span class="absValue">
+    (2/ 4)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    83,3%
+  </span>
+  <span class="absValue">
+    (5/ 6)
+  </span>
+</td>
+  </tr>
+  <tr>
+    <td class="name">EnsemblePlacementPolicy$PlacementResult</td>
+<td class="coverageStat">
+  <span class="percent">
+    100%
+  </span>
+  <span class="absValue">
+    (4/ 4)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    100%
+  </span>
+  <span class="absValue">
+    (7/ 7)
+  </span>
+</td>
+  </tr>
+<tr>
+  <td class="name"><strong>total</strong></td>
+<td class="coverageStat">
+  <span class="percent">
+    50%
+  </span>
+  <span class="absValue">
+    (6/ 12)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    63,2%
+  </span>
+  <span class="absValue">
+    (12/ 19)
+  </span>
+</td>
+</tr>
+</table>
+
+<br/>
+<br/>
+
+
+<div class="sourceCode"><i>1</i>&nbsp;/*
+<i>2</i>&nbsp; * Licensed to the Apache Software Foundation (ASF) under one
+<i>3</i>&nbsp; * or more contributor license agreements.  See the NOTICE file
+<i>4</i>&nbsp; * distributed with this work for additional information
+<i>5</i>&nbsp; * regarding copyright ownership.  The ASF licenses this file
+<i>6</i>&nbsp; * to you under the Apache License, Version 2.0 (the
+<i>7</i>&nbsp; * &quot;License&quot;); you may not use this file except in compliance
+<i>8</i>&nbsp; * with the License.  You may obtain a copy of the License at
+<i>9</i>&nbsp; *
+<i>10</i>&nbsp; *     http://www.apache.org/licenses/LICENSE-2.0
+<i>11</i>&nbsp; *
+<i>12</i>&nbsp; * Unless required by applicable law or agreed to in writing, software
+<i>13</i>&nbsp; * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+<i>14</i>&nbsp; * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+<i>15</i>&nbsp; * See the License for the specific language governing permissions and
+<i>16</i>&nbsp; * limitations under the License.
+<i>17</i>&nbsp; */
+<i>18</i>&nbsp;package org.apache.bookkeeper.client;
+<i>19</i>&nbsp;
+<i>20</i>&nbsp;import io.netty.util.HashedWheelTimer;
+<i>21</i>&nbsp;import java.util.List;
+<i>22</i>&nbsp;import java.util.Map;
+<i>23</i>&nbsp;import java.util.Optional;
+<i>24</i>&nbsp;import java.util.Set;
+<i>25</i>&nbsp;import java.util.concurrent.ThreadLocalRandom;
+<i>26</i>&nbsp;
+<i>27</i>&nbsp;import org.apache.bookkeeper.client.BKException.BKNotEnoughBookiesException;
+<i>28</i>&nbsp;import org.apache.bookkeeper.client.BookieInfoReader.BookieInfo;
+<i>29</i>&nbsp;import org.apache.bookkeeper.client.DistributionSchedule.WriteSet;
+<i>30</i>&nbsp;import org.apache.bookkeeper.client.api.LedgerMetadata;
+<i>31</i>&nbsp;import org.apache.bookkeeper.common.annotation.InterfaceAudience;
+<i>32</i>&nbsp;import org.apache.bookkeeper.common.annotation.InterfaceStability;
+<i>33</i>&nbsp;import org.apache.bookkeeper.common.util.MathUtils;
+<i>34</i>&nbsp;import org.apache.bookkeeper.conf.ClientConfiguration;
+<i>35</i>&nbsp;import org.apache.bookkeeper.feature.FeatureProvider;
+<i>36</i>&nbsp;import org.apache.bookkeeper.net.BookieSocketAddress;
+<i>37</i>&nbsp;import org.apache.bookkeeper.net.DNSToSwitchMapping;
+<i>38</i>&nbsp;import org.apache.bookkeeper.stats.StatsLogger;
+<i>39</i>&nbsp;
+<i>40</i>&nbsp;/**
+<i>41</i>&nbsp; * {@link EnsemblePlacementPolicy} encapsulates the algorithm that bookkeeper client uses to select a number of bookies
+<i>42</i>&nbsp; * from the cluster as an ensemble for storing entries.
+<i>43</i>&nbsp; *
+<i>44</i>&nbsp; * &lt;p&gt;The algorithm is typically implemented based on the data input as well as the network topology properties.
+<i>45</i>&nbsp; *
+<i>46</i>&nbsp; * &lt;h2&gt;How does it work?&lt;/h2&gt;
+<i>47</i>&nbsp; *
+<i>48</i>&nbsp; * &lt;p&gt;This interface basically covers three parts:&lt;/p&gt;
+<i>49</i>&nbsp; * &lt;ul&gt;
+<i>50</i>&nbsp; * &lt;li&gt;Initialization and uninitialization&lt;/li&gt;
+<i>51</i>&nbsp; * &lt;li&gt;How to choose bookies to place data&lt;/li&gt;
+<i>52</i>&nbsp; * &lt;li&gt;How to choose bookies to do speculative reads&lt;/li&gt;
+<i>53</i>&nbsp; * &lt;/ul&gt;
+<i>54</i>&nbsp; *
+<i>55</i>&nbsp; * &lt;h3&gt;Initialization and uninitialization&lt;/h3&gt;
+<i>56</i>&nbsp; *
+<i>57</i>&nbsp; * &lt;p&gt;The ensemble placement policy is constructed by jvm reflection during constructing bookkeeper client.
+<i>58</i>&nbsp; * After the {@code EnsemblePlacementPolicy} is constructed, bookkeeper client will call
+<i>59</i>&nbsp; * {@link #initialize(ClientConfiguration, Optional, HashedWheelTimer, FeatureProvider, StatsLogger)} to initialize
+<i>60</i>&nbsp; * the placement policy.
+<i>61</i>&nbsp; *
+<i>62</i>&nbsp; * &lt;p&gt;The {@link #initialize(ClientConfiguration, Optional, HashedWheelTimer, FeatureProvider, StatsLogger)}
+<i>63</i>&nbsp; * method takes a few resources from bookkeeper for instantiating itself. These resources include:
+<i>64</i>&nbsp; *
+<i>65</i>&nbsp; * &lt;ul&gt;
+<i>66</i>&nbsp; * &lt;li&gt;`ClientConfiguration` : The client configuration that used for constructing the bookkeeper client.
+<i>67</i>&nbsp; *                             The implementation of the placement policy could obtain its settings from this
+<i>68</i>&nbsp; *                             configuration.
+<i>69</i>&nbsp; * &lt;li&gt;`DNSToSwitchMapping`: The DNS resolver for the ensemble policy to build the network topology of the bookies
+<i>70</i>&nbsp; *                           cluster. It is optional.
+<i>71</i>&nbsp; * &lt;li&gt;`HashedWheelTimer`: A hashed wheel timer that could be used for timing related work.
+<i>72</i>&nbsp; *                         For example, a stabilize network topology could use it to delay network topology changes to
+<i>73</i>&nbsp; *                         reduce impacts of flapping bookie registrations due to zk session expires.
+<i>74</i>&nbsp; * &lt;li&gt;`FeatureProvider`: A {@link FeatureProvider} that the policy could use for enabling or disabling its offered
+<i>75</i>&nbsp; *                        features. For example, a {@link RegionAwareEnsemblePlacementPolicy} could offer features
+<i>76</i>&nbsp; *                        to disable placing data to a specific region at runtime.
+<i>77</i>&nbsp; * &lt;li&gt;`StatsLogger`: A {@link StatsLogger} for exposing stats.
+<i>78</i>&nbsp; * &lt;/ul&gt;
+<i>79</i>&nbsp; *
+<i>80</i>&nbsp; * &lt;p&gt;The ensemble placement policy is a single instance per bookkeeper client. The instance will
+<i>81</i>&nbsp; * be {@link #uninitalize()} when closing the bookkeeper client. The implementation of a placement policy should be
+<i>82</i>&nbsp; * responsible for releasing all the resources that allocated during
+<i>83</i>&nbsp; * {@link #initialize(ClientConfiguration, Optional, HashedWheelTimer, FeatureProvider, StatsLogger)}.
+<i>84</i>&nbsp; *
+<i>85</i>&nbsp; * &lt;h3&gt;How to choose bookies to place data&lt;/h3&gt;
+<i>86</i>&nbsp; *
+<i>87</i>&nbsp; * &lt;p&gt;The bookkeeper client discovers list of bookies from zookeeper via {@code BookieWatcher} - whenever there are
+<i>88</i>&nbsp; * bookie changes, the ensemble placement policy will be notified with new list of bookies via
+<i>89</i>&nbsp; * {@link #onClusterChanged(Set, Set)}. The implementation of the ensemble placement policy will react on those
+<i>90</i>&nbsp; * changes to build new network topology. Subsequent operations like {@link #newEnsemble(int, int, int, Map, Set)} or
+<i>91</i>&nbsp; * {@link #replaceBookie(int, int, int, java.util.Map, java.util.Set,
+<i>92</i>&nbsp; * org.apache.bookkeeper.net.BookieSocketAddress, java.util.Set)}
+<i>93</i>&nbsp; * hence can operate on the new
+<i>94</i>&nbsp; * network topology.
+<i>95</i>&nbsp; *
+<i>96</i>&nbsp; * &lt;p&gt;Both {@link RackawareEnsemblePlacementPolicy} and {@link RegionAwareEnsemblePlacementPolicy} are
+<i>97</i>&nbsp; * {@link TopologyAwareEnsemblePlacementPolicy}s. They build a {@link org.apache.bookkeeper.net.NetworkTopology} on
+<i>98</i>&nbsp; * bookie changes, use it for ensemble placement and ensure {@code rack/region} coverage for write quorums.
+<i>99</i>&nbsp; *
+<i>100</i>&nbsp; * &lt;h4&gt;Network Topology&lt;/h4&gt;
+<i>101</i>&nbsp; *
+<i>102</i>&nbsp; * &lt;p&gt;The network topology is presenting a cluster of bookies in a tree hierarchical structure. For example,
+<i>103</i>&nbsp; * a bookie cluster may be consists of many data centers (aka regions) filled with racks of machines.
+<i>104</i>&nbsp; * In this tree structure, leaves represent bookies and inner nodes represent switches/routes that manage
+<i>105</i>&nbsp; * traffic in/out of regions or racks.
+<i>106</i>&nbsp; *
+<i>107</i>&nbsp; * &lt;p&gt;For example, there are 3 bookies in region `A`. They are `bk1`, `bk2` and `bk3`. And their network locations are
+<i>108</i>&nbsp; * {@code /region-a/rack-1/bk1}, {@code /region-a/rack-1/bk2} and {@code /region-a/rack-2/bk3}. So the network topology
+<i>109</i>&nbsp; * will look like below:
+<i>110</i>&nbsp; *
+<i>111</i>&nbsp; * &lt;pre&gt;
+<i>112</i>&nbsp; *      root
+<i>113</i>&nbsp; *        |
+<i>114</i>&nbsp; *     region-a
+<i>115</i>&nbsp; *       /  \
+<i>116</i>&nbsp; * rack-1  rack-2
+<i>117</i>&nbsp; *   /  \       \
+<i>118</i>&nbsp; * bk1  bk2     bk3
+<i>119</i>&nbsp; * &lt;/pre&gt;
+<i>120</i>&nbsp; *
+<i>121</i>&nbsp; * &lt;p&gt;Another example, there are 4 bookies spanning in two regions `A` and `B`. They are `bk1`, `bk2`, `bk3` and `bk4`.
+<i>122</i>&nbsp; * And their network locations are {@code /region-a/rack-1/bk1}, {@code /region-a/rack-1/bk2},
+<i>123</i>&nbsp; * {@code /region-b/rack-2/bk3} and {@code /region-b/rack-2/bk4}. The network topology will look like below:
+<i>124</i>&nbsp; *
+<i>125</i>&nbsp; * &lt;pre&gt;
+<i>126</i>&nbsp; *         root
+<i>127</i>&nbsp; *         /  \
+<i>128</i>&nbsp; * region-a  region-b
+<i>129</i>&nbsp; *     |         |
+<i>130</i>&nbsp; *   rack-1    rack-2
+<i>131</i>&nbsp; *     / \       / \
+<i>132</i>&nbsp; *   bk1  bk2  bk3  bk4
+<i>133</i>&nbsp; * &lt;/pre&gt;
+<i>134</i>&nbsp; *
+<i>135</i>&nbsp; * &lt;p&gt;The network location of each bookie is resolved by a {@link DNSToSwitchMapping}. The {@link DNSToSwitchMapping}
+<i>136</i>&nbsp; * resolves a list of DNS-names or IP-addresses into a list of network locations. The network location that is returned
+<i>137</i>&nbsp; * must be a network path of the form `/region/rack`, where `/` is the root, and `region` is the region id representing
+<i>138</i>&nbsp; * the data center where `rack` is located. The network topology of the bookie cluster would determine the number of
+<i>139</i>&nbsp; *
+<i>140</i>&nbsp; * &lt;h4&gt;RackAware and RegionAware&lt;/h4&gt;
+<i>141</i>&nbsp; *
+<i>142</i>&nbsp; * &lt;p&gt;{@link RackawareEnsemblePlacementPolicy} basically just chooses bookies from different racks in the built
+<i>143</i>&nbsp; * network topology. It guarantees that a write quorum will cover at least two racks. It expects the network locations
+<i>144</i>&nbsp; * resolved by {@link DNSToSwitchMapping} have at least 2 levels. For example, network location paths like
+<i>145</i>&nbsp; * {@code /dc1/rack0} and {@code /dc1/row1/rack0} are okay, but {@code /rack0} is not acceptable.
+<i>146</i>&nbsp; *
+<i>147</i>&nbsp; * &lt;p&gt;{@link RegionAwareEnsemblePlacementPolicy} is a hierarchical placement policy, which it chooses
+<i>148</i>&nbsp; * equal-sized bookies from regions, and within each region it uses {@link RackawareEnsemblePlacementPolicy} to choose
+<i>149</i>&nbsp; * bookies from racks. For example, if there is 3 regions - {@code region-a}, {@code region-b} and {@code region-c},
+<i>150</i>&nbsp; * an application want to allocate a {@code 15-bookies} ensemble. First, it would figure out there are 3 regions and
+<i>151</i>&nbsp; * it should allocate 5 bookies from each region. Second, for each region, it would use
+<i>152</i>&nbsp; * {@link RackawareEnsemblePlacementPolicy} to choose &lt;i&gt;5&lt;/i&gt; bookies.
+<i>153</i>&nbsp; *
+<i>154</i>&nbsp; * &lt;p&gt;Since {@link RegionAwareEnsemblePlacementPolicy} is based on {@link RackawareEnsemblePlacementPolicy}, it expects
+<i>155</i>&nbsp; * the network locations resolved by {@link DNSToSwitchMapping} have at least &lt;b&gt;3&lt;/b&gt; levels.
+<i>156</i>&nbsp; *
+<i>157</i>&nbsp; * &lt;h3&gt;How to choose bookies to do speculative reads?&lt;/h3&gt;
+<i>158</i>&nbsp; *
+<i>159</i>&nbsp; * &lt;p&gt;{@link #reorderReadSequence(List, BookiesHealthInfo, WriteSet)} and
+<i>160</i>&nbsp; * {@link #reorderReadLACSequence(List, BookiesHealthInfo, WriteSet)} are
+<i>161</i>&nbsp; * two methods exposed by the placement policy, to help client determine a better read sequence according to the
+<i>162</i>&nbsp; * network topology and the bookie failure history.
+<i>163</i>&nbsp; *
+<i>164</i>&nbsp; * &lt;p&gt;For example, in {@link RackawareEnsemblePlacementPolicy}, the reads will be attempted in following sequence:
+<i>165</i>&nbsp; *
+<i>166</i>&nbsp; * &lt;ul&gt;
+<i>167</i>&nbsp; * &lt;li&gt;bookies are writable and didn&#39;t experience failures before
+<i>168</i>&nbsp; * &lt;li&gt;bookies are writable and experienced failures before
+<i>169</i>&nbsp; * &lt;li&gt;bookies are readonly
+<i>170</i>&nbsp; * &lt;li&gt;bookies already disappeared from network topology
+<i>171</i>&nbsp; * &lt;/ul&gt;
+<i>172</i>&nbsp; *
+<i>173</i>&nbsp; * &lt;p&gt;In {@link RegionAwareEnsemblePlacementPolicy}, the reads will be tried in similar following sequence
+<i>174</i>&nbsp; * as `RackAware` placement policy. There is a slight different on trying writable bookies: after trying every 2
+<i>175</i>&nbsp; * bookies from local region, it would try a bookie from remote region. Hence it would achieve low latency even
+<i>176</i>&nbsp; * there is network issues within local region.
+<i>177</i>&nbsp; *
+<i>178</i>&nbsp; * &lt;h2&gt;How to configure the placement policy?&lt;/h2&gt;
+<i>179</i>&nbsp; *
+<i>180</i>&nbsp; * &lt;p&gt;Currently there are 3 implementations available by default. They are:
+<i>181</i>&nbsp; * &lt;ul&gt;
+<i>182</i>&nbsp; *     &lt;li&gt;{@link DefaultEnsemblePlacementPolicy}&lt;/li&gt;
+<i>183</i>&nbsp; *     &lt;li&gt;{@link RackawareEnsemblePlacementPolicy}&lt;/li&gt;
+<i>184</i>&nbsp; *     &lt;li&gt;{@link RegionAwareEnsemblePlacementPolicy}&lt;/li&gt;
+<i>185</i>&nbsp; * &lt;/ul&gt;
+<i>186</i>&nbsp; *
+<i>187</i>&nbsp; * &lt;p&gt;You can configure the ensemble policy by specifying the placement policy class in
+<i>188</i>&nbsp; * {@link ClientConfiguration#setEnsemblePlacementPolicy(Class)}.
+<i>189</i>&nbsp; *
+<i>190</i>&nbsp; * &lt;p&gt;{@link DefaultEnsemblePlacementPolicy} randomly pickups bookies from the cluster, while both
+<i>191</i>&nbsp; * {@link RackawareEnsemblePlacementPolicy} and {@link RegionAwareEnsemblePlacementPolicy} choose bookies based on
+<i>192</i>&nbsp; * network locations. So you might also consider configuring a proper {@link DNSToSwitchMapping} in
+<i>193</i>&nbsp; * {@link BookKeeper.Builder} to resolve the correct network locations for your cluster.
+<i>194</i>&nbsp; *
+<i>195</i>&nbsp; * @see TopologyAwareEnsemblePlacementPolicy
+<i>196</i>&nbsp; * @see DefaultEnsemblePlacementPolicy
+<i>197</i>&nbsp; * @see RackawareEnsemblePlacementPolicy
+<i>198</i>&nbsp; * @see RegionAwareEnsemblePlacementPolicy
+<i>199</i>&nbsp; */
+<i>200</i>&nbsp;@InterfaceAudience.Public
+<i>201</i>&nbsp;@InterfaceStability.Evolving
+<i>202</i>&nbsp;public interface EnsemblePlacementPolicy {
+<i>203</i>&nbsp;
+<i>204</i>&nbsp;    /**
+<i>205</i>&nbsp;     * Initialize the policy.
+<i>206</i>&nbsp;     *
+<i>207</i>&nbsp;     * @param conf client configuration
+<i>208</i>&nbsp;     * @param optionalDnsResolver dns resolver
+<i>209</i>&nbsp;     * @param hashedWheelTimer timer
+<i>210</i>&nbsp;     * @param featureProvider feature provider
+<i>211</i>&nbsp;     * @param statsLogger stats logger
+<i>212</i>&nbsp;     *
+<i>213</i>&nbsp;     * @since 4.5
+<i>214</i>&nbsp;     */
+<i>215</i>&nbsp;    EnsemblePlacementPolicy initialize(ClientConfiguration conf,
+<i>216</i>&nbsp;                                       Optional&lt;DNSToSwitchMapping&gt; optionalDnsResolver,
+<i>217</i>&nbsp;                                       HashedWheelTimer hashedWheelTimer,
+<i>218</i>&nbsp;                                       FeatureProvider featureProvider,
+<i>219</i>&nbsp;                                       StatsLogger statsLogger);
+<i>220</i>&nbsp;
+<i>221</i>&nbsp;    /**
+<i>222</i>&nbsp;     * Uninitialize the policy.
+<i>223</i>&nbsp;     */
+<i>224</i>&nbsp;    void uninitalize();
+<i>225</i>&nbsp;
+<i>226</i>&nbsp;    /**
+<i>227</i>&nbsp;     * A consistent view of the cluster (what bookies are available as writable, what bookies are available as
+<i>228</i>&nbsp;     * readonly) is updated when any changes happen in the cluster.
+<i>229</i>&nbsp;     *
+<i>230</i>&nbsp;     * &lt;p&gt;The implementation should take actions when the cluster view is changed. So subsequent
+<i>231</i>&nbsp;     * {@link #newEnsemble(int, int, int, Map, Set)} and
+<i>232</i>&nbsp;     * {@link #replaceBookie(int, int, int, java.util.Map, java.util.Set,
+<i>233</i>&nbsp;     * org.apache.bookkeeper.net.BookieSocketAddress, java.util.Set) }
+<i>234</i>&nbsp;     * can choose proper bookies.
+<i>235</i>&nbsp;     *
+<i>236</i>&nbsp;     * @param writableBookies
+<i>237</i>&nbsp;     *          All the bookies in the cluster available for write/read.
+<i>238</i>&nbsp;     * @param readOnlyBookies
+<i>239</i>&nbsp;     *          All the bookies in the cluster available for readonly.
+<i>240</i>&nbsp;     * @return the dead bookies during this cluster change.
+<i>241</i>&nbsp;     */
+<i>242</i>&nbsp;    Set&lt;BookieSocketAddress&gt; onClusterChanged(Set&lt;BookieSocketAddress&gt; writableBookies,
+<i>243</i>&nbsp;                                              Set&lt;BookieSocketAddress&gt; readOnlyBookies);
+<i>244</i>&nbsp;
+<i>245</i>&nbsp;    /**
+<i>246</i>&nbsp;     * Choose &lt;i&gt;numBookies&lt;/i&gt; bookies for ensemble. If the count is more than the number of available
+<i>247</i>&nbsp;     * nodes, {@link BKNotEnoughBookiesException} is thrown.
+<i>248</i>&nbsp;     *
+<i>249</i>&nbsp;     * &lt;p&gt;The implementation should respect to the replace settings. The size of the returned bookie list
+<i>250</i>&nbsp;     * should be equal to the provide {@code ensembleSize}.
+<i>251</i>&nbsp;     *
+<i>252</i>&nbsp;     * &lt;p&gt;{@code customMetadata} is the same user defined data that user provides
+<i>253</i>&nbsp;     * when {@link BookKeeper#createLedger(int, int, int, BookKeeper.DigestType, byte[], Map)}.
+<i>254</i>&nbsp;     *
+<i>255</i>&nbsp;     * &lt;p&gt;If &#39;enforceMinNumRacksPerWriteQuorum&#39; config is enabled then the bookies belonging to default
+<i>256</i>&nbsp;     * faultzone (rack) will be excluded while selecting bookies.
+<i>257</i>&nbsp;     *
+<i>258</i>&nbsp;     * @param ensembleSize
+<i>259</i>&nbsp;     *          Ensemble Size
+<i>260</i>&nbsp;     * @param writeQuorumSize
+<i>261</i>&nbsp;     *          Write Quorum Size
+<i>262</i>&nbsp;     * @param ackQuorumSize
+<i>263</i>&nbsp;     *          the value of ackQuorumSize (added since 4.5)
+<i>264</i>&nbsp;     * @param customMetadata the value of customMetadata. it is the same user defined metadata that user
+<i>265</i>&nbsp;     *                       provides in {@link BookKeeper#createLedger(int, int, int, BookKeeper.DigestType, byte[])}
+<i>266</i>&nbsp;     * @param excludeBookies Bookies that should not be considered as targets.
+<i>267</i>&nbsp;     * @throws BKNotEnoughBookiesException if not enough bookies available.
+<i>268</i>&nbsp;     * @return a placement result containing list of bookie addresses for the ensemble.
+<i>269</i>&nbsp;     */
+<i>270</i>&nbsp;    PlacementResult&lt;List&lt;BookieSocketAddress&gt;&gt; newEnsemble(int ensembleSize,
+<i>271</i>&nbsp;                                                           int writeQuorumSize,
+<i>272</i>&nbsp;                                                           int ackQuorumSize,
+<i>273</i>&nbsp;                                                           Map&lt;String, byte[]&gt; customMetadata,
+<i>274</i>&nbsp;                                                           Set&lt;BookieSocketAddress&gt; excludeBookies)
+<i>275</i>&nbsp;            throws BKNotEnoughBookiesException;
+<i>276</i>&nbsp;
+<i>277</i>&nbsp;    /**
+<i>278</i>&nbsp;     * Choose a new bookie to replace &lt;i&gt;bookieToReplace&lt;/i&gt;. If no bookie available in the cluster,
+<i>279</i>&nbsp;     * {@link BKNotEnoughBookiesException} is thrown.
+<i>280</i>&nbsp;     *
+<i>281</i>&nbsp;     * &lt;p&gt;If &#39;enforceMinNumRacksPerWriteQuorum&#39; config is enabled then the bookies belonging to default
+<i>282</i>&nbsp;     * faultzone (rack) will be excluded while selecting bookies.
+<i>283</i>&nbsp;     *
+<i>284</i>&nbsp;     * @param ensembleSize
+<i>285</i>&nbsp;     *          the value of ensembleSize
+<i>286</i>&nbsp;     * @param writeQuorumSize
+<i>287</i>&nbsp;     *          the value of writeQuorumSize
+<i>288</i>&nbsp;     * @param ackQuorumSize the value of ackQuorumSize (added since 4.5)
+<i>289</i>&nbsp;     * @param customMetadata the value of customMetadata. it is the same user defined metadata that user
+<i>290</i>&nbsp;     *                       provides in {@link BookKeeper#createLedger(int, int, int, BookKeeper.DigestType, byte[])}
+<i>291</i>&nbsp;     * @param currentEnsemble the value of currentEnsemble
+<i>292</i>&nbsp;     * @param bookieToReplace bookie to replace
+<i>293</i>&nbsp;     * @param excludeBookies bookies that should not be considered as candidate.
+<i>294</i>&nbsp;     * @throws BKNotEnoughBookiesException
+<i>295</i>&nbsp;     * @return a placement result containing the new bookie address.
+<i>296</i>&nbsp;     */
+<i>297</i>&nbsp;    PlacementResult&lt;BookieSocketAddress&gt; replaceBookie(int ensembleSize,
+<i>298</i>&nbsp;                                                       int writeQuorumSize,
+<i>299</i>&nbsp;                                                       int ackQuorumSize,
+<i>300</i>&nbsp;                                                       Map&lt;String, byte[]&gt; customMetadata,
+<i>301</i>&nbsp;                                                       List&lt;BookieSocketAddress&gt; currentEnsemble,
+<i>302</i>&nbsp;                                                       BookieSocketAddress bookieToReplace,
+<i>303</i>&nbsp;                                                       Set&lt;BookieSocketAddress&gt; excludeBookies)
+<i>304</i>&nbsp;            throws BKNotEnoughBookiesException;
+<i>305</i>&nbsp;
+<i>306</i>&nbsp;    /**
+<i>307</i>&nbsp;     * Register a bookie as slow so that it is tried after available and read-only bookies.
+<i>308</i>&nbsp;     *
+<i>309</i>&nbsp;     * @param bookieSocketAddress
+<i>310</i>&nbsp;     *          Address of bookie host
+<i>311</i>&nbsp;     * @param entryId
+<i>312</i>&nbsp;     *          Entry ID that caused a speculative timeout on the bookie.
+<i>313</i>&nbsp;     */
+<i>314</i>&nbsp;    void registerSlowBookie(BookieSocketAddress bookieSocketAddress, long entryId);
+<i>315</i>&nbsp;
+<i>316</i>&nbsp;    /**
+<i>317</i>&nbsp;     * Reorder the read sequence of a given write quorum &lt;i&gt;writeSet&lt;/i&gt;.
+<i>318</i>&nbsp;     *
+<i>319</i>&nbsp;     * @param ensemble
+<i>320</i>&nbsp;     *          Ensemble to read entries.
+<i>321</i>&nbsp;     * @param bookiesHealthInfo
+<i>322</i>&nbsp;     *          Health info for bookies
+<i>323</i>&nbsp;     * @param writeSet
+<i>324</i>&nbsp;     *          Write quorum to read entries. This will be modified, rather than
+<i>325</i>&nbsp;     *          allocating a new WriteSet.
+<i>326</i>&nbsp;     * @return The read sequence. This will be the same object as the passed in
+<i>327</i>&nbsp;     *         writeSet.
+<i>328</i>&nbsp;     * @since 4.5
+<i>329</i>&nbsp;     */
+<i>330</i>&nbsp;    DistributionSchedule.WriteSet reorderReadSequence(
+<i>331</i>&nbsp;            List&lt;BookieSocketAddress&gt; ensemble,
+<i>332</i>&nbsp;            BookiesHealthInfo bookiesHealthInfo,
+<i>333</i>&nbsp;            DistributionSchedule.WriteSet writeSet);
+<i>334</i>&nbsp;
+<i>335</i>&nbsp;
+<i>336</i>&nbsp;    /**
+<i>337</i>&nbsp;     * Reorder the read last add confirmed sequence of a given write quorum &lt;i&gt;writeSet&lt;/i&gt;.
+<i>338</i>&nbsp;     *
+<i>339</i>&nbsp;     * @param ensemble
+<i>340</i>&nbsp;     *          Ensemble to read entries.
+<i>341</i>&nbsp;     * @param bookiesHealthInfo
+<i>342</i>&nbsp;     *          Health info for bookies
+<i>343</i>&nbsp;     * @param writeSet
+<i>344</i>&nbsp;     *          Write quorum to read entries. This will be modified, rather than
+<i>345</i>&nbsp;     *          allocating a new WriteSet.
+<i>346</i>&nbsp;     * @return The read sequence. This will be the same object as the passed in
+<i>347</i>&nbsp;     *         writeSet.
+<i>348</i>&nbsp;     * @since 4.5
+<i>349</i>&nbsp;     */
+<i>350</i>&nbsp;    DistributionSchedule.WriteSet reorderReadLACSequence(
+<i>351</i>&nbsp;            List&lt;BookieSocketAddress&gt; ensemble,
+<i>352</i>&nbsp;            BookiesHealthInfo bookiesHealthInfo,
+<i>353</i>&nbsp;            DistributionSchedule.WriteSet writeSet);
+<i>354</i>&nbsp;
+<i>355</i>&nbsp;    /**
+<i>356</i>&nbsp;     * Send the bookie info details.
+<i>357</i>&nbsp;     *
+<i>358</i>&nbsp;     * @param bookieInfoMap
+<i>359</i>&nbsp;     *          A map that has the bookie to BookieInfo
+<i>360</i>&nbsp;     * @since 4.5
+<i>361</i>&nbsp;     */
+<i>362</i>&nbsp;    default void updateBookieInfo(Map&lt;BookieSocketAddress, BookieInfo&gt; bookieInfoMap) {
+<b class="nc"><i>363</i>&nbsp;    }</b>
+<i>364</i>&nbsp;
+<i>365</i>&nbsp;    /**
+<i>366</i>&nbsp;     * Select one bookie to the &quot;sticky&quot; bookie where all reads for a particular
+<i>367</i>&nbsp;     * ledger will be directed to.
+<i>368</i>&nbsp;     *
+<i>369</i>&nbsp;     * &lt;p&gt;The default implementation will pick a bookie randomly from the ensemble.
+<i>370</i>&nbsp;     * Other placement policies will be able to do better decisions based on
+<i>371</i>&nbsp;     * additional informations (eg: rack or region awareness).
+<i>372</i>&nbsp;     *
+<i>373</i>&nbsp;     * @param metadata
+<i>374</i>&nbsp;     *            the {@link LedgerMetadata} object
+<i>375</i>&nbsp;     * @param currentStickyBookieIndex
+<i>376</i>&nbsp;     *            if we are changing the sticky bookie after a read failure, the
+<i>377</i>&nbsp;     *            current sticky bookie is passed in so that we will avoid
+<i>378</i>&nbsp;     *            choosing it again
+<i>379</i>&nbsp;     * @return the index, within the ensemble of the bookie chosen as the sticky
+<i>380</i>&nbsp;     *         bookie
+<i>381</i>&nbsp;     *
+<i>382</i>&nbsp;     * @since 4.9
+<i>383</i>&nbsp;     */
+<i>384</i>&nbsp;    default int getStickyReadBookieIndex(LedgerMetadata metadata, Optional&lt;Integer&gt; currentStickyBookieIndex) {
+<b class="nc"><i>385</i>&nbsp;        if (!currentStickyBookieIndex.isPresent()) {</b>
+<i>386</i>&nbsp;            // Pick one bookie randomly from the current ensemble as the initial
+<i>387</i>&nbsp;            // &quot;sticky bookie&quot;
+<b class="nc"><i>388</i>&nbsp;            return ThreadLocalRandom.current().nextInt(metadata.getEnsembleSize());</b>
+<i>389</i>&nbsp;        } else {
+<i>390</i>&nbsp;            // When choosing a new sticky bookie index (eg: after the current
+<i>391</i>&nbsp;            // one has read failures), by default we pick the next one in the
+<i>392</i>&nbsp;            // ensemble, to avoid picking up the same one again.
+<b class="nc"><i>393</i>&nbsp;            return MathUtils.signSafeMod(currentStickyBookieIndex.get() + 1, metadata.getEnsembleSize());</b>
+<i>394</i>&nbsp;        }
+<i>395</i>&nbsp;    }
+<i>396</i>&nbsp;
+<i>397</i>&nbsp;    /**
+<i>398</i>&nbsp;     * returns AdherenceLevel if the Ensemble is strictly/softly/fails adhering
+<i>399</i>&nbsp;     * to placement policy, like in the case of
+<i>400</i>&nbsp;     * RackawareEnsemblePlacementPolicy, bookies in the writeset are from
+<i>401</i>&nbsp;     * &#39;minNumRacksPerWriteQuorum&#39; number of racks. And in the case of
+<i>402</i>&nbsp;     * RegionawareEnsemblePlacementPolicy, check for
+<i>403</i>&nbsp;     * minimumRegionsForDurability, reppRegionsToWrite, rack distribution within
+<i>404</i>&nbsp;     * a region and other parameters of RegionAwareEnsemblePlacementPolicy. In
+<i>405</i>&nbsp;     * ZoneAwareEnsemblePlacementPolicy if bookies in the writeset are from
+<i>406</i>&nbsp;     * &#39;desiredNumOfZones&#39; then it is considered as MEETS_STRICT if they are
+<i>407</i>&nbsp;     * from &#39;minNumOfZones&#39; then it is considered as MEETS_SOFT otherwise
+<i>408</i>&nbsp;     * considered as FAIL.
+<i>409</i>&nbsp;     *
+<i>410</i>&nbsp;     * @param ensembleList
+<i>411</i>&nbsp;     *            list of BookieSocketAddress of bookies in the ensemble
+<i>412</i>&nbsp;     * @param writeQuorumSize
+<i>413</i>&nbsp;     *            writeQuorumSize of the ensemble
+<i>414</i>&nbsp;     * @param ackQuorumSize
+<i>415</i>&nbsp;     *            ackQuorumSize of the ensemble
+<i>416</i>&nbsp;     * @return
+<i>417</i>&nbsp;     */
+<i>418</i>&nbsp;    default PlacementPolicyAdherence isEnsembleAdheringToPlacementPolicy(List&lt;BookieSocketAddress&gt; ensembleList,
+<i>419</i>&nbsp;            int writeQuorumSize, int ackQuorumSize) {
+<b class="nc"><i>420</i>&nbsp;        return PlacementPolicyAdherence.FAIL;</b>
+<i>421</i>&nbsp;    }
+<i>422</i>&nbsp;
+<i>423</i>&nbsp;    /**
+<i>424</i>&nbsp;     * Returns true if the bookies that have acknowledged a write adhere to the minimum fault domains as defined in the
+<i>425</i>&nbsp;     * placement policy in use. Ex: In the case of RackawareEnsemblePlacementPolicy, bookies belong to at least
+<i>426</i>&nbsp;     * &#39;minNumRacksPerWriteQuorum&#39; number of racks.
+<i>427</i>&nbsp;     *
+<i>428</i>&nbsp;     * @param ackedBookies
+<i>429</i>&nbsp;     *            list of BookieSocketAddress of bookies that have acknowledged a write.
+<i>430</i>&nbsp;     * @param writeQuorumSize
+<i>431</i>&nbsp;     *            writeQuorumSize of the ensemble
+<i>432</i>&nbsp;     * @param ackQuorumSize
+<i>433</i>&nbsp;     *            ackQuorumSize of the ensemble
+<i>434</i>&nbsp;     * @return
+<i>435</i>&nbsp;     */
+<i>436</i>&nbsp;    default boolean areAckedBookiesAdheringToPlacementPolicy(Set&lt;BookieSocketAddress&gt; ackedBookies,
+<i>437</i>&nbsp;                                                             int writeQuorumSize,
+<i>438</i>&nbsp;                                                             int ackQuorumSize) {
+<b class="nc"><i>439</i>&nbsp;        return true;</b>
+<i>440</i>&nbsp;    }
+<i>441</i>&nbsp;
+<i>442</i>&nbsp;    /**
+<i>443</i>&nbsp;     * enum for PlacementPolicyAdherence. Currently we are supporting tri-value
+<i>444</i>&nbsp;     * enum for PlacementPolicyAdherence. If placement policy is met strictly
+<i>445</i>&nbsp;     * then it is MEETS_STRICT, if it doesn&#39;t adhere to placement policy then it
+<i>446</i>&nbsp;     * is FAIL. But there are certain placement policies, like
+<i>447</i>&nbsp;     * ZoneAwareEnsemblePlacementPolicy which has definition of soft adherence
+<i>448</i>&nbsp;     * level to support zone down scenarios.
+<i>449</i>&nbsp;     */
+<b class="fc"><i>450</i>&nbsp;    enum PlacementPolicyAdherence {</b>
+<b class="fc"><i>451</i>&nbsp;        FAIL(1), MEETS_SOFT(3), MEETS_STRICT(5);</b>
+<i>452</i>&nbsp;        private int numVal;
+<i>453</i>&nbsp;
+<b class="fc"><i>454</i>&nbsp;        private PlacementPolicyAdherence(int numVal) {</b>
+<b class="fc"><i>455</i>&nbsp;            this.numVal = numVal;</b>
+<b class="fc"><i>456</i>&nbsp;        }</b>
+<i>457</i>&nbsp;
+<i>458</i>&nbsp;        public int getNumVal() {
+<b class="nc"><i>459</i>&nbsp;            return numVal;</b>
+<i>460</i>&nbsp;        }
+<i>461</i>&nbsp;    }
+<i>462</i>&nbsp;
+<i>463</i>&nbsp;    /**
+<i>464</i>&nbsp;     * Result of a placement calculation against a placement policy.
+<i>465</i>&nbsp;     */
+<i>466</i>&nbsp;    final class PlacementResult&lt;T&gt; {
+<i>467</i>&nbsp;        private final T result;
+<i>468</i>&nbsp;        private final PlacementPolicyAdherence policyAdherence;
+<i>469</i>&nbsp;
+<i>470</i>&nbsp;        public static &lt;T&gt; PlacementResult&lt;T&gt; of(T result, PlacementPolicyAdherence policyAdherence) {
+<b class="fc"><i>471</i>&nbsp;            return new PlacementResult&lt;&gt;(result, policyAdherence);</b>
+<i>472</i>&nbsp;        }
+<i>473</i>&nbsp;
+<b class="fc"><i>474</i>&nbsp;        private PlacementResult(T result, PlacementPolicyAdherence policyAdherence) {</b>
+<b class="fc"><i>475</i>&nbsp;            this.result = result;</b>
+<b class="fc"><i>476</i>&nbsp;            this.policyAdherence = policyAdherence;</b>
+<b class="fc"><i>477</i>&nbsp;        }</b>
+<i>478</i>&nbsp;
+<i>479</i>&nbsp;        public T getResult() {
+<b class="fc"><i>480</i>&nbsp;            return result;</b>
+<i>481</i>&nbsp;        }
+<i>482</i>&nbsp;
+<i>483</i>&nbsp;        public PlacementPolicyAdherence isAdheringToPolicy() {
+<b class="fc"><i>484</i>&nbsp;            return policyAdherence;</b>
+<i>485</i>&nbsp;        }
+<i>486</i>&nbsp;    }
+<i>487</i>&nbsp;}
+</div>
+</div>
+
+<div class="footer">
+    
+    <div style="float:right;">generated on 2021-06-28 15:57</div>
+</div>
+</body>
+</html>

@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ArraySortGroupTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$myBookieFenceLedgerTest.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.bookie.storage.ldb</a> &gt; <span class="el_source">ArraySortGroupTest.java</span></div><h1>ArraySortGroupTest.java</h1><pre class="source lang-java linenums">/**
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.bookie.storage.ldb;
+
+import static org.junit.Assert.assertArrayEquals;
+
+import org.junit.Test;
+
+/**
+ * Unit test for {@link ArrayGroupSort}.
+ */
+<span class="nc" id="L30">public class ArraySortGroupTest {</span>
+
+    @Test
+    public void simple() {
+<span class="nc" id="L34">        long[] data = new long[] { //</span>
+                1, 2, 3, 4, //
+                5, 6, 3, 1, //
+                4, 8, 1, 2, //
+                4, 5, 12, 10, //
+                3, 3, 3, 3, //
+                4, 3, 1, 2, //
+                3, 3, 3, 3, //
+        };
+
+<span class="nc" id="L44">        long[] expectedSorted = new long[] { //</span>
+                1, 2, 3, 4, //
+                3, 3, 3, 3, //
+                3, 3, 3, 3, //
+                4, 3, 1, 2, //
+                4, 5, 12, 10, //
+                4, 8, 1, 2, //
+                5, 6, 3, 1, //
+        };
+
+<span class="nc" id="L54">        ArrayGroupSort sorter = new ArrayGroupSort(2, 4);</span>
+<span class="nc" id="L55">        sorter.sort(data);</span>
+
+<span class="nc" id="L57">        assertArrayEquals(expectedSorted, data);</span>
+<span class="nc" id="L58">    }</span>
+
+    @Test(expected = IllegalArgumentException.class)
+    public void keySmallerThanTotalSize() {
+<span class="nc" id="L62">        new ArrayGroupSort(3, 2);</span>
+<span class="nc" id="L63">    }</span>
+
+    @Test(expected = IllegalArgumentException.class)
+    public void negativeKeySize() {
+<span class="nc" id="L67">        new ArrayGroupSort(-1, 2);</span>
+<span class="nc" id="L68">    }</span>
+
+    @Test(expected = IllegalArgumentException.class)
+    public void negativeTotalSize() {
+<span class="nc" id="L72">        new ArrayGroupSort(1, -1);</span>
+<span class="nc" id="L73">    }</span>
+
+    @Test(expected = IllegalArgumentException.class)
+    public void arraySizeIsNotMultiple() {
+<span class="nc" id="L77">        ArrayGroupSort sorter = new ArrayGroupSort(1, 3);</span>
+<span class="nc" id="L78">        sorter.sort(new long[] { 1, 2, 3, 4 });</span>
+<span class="nc" id="L79">    }</span>
+
+    @Test(expected = IllegalArgumentException.class)
+    public void arraySizeIsShorterThanRequired() {
+<span class="nc" id="L83">        ArrayGroupSort sorter = new ArrayGroupSort(1, 3);</span>
+<span class="nc" id="L84">        sorter.sort(new long[] { 1, 2 });</span>
+<span class="nc" id="L85">    }</span>
+
+    @Test
+    public void emptyArray() {
+<span class="nc" id="L89">        long[] data = new long[] {};</span>
+
+<span class="nc" id="L91">        long[] expectedSorted = new long[] {};</span>
+
+<span class="nc" id="L93">        ArrayGroupSort sorter = new ArrayGroupSort(2, 4);</span>
+<span class="nc" id="L94">        sorter.sort(data);</span>
+
+<span class="nc" id="L96">        assertArrayEquals(expectedSorted, data);</span>
+<span class="nc" id="L97">    }</span>
+
+    @Test
+    public void singleItem() {
+<span class="nc" id="L101">        long[] data = new long[] { 1, 2, 3, 4 };</span>
+<span class="nc" id="L102">        long[] expectedSorted = new long[] { 1, 2, 3, 4 };</span>
+
+<span class="nc" id="L104">        ArrayGroupSort sorter = new ArrayGroupSort(2, 4);</span>
+<span class="nc" id="L105">        sorter.sort(data);</span>
+
+<span class="nc" id="L107">        assertArrayEquals(expectedSorted, data);</span>
+<span class="nc" id="L108">    }</span>
+
+    @Test
+    public void twoItems() {
+<span class="nc" id="L112">        long[] data = new long[] { 1, 2, 3, 4, 1, 1, 5, 5 };</span>
+<span class="nc" id="L113">        long[] expectedSorted = new long[] { 1, 1, 5, 5, 1, 2, 3, 4 };</span>
+
+<span class="nc" id="L115">        ArrayGroupSort sorter = new ArrayGroupSort(2, 4);</span>
+<span class="nc" id="L116">        sorter.sort(data);</span>
+
+<span class="nc" id="L118">        assertArrayEquals(expectedSorted, data);</span>
+<span class="nc" id="L119">    }</span>
+
+    @Test
+    public void threeItems() {
+<span class="nc" id="L123">        long[] data = new long[] { 1, 2, 3, 4, 1, 1, 5, 5, 1, 0, 2, 1 };</span>
+<span class="nc" id="L124">        long[] expectedSorted = new long[] { 1, 0, 2, 1, 1, 1, 5, 5, 1, 2, 3, 4 };</span>
+
+<span class="nc" id="L126">        ArrayGroupSort sorter = new ArrayGroupSort(2, 4);</span>
+<span class="nc" id="L127">        sorter.sort(data);</span>
+
+<span class="nc" id="L129">        assertArrayEquals(expectedSorted, data);</span>
+<span class="nc" id="L130">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

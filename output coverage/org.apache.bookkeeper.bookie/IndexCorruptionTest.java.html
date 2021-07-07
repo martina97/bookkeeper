@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>IndexCorruptionTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$myBookieFenceLedgerTest.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.bookie</a> &gt; <span class="el_source">IndexCorruptionTest.java</span></div><h1>IndexCorruptionTest.java</h1><pre class="source lang-java linenums">/*
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.bookie;
+
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+
+import java.util.Enumeration;
+
+import org.apache.bookkeeper.client.BookKeeper.DigestType;
+import org.apache.bookkeeper.client.LedgerEntry;
+import org.apache.bookkeeper.client.LedgerHandle;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * This class tests that index corruption cases.
+ */
+public class IndexCorruptionTest extends BookKeeperClusterTestCase {
+<span class="nc" id="L42">    private static final Logger LOG = LoggerFactory.getLogger(IndexCorruptionTest.class);</span>
+
+    DigestType digestType;
+
+<span class="nc" id="L46">    int pageSize = 1024;</span>
+
+    public IndexCorruptionTest() {
+<span class="nc" id="L49">        super(1);</span>
+<span class="nc" id="L50">        this.digestType = DigestType.CRC32;</span>
+<span class="nc" id="L51">        baseConf.setPageSize(pageSize);</span>
+<span class="nc" id="L52">    }</span>
+
+    @Test
+    public void testNoSuchLedger() throws Exception {
+<span class="nc" id="L56">        LOG.debug(&quot;Testing NoSuchLedger&quot;);</span>
+
+<span class="nc" id="L58">        SyncThread syncThread = bs.get(0).getBookie().syncThread;</span>
+<span class="nc" id="L59">        syncThread.suspendSync();</span>
+        // Create a ledger
+<span class="nc" id="L61">        LedgerHandle lh = bkc.createLedger(1, 1, digestType, &quot;&quot;.getBytes());</span>
+
+        // Close the ledger which cause a readEntry(0) call
+<span class="nc" id="L64">        LedgerHandle newLh = bkc.openLedger(lh.getId(), digestType, &quot;&quot;.getBytes());</span>
+
+        // Create a new ledger to write entries
+<span class="nc" id="L67">        String dummyMsg = &quot;NoSuchLedger&quot;;</span>
+<span class="nc" id="L68">        int numMsgs = 3;</span>
+<span class="nc" id="L69">        LedgerHandle wlh = bkc.createLedger(1, 1, digestType, &quot;&quot;.getBytes());</span>
+<span class="nc bnc" id="L70" title="All 2 branches missed.">        for (int i = 0; i &lt; numMsgs; i++) {</span>
+<span class="nc" id="L71">            wlh.addEntry(dummyMsg.getBytes());</span>
+        }
+
+<span class="nc" id="L74">        syncThread.resumeSync();</span>
+
+        // trigger sync
+<span class="nc" id="L77">        Thread.sleep(2 * baseConf.getFlushInterval());</span>
+
+        // restart bookies
+<span class="nc" id="L80">        restartBookies();</span>
+
+<span class="nc" id="L82">        Enumeration&lt;LedgerEntry&gt; seq = wlh.readEntries(0, numMsgs - 1);</span>
+<span class="nc" id="L83">        assertTrue(&quot;Enumeration of ledger entries has no element&quot;, seq.hasMoreElements());</span>
+<span class="nc" id="L84">        int entryId = 0;</span>
+<span class="nc bnc" id="L85" title="All 2 branches missed.">        while (seq.hasMoreElements()) {</span>
+<span class="nc" id="L86">            LedgerEntry e = seq.nextElement();</span>
+<span class="nc" id="L87">            assertEquals(entryId, e.getEntryId());</span>
+
+<span class="nc" id="L89">            assertArrayEquals(dummyMsg.getBytes(), e.getEntry());</span>
+<span class="nc" id="L90">            ++entryId;</span>
+<span class="nc" id="L91">        }</span>
+<span class="nc" id="L92">        assertEquals(entryId, numMsgs);</span>
+<span class="nc" id="L93">    }</span>
+
+    @Test
+    public void testEmptyIndexPage() throws Exception {
+<span class="nc" id="L97">        LOG.debug(&quot;Testing EmptyIndexPage&quot;);</span>
+
+<span class="nc" id="L99">        SyncThread syncThread = bs.get(0).getBookie().syncThread;</span>
+<span class="nc" id="L100">        assertNotNull(&quot;Not found SyncThread.&quot;, syncThread);</span>
+
+<span class="nc" id="L102">        syncThread.suspendSync();</span>
+
+        // Create a ledger
+<span class="nc" id="L105">        LedgerHandle lh1 = bkc.createLedger(1, 1, digestType, &quot;&quot;.getBytes());</span>
+
+<span class="nc" id="L107">        String dummyMsg = &quot;NoSuchLedger&quot;;</span>
+
+        // write two page entries to ledger 2
+<span class="nc" id="L110">        int numMsgs = 2 * pageSize / 8;</span>
+<span class="nc" id="L111">        LedgerHandle lh2 = bkc.createLedger(1, 1, digestType, &quot;&quot;.getBytes());</span>
+<span class="nc bnc" id="L112" title="All 2 branches missed.">        for (int i = 0; i &lt; numMsgs; i++) {</span>
+<span class="nc" id="L113">            lh2.addEntry(dummyMsg.getBytes());</span>
+        }
+
+<span class="nc" id="L116">        syncThread.resumeSync();</span>
+
+        // trigger sync
+<span class="nc" id="L119">        Thread.sleep(2 * baseConf.getFlushInterval());</span>
+
+<span class="nc" id="L121">        syncThread.suspendSync();</span>
+
+        // Close ledger 1 which cause a readEntry(0) call
+<span class="nc" id="L124">        LedgerHandle newLh1 = bkc.openLedger(lh1.getId(), digestType, &quot;&quot;.getBytes());</span>
+
+        // write another 3 entries to ledger 2
+<span class="nc bnc" id="L127" title="All 2 branches missed.">        for (int i = 0; i &lt; 3; i++) {</span>
+<span class="nc" id="L128">            lh2.addEntry(dummyMsg.getBytes());</span>
+        }
+
+<span class="nc" id="L131">        syncThread.resumeSync();</span>
+
+        // wait for sync again
+<span class="nc" id="L134">        Thread.sleep(2 * baseConf.getFlushInterval());</span>
+
+        // restart bookies
+<span class="nc" id="L137">        restartBookies();</span>
+
+<span class="nc" id="L139">        numMsgs += 3;</span>
+<span class="nc" id="L140">        Enumeration&lt;LedgerEntry&gt; seq = lh2.readEntries(0, numMsgs - 1);</span>
+<span class="nc" id="L141">        assertTrue(&quot;Enumeration of ledger entries has no element&quot;, seq.hasMoreElements());</span>
+<span class="nc" id="L142">        int entryId = 0;</span>
+<span class="nc bnc" id="L143" title="All 2 branches missed.">        while (seq.hasMoreElements()) {</span>
+<span class="nc" id="L144">            LedgerEntry e = seq.nextElement();</span>
+<span class="nc" id="L145">            assertEquals(entryId, e.getEntryId());</span>
+
+<span class="nc" id="L147">            assertArrayEquals(dummyMsg.getBytes(), e.getEntry());</span>
+<span class="nc" id="L148">            ++entryId;</span>
+<span class="nc" id="L149">        }</span>
+<span class="nc" id="L150">        assertEquals(entryId, numMsgs);</span>
+<span class="nc" id="L151">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

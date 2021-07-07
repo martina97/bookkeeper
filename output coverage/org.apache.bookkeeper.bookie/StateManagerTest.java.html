@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>StateManagerTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$myBookieFenceLedgerTest.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.bookie</a> &gt; <span class="el_source">StateManagerTest.java</span></div><h1>StateManagerTest.java</h1><pre class="source lang-java linenums">/**
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.bookie;
+
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+import io.netty.buffer.UnpooledByteBufAllocator;
+
+import java.io.File;
+import org.apache.bookkeeper.conf.ServerConfiguration;
+import org.apache.bookkeeper.conf.TestBKConfiguration;
+import org.apache.bookkeeper.discover.BookieServiceInfo;
+import org.apache.bookkeeper.meta.MetadataBookieDriver;
+import org.apache.bookkeeper.meta.zk.ZKMetadataBookieDriver;
+import org.apache.bookkeeper.stats.NullStatsLogger;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.rules.TestName;
+
+/**
+ * Testing StateManager cases.
+ */
+public class StateManagerTest extends BookKeeperClusterTestCase {
+
+<span class="nc" id="L45">    @Rule</span>
+    public final TestName runtime = new TestName();
+    final ServerConfiguration conf;
+    MetadataBookieDriver driver;
+
+    public StateManagerTest(){
+<span class="nc" id="L51">        super(0);</span>
+<span class="nc" id="L52">        String ledgersPath = &quot;/&quot; + &quot;ledgers&quot; + runtime.getMethodName();</span>
+<span class="nc" id="L53">        baseClientConf.setMetadataServiceUri(zkUtil.getMetadataServiceUri(ledgersPath));</span>
+<span class="nc" id="L54">        baseConf.setMetadataServiceUri(zkUtil.getMetadataServiceUri(ledgersPath));</span>
+<span class="nc" id="L55">        conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L56">        driver = new ZKMetadataBookieDriver();</span>
+
+<span class="nc" id="L58">    }</span>
+
+    @Override
+    public void setUp() throws Exception {
+<span class="nc" id="L62">        super.setUp();</span>
+<span class="nc" id="L63">        zkUtil.createBKEnsemble(&quot;/&quot; + runtime.getMethodName());</span>
+<span class="nc" id="L64">        File tmpDir = createTempDir(&quot;stateManger&quot;, &quot;test&quot;);</span>
+<span class="nc" id="L65">        conf.setJournalDirName(tmpDir.getPath())</span>
+<span class="nc" id="L66">                .setLedgerDirNames(new String[] { tmpDir.getPath() })</span>
+<span class="nc" id="L67">                .setJournalDirName(tmpDir.toString())</span>
+<span class="nc" id="L68">                .setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+<span class="nc" id="L69">    }</span>
+
+    @Override
+    public void tearDown() throws Exception {
+<span class="nc" id="L73">        super.tearDown();</span>
+<span class="nc bnc" id="L74" title="All 2 branches missed.">        if (driver != null) {</span>
+<span class="nc" id="L75">            driver.close();</span>
+        }
+<span class="nc" id="L77">    }</span>
+
+    /**
+     * StateManager can transition between writable mode and readOnly mode if it was not created with readOnly mode.
+     */
+    @Test
+    public void testNormalBookieTransitions() throws Exception {
+<span class="nc" id="L84">        BookieStateManager stateManager = new BookieStateManager(conf, driver);</span>
+<span class="nc" id="L85">        driver.initialize(conf, () -&gt; {</span>
+<span class="nc" id="L86">            stateManager.forceToUnregistered();</span>
+            // schedule a re-register operation
+<span class="nc" id="L88">            stateManager.registerBookie(false);</span>
+<span class="nc" id="L89">        }, NullStatsLogger.INSTANCE);</span>
+
+<span class="nc" id="L91">        stateManager.initState();</span>
+<span class="nc" id="L92">        stateManager.registerBookie(true).get();</span>
+
+<span class="nc" id="L94">        assertTrue(stateManager.isRunning());</span>
+<span class="nc" id="L95">        assertTrue(stateManager.isRegistered());</span>
+
+<span class="nc" id="L97">        stateManager.transitionToReadOnlyMode().get();</span>
+<span class="nc" id="L98">        assertTrue(stateManager.isReadOnly());</span>
+
+<span class="nc" id="L100">        stateManager.transitionToWritableMode().get();</span>
+<span class="nc" id="L101">        assertTrue(stateManager.isRunning());</span>
+<span class="nc" id="L102">        assertFalse(stateManager.isReadOnly());</span>
+
+<span class="nc" id="L104">        stateManager.close();</span>
+<span class="nc" id="L105">        assertFalse(stateManager.isRunning());</span>
+<span class="nc" id="L106">    }</span>
+
+    @Test
+    public void testReadOnlyDisableBookieTransitions() throws Exception {
+<span class="nc" id="L110">        conf.setReadOnlyModeEnabled(false);</span>
+        // readOnly disabled bk stateManager
+<span class="nc" id="L112">        BookieStateManager stateManager = new BookieStateManager(conf, driver);</span>
+        // simulate sync shutdown logic in bookie
+<span class="nc" id="L114">        stateManager.setShutdownHandler(new StateManager.ShutdownHandler() {</span>
+            @Override
+            public void shutdown(int code) {
+                try {
+<span class="nc bnc" id="L118" title="All 2 branches missed.">                    if (stateManager.isRunning()) {</span>
+<span class="nc" id="L119">                        stateManager.forceToShuttingDown();</span>
+<span class="nc" id="L120">                        stateManager.forceToReadOnly();</span>
+                    }
+
+                } finally {
+<span class="nc" id="L124">                    stateManager.close();</span>
+                }
+<span class="nc" id="L126">            }</span>
+        });
+<span class="nc" id="L128">        driver.initialize(</span>
+            conf,
+            () -&gt; {
+<span class="nc" id="L131">                stateManager.forceToUnregistered();</span>
+                // schedule a re-register operation
+<span class="nc" id="L133">                stateManager.registerBookie(false);</span>
+<span class="nc" id="L134">            },</span>
+            NullStatsLogger.INSTANCE);
+
+<span class="nc" id="L137">        stateManager.initState();</span>
+<span class="nc" id="L138">        stateManager.registerBookie(true).get();</span>
+<span class="nc" id="L139">        assertTrue(stateManager.isRunning());</span>
+
+<span class="nc" id="L141">        stateManager.transitionToReadOnlyMode().get();</span>
+        // stateManager2 will shutdown
+<span class="nc" id="L143">        assertFalse(stateManager.isRunning());</span>
+        // different dimension of bookie state: running &lt;--&gt; down, read &lt;--&gt; write, unregistered &lt;--&gt; registered
+        // bookie2 is set to readOnly when shutdown
+<span class="nc" id="L146">        assertTrue(stateManager.isReadOnly());</span>
+<span class="nc" id="L147">    }</span>
+
+    @Test
+    public void testReadOnlyBookieTransitions() throws Exception{
+        // readOnlybk, which use override stateManager impl
+<span class="nc" id="L152">        File tmpDir = createTempDir(&quot;stateManger&quot;, &quot;test-readonly&quot;);</span>
+<span class="nc" id="L153">        final ServerConfiguration readOnlyConf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L154">        readOnlyConf.setJournalDirName(tmpDir.getPath())</span>
+<span class="nc" id="L155">                .setLedgerDirNames(new String[] { tmpDir.getPath() })</span>
+<span class="nc" id="L156">                .setJournalDirName(tmpDir.toString())</span>
+<span class="nc" id="L157">                .setMetadataServiceUri(zkUtil.getMetadataServiceUri())</span>
+<span class="nc" id="L158">                .setForceReadOnlyBookie(true);</span>
+<span class="nc" id="L159">        ReadOnlyBookie readOnlyBookie = new ReadOnlyBookie(readOnlyConf, NullStatsLogger.INSTANCE,</span>
+                UnpooledByteBufAllocator.DEFAULT, BookieServiceInfo.NO_INFO);
+<span class="nc" id="L161">        readOnlyBookie.start();</span>
+<span class="nc" id="L162">        assertTrue(readOnlyBookie.isRunning());</span>
+<span class="nc" id="L163">        assertTrue(readOnlyBookie.isReadOnly());</span>
+
+        // transition has no effect if bookie start with readOnly mode
+<span class="nc" id="L166">        readOnlyBookie.getStateManager().transitionToWritableMode().get();</span>
+<span class="nc" id="L167">        assertTrue(readOnlyBookie.isRunning());</span>
+<span class="nc" id="L168">        assertTrue(readOnlyBookie.isReadOnly());</span>
+<span class="nc" id="L169">        readOnlyBookie.shutdown();</span>
+
+<span class="nc" id="L171">    }</span>
+
+    /**
+     * Verify the bookie reg.
+     */
+    @Test
+    public void testRegistration() throws Exception {
+<span class="nc" id="L178">        BookieStateManager stateManager = new BookieStateManager(conf, driver);</span>
+<span class="nc" id="L179">        driver.initialize(</span>
+            conf,
+            () -&gt; {
+<span class="nc" id="L182">                stateManager.forceToUnregistered();</span>
+                // schedule a re-register operation
+<span class="nc" id="L184">                stateManager.registerBookie(false);</span>
+<span class="nc" id="L185">            },</span>
+            NullStatsLogger.INSTANCE);
+        // simulate sync shutdown logic in bookie
+<span class="nc" id="L188">        stateManager.setShutdownHandler(new StateManager.ShutdownHandler() {</span>
+            @Override
+            public void shutdown(int code) {
+                try {
+<span class="nc bnc" id="L192" title="All 2 branches missed.">                    if (stateManager.isRunning()) {</span>
+<span class="nc" id="L193">                        stateManager.forceToShuttingDown();</span>
+<span class="nc" id="L194">                        stateManager.forceToReadOnly();</span>
+                    }
+
+                } finally {
+<span class="nc" id="L198">                    stateManager.close();</span>
+                }
+<span class="nc" id="L200">            }</span>
+        });
+<span class="nc" id="L202">        stateManager.initState();</span>
+        // up
+<span class="nc" id="L204">        assertTrue(stateManager.isRunning());</span>
+        // unregistered
+<span class="nc" id="L206">        assertFalse(stateManager.isRegistered());</span>
+
+<span class="nc" id="L208">        stateManager.registerBookie(true).get();</span>
+        // registered
+<span class="nc" id="L210">        assertTrue(stateManager.isRegistered());</span>
+<span class="nc" id="L211">        stateManager.getShutdownHandler().shutdown(ExitCode.OK);</span>
+        // readOnly
+<span class="nc" id="L213">        assertTrue(stateManager.isReadOnly());</span>
+<span class="nc" id="L214">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

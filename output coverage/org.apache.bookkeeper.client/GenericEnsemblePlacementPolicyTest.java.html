@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>GenericEnsemblePlacementPolicyTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">GenericEnsemblePlacementPolicyTest.java</span></div><h1>GenericEnsemblePlacementPolicyTest.java</h1><pre class="source lang-java linenums">/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.bookkeeper.client;
+
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.fail;
+
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameters;
+
+/**
+ * Testing a generic ensemble placement policy.
+ */
+@RunWith(Parameterized.class)
+public class GenericEnsemblePlacementPolicyTest extends BookKeeperClusterTestCase {
+
+<span class="nc" id="L48">    private BookKeeper.DigestType digestType = BookKeeper.DigestType.CRC32;</span>
+    private static final String PASSWORD = &quot;testPasswd&quot;;
+    private static final String property = &quot;foo&quot;;
+<span class="nc" id="L51">    private static final byte[] value = &quot;bar&quot;.getBytes(StandardCharsets.UTF_8);</span>
+<span class="nc" id="L52">    private static List&lt;Map&lt;String, byte[]&gt;&gt; customMetadataOnNewEnsembleStack = new ArrayList&lt;&gt;();</span>
+<span class="nc" id="L53">    private static List&lt;Map&lt;String, byte[]&gt;&gt; customMetadataOnReplaceBookieStack = new ArrayList&lt;&gt;();</span>
+
+    @Parameters
+    public static Collection&lt;Object[]&gt; getDiskWeightBasedPlacementEnabled() {
+<span class="nc" id="L57">        return Arrays.asList(new Object[][] { { false }, { true } });</span>
+    }
+
+    public GenericEnsemblePlacementPolicyTest(boolean diskWeightBasedPlacementEnabled) {
+<span class="nc" id="L61">        super(0);</span>
+<span class="nc" id="L62">        baseClientConf.setEnsemblePlacementPolicy(CustomEnsemblePlacementPolicy.class);</span>
+<span class="nc" id="L63">        baseClientConf.setDiskWeightBasedPlacementEnabled(diskWeightBasedPlacementEnabled);</span>
+<span class="nc" id="L64">    }</span>
+
+    /**
+     * A custom ensemble placement policy.
+     */
+<span class="nc" id="L69">    public static final class CustomEnsemblePlacementPolicy extends DefaultEnsemblePlacementPolicy {</span>
+
+        @Override
+        public PlacementResult&lt;BookieSocketAddress&gt; replaceBookie(int ensembleSize, int writeQuorumSize,
+            int ackQuorumSize, Map&lt;String, byte[]&gt; customMetadata, List&lt;BookieSocketAddress&gt; currentEnsemble,
+            BookieSocketAddress bookieToReplace, Set&lt;BookieSocketAddress&gt; excludeBookies)
+            throws BKException.BKNotEnoughBookiesException {
+<span class="nc" id="L76">            new Exception(&quot;replaceBookie &quot; + ensembleSize + &quot;,&quot; + customMetadata).printStackTrace();</span>
+<span class="nc" id="L77">            assertNotNull(customMetadata);</span>
+<span class="nc" id="L78">            customMetadataOnReplaceBookieStack.add(customMetadata);</span>
+<span class="nc" id="L79">            return super.replaceBookie(ensembleSize, writeQuorumSize, ackQuorumSize, customMetadata,</span>
+                currentEnsemble, bookieToReplace, excludeBookies);
+        }
+
+        @Override
+        public PlacementResult&lt;List&lt;BookieSocketAddress&gt;&gt; newEnsemble(int ensembleSize, int quorumSize,
+            int ackQuorumSize, Map&lt;String, byte[]&gt; customMetadata, Set&lt;BookieSocketAddress&gt; excludeBookies)
+            throws BKException.BKNotEnoughBookiesException {
+<span class="nc" id="L87">            assertNotNull(customMetadata);</span>
+<span class="nc" id="L88">            customMetadataOnNewEnsembleStack.add(customMetadata);</span>
+<span class="nc" id="L89">            return super.newEnsemble(ensembleSize, quorumSize, ackQuorumSize, customMetadata, excludeBookies);</span>
+        }
+    }
+
+    @Before
+    public void reset() {
+<span class="nc" id="L95">        customMetadataOnNewEnsembleStack.clear();</span>
+<span class="nc" id="L96">        customMetadataOnReplaceBookieStack.clear();</span>
+<span class="nc" id="L97">    }</span>
+
+    @Test
+    public void testNewEnsemble() throws Exception {
+<span class="nc" id="L101">        numBookies = 1;</span>
+<span class="nc" id="L102">        startBKCluster(zkUtil.getMetadataServiceUri());</span>
+        try {
+<span class="nc" id="L104">            Map&lt;String, byte[]&gt; customMetadata = new HashMap&lt;&gt;();</span>
+<span class="nc" id="L105">            customMetadata.put(property, value);</span>
+<span class="nc" id="L106">            try (BookKeeper bk = new BookKeeper(baseClientConf, zkc)) {</span>
+<span class="nc" id="L107">                bk.createLedger(1, 1, 1, digestType, PASSWORD.getBytes(), customMetadata);</span>
+            }
+<span class="nc" id="L109">            assertEquals(1, customMetadataOnNewEnsembleStack.size());</span>
+<span class="nc" id="L110">            assertArrayEquals(value, customMetadataOnNewEnsembleStack.get(0).get(property));</span>
+        } finally {
+<span class="nc" id="L112">            stopBKCluster();</span>
+        }
+<span class="nc" id="L114">    }</span>
+
+    @Test
+    public void testNewEnsembleWithNotEnoughtBookies() throws Exception {
+<span class="nc" id="L118">        numBookies = 0;</span>
+        try {
+<span class="nc" id="L120">            startBKCluster(zkUtil.getMetadataServiceUri());</span>
+<span class="nc" id="L121">            Map&lt;String, byte[]&gt; customMetadata = new HashMap&lt;&gt;();</span>
+<span class="nc" id="L122">            customMetadata.put(property, value);</span>
+<span class="nc" id="L123">            try (BookKeeper bk = new BookKeeper(baseClientConf, zkc)) {</span>
+<span class="nc" id="L124">                bk.createLedger(1, 1, 1, digestType, PASSWORD.getBytes(), customMetadata);</span>
+<span class="nc" id="L125">                fail(&quot;creation should fail&quot;);</span>
+<span class="nc" id="L126">            } catch (BKException.BKNotEnoughBookiesException bneb) {</span>
+<span class="nc" id="L127">            }</span>
+<span class="nc" id="L128">            assertEquals(2, customMetadataOnNewEnsembleStack.size());</span>
+<span class="nc" id="L129">            assertArrayEquals(value, customMetadataOnNewEnsembleStack.get(0).get(property));</span>
+<span class="nc" id="L130">            assertArrayEquals(value, customMetadataOnNewEnsembleStack.get(1).get(property));</span>
+        } finally {
+<span class="nc" id="L132">            stopBKCluster();</span>
+        }
+<span class="nc" id="L134">    }</span>
+
+    @Test
+    public void testReplaceBookie() throws Exception {
+<span class="nc" id="L138">        numBookies = 3;</span>
+<span class="nc" id="L139">        startBKCluster(zkUtil.getMetadataServiceUri());</span>
+        try {
+<span class="nc" id="L141">            Map&lt;String, byte[]&gt; customMetadata = new HashMap&lt;&gt;();</span>
+<span class="nc" id="L142">            customMetadata.put(property, value);</span>
+<span class="nc" id="L143">            try (BookKeeper bk = new BookKeeper(baseClientConf, zkc)) {</span>
+<span class="nc" id="L144">                try (LedgerHandle lh = bk.createLedger(2, 2, 2, digestType, PASSWORD.getBytes(), customMetadata)) {</span>
+<span class="nc" id="L145">                    lh.addEntry(value);</span>
+<span class="nc" id="L146">                    long lId = lh.getId();</span>
+<span class="nc" id="L147">                    List&lt;BookieSocketAddress&gt; ensembleAtFirstEntry = lh.getLedgerMetadata().getEnsembleAt(lId);</span>
+<span class="nc" id="L148">                    assertEquals(2, ensembleAtFirstEntry.size());</span>
+<span class="nc" id="L149">                    killBookie(ensembleAtFirstEntry.get(0));</span>
+<span class="nc" id="L150">                    lh.addEntry(value);</span>
+                }
+            }
+<span class="nc" id="L153">            assertEquals(2, customMetadataOnNewEnsembleStack.size());</span>
+<span class="nc" id="L154">            assertArrayEquals(value, customMetadataOnNewEnsembleStack.get(0).get(property));</span>
+            // replaceBookie by default calls newEnsemble, so newEnsemble gets called twice
+<span class="nc" id="L156">            assertArrayEquals(value, customMetadataOnNewEnsembleStack.get(0).get(property));</span>
+
+<span class="nc" id="L158">            assertEquals(1, customMetadataOnReplaceBookieStack.size());</span>
+<span class="nc" id="L159">            assertArrayEquals(value, customMetadataOnReplaceBookieStack.get(0).get(property));</span>
+
+        } finally {
+<span class="nc" id="L162">            stopBKCluster();</span>
+        }
+<span class="nc" id="L164">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

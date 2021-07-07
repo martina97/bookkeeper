@@ -1,0 +1,375 @@
+
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html id="htmlId">
+<head>
+  <title>Coverage Report :: DistributionSchedule</title>
+  <style type="text/css">
+    @import "../../.css/coverage.css";
+  </style>
+</head>
+
+<body>
+<div class="header"></div>
+
+<div class="content">
+<div class="breadCrumbs">
+    [ <a href="../../index.html">all classes</a> ]
+    [ <a href="../index.html">org.apache.bookkeeper.client</a> ]
+</div>
+
+<h1>Coverage Summary for Class: DistributionSchedule (org.apache.bookkeeper.client)</h1>
+
+<table class="coverageStats">
+
+<tr>
+  <th class="name">Class</th>
+<th class="coverageStat 
+">
+  Method, %
+</th>
+<th class="coverageStat 
+">
+  Line, %
+</th>
+</tr>
+<tr>
+  <td class="name">DistributionSchedule</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 1)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 1)
+  </span>
+</td>
+</tr>
+  <tr>
+    <td class="name">DistributionSchedule$1</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 11)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 11)
+  </span>
+</td>
+  </tr>
+  <tr>
+    <td class="name">DistributionSchedule$AckSet</td>
+  </tr>
+  <tr>
+    <td class="name">DistributionSchedule$QuorumCoverageSet</td>
+  </tr>
+  <tr>
+    <td class="name">DistributionSchedule$WriteSet</td>
+  </tr>
+<tr>
+  <td class="name"><strong>total</strong></td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 12)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 12)
+  </span>
+</td>
+</tr>
+</table>
+
+<br/>
+<br/>
+
+
+<div class="sourceCode"><i>1</i>&nbsp;/**
+<i>2</i>&nbsp; * Licensed to the Apache Software Foundation (ASF) under one
+<i>3</i>&nbsp; * or more contributor license agreements.  See the NOTICE file
+<i>4</i>&nbsp; * distributed with this work for additional information
+<i>5</i>&nbsp; * regarding copyright ownership.  The ASF licenses this file
+<i>6</i>&nbsp; * to you under the Apache License, Version 2.0 (the
+<i>7</i>&nbsp; * &quot;License&quot;); you may not use this file except in compliance
+<i>8</i>&nbsp; * with the License.  You may obtain a copy of the License at
+<i>9</i>&nbsp; *
+<i>10</i>&nbsp; *     http://www.apache.org/licenses/LICENSE-2.0
+<i>11</i>&nbsp; *
+<i>12</i>&nbsp; * Unless required by applicable law or agreed to in writing, software
+<i>13</i>&nbsp; * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+<i>14</i>&nbsp; * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+<i>15</i>&nbsp; * See the License for the specific language governing permissions and
+<i>16</i>&nbsp; * limitations under the License.
+<i>17</i>&nbsp; */
+<i>18</i>&nbsp;package org.apache.bookkeeper.client;
+<i>19</i>&nbsp;
+<i>20</i>&nbsp;import java.util.BitSet;
+<i>21</i>&nbsp;import java.util.Map;
+<i>22</i>&nbsp;
+<i>23</i>&nbsp;import org.apache.bookkeeper.net.BookieSocketAddress;
+<i>24</i>&nbsp;
+<i>25</i>&nbsp;/**
+<i>26</i>&nbsp; * This interface determins how entries are distributed among bookies.
+<i>27</i>&nbsp; *
+<i>28</i>&nbsp; * &lt;p&gt;Every entry gets replicated to some number of replicas. The first replica for
+<i>29</i>&nbsp; * an entry is given a replicaIndex of 0, and so on. To distribute write load,
+<i>30</i>&nbsp; * not all entries go to all bookies. Given an entry-id and replica index, an
+<i>31</i>&nbsp; * {@link DistributionSchedule} determines which bookie that replica should go
+<i>32</i>&nbsp; * to.
+<i>33</i>&nbsp; */
+<i>34</i>&nbsp;
+<i>35</i>&nbsp;public interface DistributionSchedule {
+<i>36</i>&nbsp;
+<i>37</i>&nbsp;    /**
+<i>38</i>&nbsp;     * A write set represents the set of bookies to which
+<i>39</i>&nbsp;     * a request will be written.
+<i>40</i>&nbsp;     * The set consists of a list of indices which can be
+<i>41</i>&nbsp;     * used to lookup the bookie in the ensemble.
+<i>42</i>&nbsp;     */
+<i>43</i>&nbsp;    interface WriteSet {
+<i>44</i>&nbsp;        /**
+<i>45</i>&nbsp;         * The number of indexes in the write set.
+<i>46</i>&nbsp;         */
+<i>47</i>&nbsp;        int size();
+<i>48</i>&nbsp;
+<i>49</i>&nbsp;        /**
+<i>50</i>&nbsp;         * Whether the set contains the given index.
+<i>51</i>&nbsp;         */
+<i>52</i>&nbsp;        boolean contains(int i);
+<i>53</i>&nbsp;
+<i>54</i>&nbsp;        /**
+<i>55</i>&nbsp;         * Get the index at index i.
+<i>56</i>&nbsp;         */
+<i>57</i>&nbsp;        int get(int i);
+<i>58</i>&nbsp;
+<i>59</i>&nbsp;        /**
+<i>60</i>&nbsp;         * Set the index at index i.
+<i>61</i>&nbsp;         * @return the previous value at that index.
+<i>62</i>&nbsp;         */
+<i>63</i>&nbsp;        int set(int i, int index);
+<i>64</i>&nbsp;
+<i>65</i>&nbsp;        /**
+<i>66</i>&nbsp;         * Sort the indices.
+<i>67</i>&nbsp;         */
+<i>68</i>&nbsp;        void sort();
+<i>69</i>&nbsp;
+<i>70</i>&nbsp;        /**
+<i>71</i>&nbsp;         * Index of a specified bookie index.
+<i>72</i>&nbsp;         * -1 if not found.
+<i>73</i>&nbsp;         */
+<i>74</i>&nbsp;        int indexOf(int index);
+<i>75</i>&nbsp;
+<i>76</i>&nbsp;        /**
+<i>77</i>&nbsp;         * If we want a write set to cover all bookies in an ensemble
+<i>78</i>&nbsp;         * of size X, then all of the index from 0..X must exist in the
+<i>79</i>&nbsp;         * write set. This method appends those which are missing to the
+<i>80</i>&nbsp;         * end of the write set.
+<i>81</i>&nbsp;         */
+<i>82</i>&nbsp;        void addMissingIndices(int maxIndex);
+<i>83</i>&nbsp;
+<i>84</i>&nbsp;        /**
+<i>85</i>&nbsp;         * Move an index from one position to another,
+<i>86</i>&nbsp;         * shifting the other indices accordingly.
+<i>87</i>&nbsp;         */
+<i>88</i>&nbsp;        void moveAndShift(int from, int to);
+<i>89</i>&nbsp;
+<i>90</i>&nbsp;        /**
+<i>91</i>&nbsp;         * Recycle write set object when not in use.
+<i>92</i>&nbsp;         */
+<i>93</i>&nbsp;        void recycle();
+<i>94</i>&nbsp;
+<i>95</i>&nbsp;        /**
+<i>96</i>&nbsp;         * Make a deep copy of this write set.
+<i>97</i>&nbsp;         */
+<i>98</i>&nbsp;        WriteSet copy();
+<i>99</i>&nbsp;    }
+<i>100</i>&nbsp;
+<b class="nc"><i>101</i>&nbsp;    WriteSet NULL_WRITE_SET = new WriteSet() {</b>
+<i>102</i>&nbsp;            @Override
+<i>103</i>&nbsp;            public int size() {
+<b class="nc"><i>104</i>&nbsp;                return 0;</b>
+<i>105</i>&nbsp;            }
+<i>106</i>&nbsp;            @Override
+<i>107</i>&nbsp;            public boolean contains(int i) {
+<b class="nc"><i>108</i>&nbsp;                return false;</b>
+<i>109</i>&nbsp;            }
+<i>110</i>&nbsp;            @Override
+<i>111</i>&nbsp;            public int get(int i) {
+<b class="nc"><i>112</i>&nbsp;                throw new ArrayIndexOutOfBoundsException();</b>
+<i>113</i>&nbsp;            }
+<i>114</i>&nbsp;            @Override
+<i>115</i>&nbsp;            public int set(int i, int index) {
+<b class="nc"><i>116</i>&nbsp;                throw new ArrayIndexOutOfBoundsException();</b>
+<i>117</i>&nbsp;            }
+<i>118</i>&nbsp;            @Override
+<b class="nc"><i>119</i>&nbsp;            public void sort() {}</b>
+<i>120</i>&nbsp;            @Override
+<i>121</i>&nbsp;            public int indexOf(int index) {
+<b class="nc"><i>122</i>&nbsp;                return -1;</b>
+<i>123</i>&nbsp;            }
+<i>124</i>&nbsp;            @Override
+<i>125</i>&nbsp;            public void addMissingIndices(int maxIndex) {
+<b class="nc"><i>126</i>&nbsp;                throw new ArrayIndexOutOfBoundsException();</b>
+<i>127</i>&nbsp;            }
+<i>128</i>&nbsp;            @Override
+<i>129</i>&nbsp;            public void moveAndShift(int from, int to) {
+<b class="nc"><i>130</i>&nbsp;                throw new ArrayIndexOutOfBoundsException();</b>
+<i>131</i>&nbsp;            }
+<i>132</i>&nbsp;            @Override
+<b class="nc"><i>133</i>&nbsp;            public void recycle() {}</b>
+<i>134</i>&nbsp;            @Override
+<i>135</i>&nbsp;            public WriteSet copy() {
+<b class="nc"><i>136</i>&nbsp;                return this;</b>
+<i>137</i>&nbsp;            }
+<i>138</i>&nbsp;        };
+<i>139</i>&nbsp;
+<i>140</i>&nbsp;    /**
+<i>141</i>&nbsp;     * Return the set of bookie indices to send the message to.
+<i>142</i>&nbsp;     */
+<i>143</i>&nbsp;    WriteSet getWriteSet(long entryId);
+<i>144</i>&nbsp;
+<i>145</i>&nbsp;    /**
+<i>146</i>&nbsp;     * Return the set of bookies indices to send the messages to the whole ensemble.
+<i>147</i>&nbsp;     *
+<i>148</i>&nbsp;     * @param entryId entry id used to calculate the ensemble.
+<i>149</i>&nbsp;     * @return the set of bookies indices to send the request.
+<i>150</i>&nbsp;     */
+<i>151</i>&nbsp;    WriteSet getEnsembleSet(long entryId);
+<i>152</i>&nbsp;
+<i>153</i>&nbsp;    /**
+<i>154</i>&nbsp;     * An ack set represents the set of bookies from which
+<i>155</i>&nbsp;     * a response must be received so that an entry can be
+<i>156</i>&nbsp;     * considered to be replicated on a quorum.
+<i>157</i>&nbsp;     */
+<i>158</i>&nbsp;    interface AckSet {
+<i>159</i>&nbsp;        /**
+<i>160</i>&nbsp;         * Add a bookie response and check if quorum has been met.
+<i>161</i>&nbsp;         * @return true if quorum has been met, false otherwise
+<i>162</i>&nbsp;         */
+<i>163</i>&nbsp;        boolean completeBookieAndCheck(int bookieIndexHeardFrom);
+<i>164</i>&nbsp;
+<i>165</i>&nbsp;        /**
+<i>166</i>&nbsp;         * Received failure response from a bookie and check if ack quorum
+<i>167</i>&nbsp;         * will be broken.
+<i>168</i>&nbsp;         *
+<i>169</i>&nbsp;         * @param bookieIndexHeardFrom
+<i>170</i>&nbsp;         *          bookie index that failed.
+<i>171</i>&nbsp;         * @param address
+<i>172</i>&nbsp;         *          bookie address
+<i>173</i>&nbsp;         * @return true if ack quorum is broken, false otherwise.
+<i>174</i>&nbsp;         */
+<i>175</i>&nbsp;        boolean failBookieAndCheck(int bookieIndexHeardFrom, BookieSocketAddress address);
+<i>176</i>&nbsp;
+<i>177</i>&nbsp;        /**
+<i>178</i>&nbsp;         * Return the list of bookies that already failed.
+<i>179</i>&nbsp;         *
+<i>180</i>&nbsp;         * @return the list of bookies that already failed.
+<i>181</i>&nbsp;         */
+<i>182</i>&nbsp;        Map&lt;Integer, BookieSocketAddress&gt; getFailedBookies();
+<i>183</i>&nbsp;
+<i>184</i>&nbsp;        /**
+<i>185</i>&nbsp;         * Invalidate a previous bookie response.
+<i>186</i>&nbsp;         * Used for reissuing write requests.
+<i>187</i>&nbsp;         */
+<i>188</i>&nbsp;        boolean removeBookieAndCheck(int bookie);
+<i>189</i>&nbsp;
+<i>190</i>&nbsp;        /**
+<i>191</i>&nbsp;         * Recycle this ack set when not used anymore.
+<i>192</i>&nbsp;         */
+<i>193</i>&nbsp;        void recycle();
+<i>194</i>&nbsp;    }
+<i>195</i>&nbsp;
+<i>196</i>&nbsp;    /**
+<i>197</i>&nbsp;     * Returns an ackset object, responses should be checked against this.
+<i>198</i>&nbsp;     */
+<i>199</i>&nbsp;    AckSet getAckSet();
+<i>200</i>&nbsp;
+<i>201</i>&nbsp;    /**
+<i>202</i>&nbsp;     * Returns an ackset object useful to wait for all bookies in the ensemble,
+<i>203</i>&nbsp;     * responses should be checked against this.
+<i>204</i>&nbsp;     */
+<i>205</i>&nbsp;    AckSet getEnsembleAckSet();
+<i>206</i>&nbsp;
+<i>207</i>&nbsp;    /**
+<i>208</i>&nbsp;     * Interface to keep track of which bookies in an ensemble, an action
+<i>209</i>&nbsp;     * has been performed for.
+<i>210</i>&nbsp;     */
+<i>211</i>&nbsp;    interface QuorumCoverageSet {
+<i>212</i>&nbsp;        /**
+<i>213</i>&nbsp;         * Add a bookie to the result set.
+<i>214</i>&nbsp;         *
+<i>215</i>&nbsp;         * @param bookieIndexHeardFrom Bookie we&#39;ve just heard from
+<i>216</i>&nbsp;         */
+<i>217</i>&nbsp;        void addBookie(int bookieIndexHeardFrom, int rc);
+<i>218</i>&nbsp;
+<i>219</i>&nbsp;        /**
+<i>220</i>&nbsp;         * check if all quorum in the set have had the action performed for it.
+<i>221</i>&nbsp;         *
+<i>222</i>&nbsp;         * @return whether all quorums have been covered
+<i>223</i>&nbsp;         */
+<i>224</i>&nbsp;        boolean checkCovered();
+<i>225</i>&nbsp;    }
+<i>226</i>&nbsp;
+<i>227</i>&nbsp;    QuorumCoverageSet getCoverageSet();
+<i>228</i>&nbsp;
+<i>229</i>&nbsp;    /**
+<i>230</i>&nbsp;     * Whether entry presents on given bookie index.
+<i>231</i>&nbsp;     *
+<i>232</i>&nbsp;     * @param entryId
+<i>233</i>&nbsp;     *            - entryId to check the presence on given bookie index
+<i>234</i>&nbsp;     * @param bookieIndex
+<i>235</i>&nbsp;     *            - bookie index on which it need to check the possible presence
+<i>236</i>&nbsp;     *            of the entry
+<i>237</i>&nbsp;     * @return true if it has entry otherwise false.
+<i>238</i>&nbsp;     */
+<i>239</i>&nbsp;    boolean hasEntry(long entryId, int bookieIndex);
+<i>240</i>&nbsp;
+<i>241</i>&nbsp;    /**
+<i>242</i>&nbsp;     * Get the bitset representing the entries from entry &#39;startEntryId&#39; to
+<i>243</i>&nbsp;     * &#39;lastEntryId&#39;, that would be striped to the bookie with index -
+<i>244</i>&nbsp;     * bookieIndex. Value of the bit with the &#39;bitIndex+n&#39;, indicate whether
+<i>245</i>&nbsp;     * entry with entryid &#39;startEntryId+n&#39; is striped to this bookie or not.
+<i>246</i>&nbsp;     *
+<i>247</i>&nbsp;     * @param bookieIndex
+<i>248</i>&nbsp;     *            index of the bookie in the ensemble starting with 0
+<i>249</i>&nbsp;     * @param startEntryId
+<i>250</i>&nbsp;     *            starting entryid
+<i>251</i>&nbsp;     * @param lastEntryId
+<i>252</i>&nbsp;     *            last entryid
+<i>253</i>&nbsp;     * @return the bitset representing the entries that would be striped to the
+<i>254</i>&nbsp;     *         bookie
+<i>255</i>&nbsp;     */
+<i>256</i>&nbsp;    BitSet getEntriesStripedToTheBookie(int bookieIndex, long startEntryId, long lastEntryId);
+<i>257</i>&nbsp;}
+</div>
+</div>
+
+<div class="footer">
+    
+    <div style="float:right;">generated on 2021-06-28 15:57</div>
+</div>
+</body>
+</html>

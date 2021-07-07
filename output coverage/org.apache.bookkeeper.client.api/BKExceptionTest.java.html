@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>BKExceptionTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client.api</a> &gt; <span class="el_source">BKExceptionTest.java</span></div><h1>BKExceptionTest.java</h1><pre class="source lang-java linenums">/*
+ * Copyright 2017 The Apache Software Foundation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.bookkeeper.client.api;
+
+import static org.apache.bookkeeper.client.api.BKException.Code.UnexpectedConditionException;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertTrue;
+
+import java.lang.reflect.Field;
+import org.junit.Test;
+
+/**
+ * Tests for BKException methods.
+ */
+<span class="nc" id="L29">public class BKExceptionTest {</span>
+
+    @Test
+    public void testGetMessage() throws Exception {
+<span class="nc" id="L33">        Field[] fields = BKException.Code.class.getFields();</span>
+<span class="nc" id="L34">        int count = 0;</span>
+<span class="nc bnc" id="L35" title="All 2 branches missed.">        for (Field f : fields) {</span>
+<span class="nc bnc" id="L36" title="All 4 branches missed.">            if (f.getType() == Integer.TYPE &amp;&amp; !f.getName().equals(&quot;UNINITIALIZED&quot;)) {</span>
+<span class="nc" id="L37">                int code = f.getInt(null);</span>
+<span class="nc" id="L38">                String msg = BKException.getMessage(code);</span>
+<span class="nc bnc" id="L39" title="All 2 branches missed.">                if (code == UnexpectedConditionException) {</span>
+<span class="nc" id="L40">                    assertEquals(&quot;Unexpected condition&quot;, msg);</span>
+                } else {
+<span class="nc" id="L42">                    assertNotEquals(&quot;failure on code &quot; + f.getName(), &quot;Unexpected condition&quot;, msg);</span>
+                }
+<span class="nc" id="L44">                count++;</span>
+            }
+        }
+        // assert that we found at least 1 code other than UnexpectedConditionException
+<span class="nc bnc" id="L48" title="All 2 branches missed.">        assertTrue(count &gt; 2);</span>
+<span class="nc" id="L49">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

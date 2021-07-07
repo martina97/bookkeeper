@@ -1,0 +1,732 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>BookKeeperAdminTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">BookKeeperAdminTest.java</span></div><h1>BookKeeperAdminTest.java</h1><pre class="source lang-java linenums">/**
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.client;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.apache.bookkeeper.util.BookKeeperConstants.AVAILABLE_NODE;
+import static org.apache.bookkeeper.util.BookKeeperConstants.READONLY;
+import static org.hamcrest.Matchers.is;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertThat;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import com.google.common.net.InetAddresses;
+import java.io.File;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Objects;
+import java.util.Random;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.apache.bookkeeper.bookie.Bookie;
+import org.apache.bookkeeper.client.BookKeeper.DigestType;
+import org.apache.bookkeeper.client.api.LedgerMetadata;
+import org.apache.bookkeeper.common.component.ComponentStarter;
+import org.apache.bookkeeper.common.component.Lifecycle;
+import org.apache.bookkeeper.common.component.LifecycleComponent;
+import org.apache.bookkeeper.conf.ClientConfiguration;
+import org.apache.bookkeeper.conf.ServerConfiguration;
+import org.apache.bookkeeper.conf.TestBKConfiguration;
+import org.apache.bookkeeper.discover.BookieServiceInfo;
+import org.apache.bookkeeper.meta.UnderreplicatedLedger;
+import org.apache.bookkeeper.meta.ZkLedgerUnderreplicationManager;
+import org.apache.bookkeeper.meta.zk.ZKMetadataDriverBase;
+import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.proto.BookieServer;
+import org.apache.bookkeeper.replication.ReplicationException.UnavailableException;
+import org.apache.bookkeeper.server.Main;
+import org.apache.bookkeeper.server.conf.BookieConfiguration;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.apache.bookkeeper.util.AvailabilityOfEntriesOfLedger;
+import org.apache.bookkeeper.util.BookKeeperConstants;
+import org.apache.bookkeeper.util.PortManager;
+import org.apache.commons.io.FileUtils;
+import org.apache.zookeeper.CreateMode;
+import org.apache.zookeeper.ZooDefs.Ids;
+import org.junit.Assert;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Test the bookkeeper admin.
+ */
+public class BookKeeperAdminTest extends BookKeeperClusterTestCase {
+
+<span class="nc" id="L85">    private static final Logger LOG = LoggerFactory.getLogger(BookKeeperAdminTest.class);</span>
+<span class="nc" id="L86">    private DigestType digestType = DigestType.CRC32;</span>
+    private static final String PASSWORD = &quot;testPasswd&quot;;
+    private static final int numOfBookies = 2;
+<span class="nc" id="L89">    private final int lostBookieRecoveryDelayInitValue = 1800;</span>
+
+    public BookKeeperAdminTest() {
+<span class="nc" id="L92">        super(numOfBookies, 480);</span>
+<span class="nc" id="L93">        baseConf.setLostBookieRecoveryDelay(lostBookieRecoveryDelayInitValue);</span>
+<span class="nc" id="L94">        baseConf.setOpenLedgerRereplicationGracePeriod(String.valueOf(30000));</span>
+<span class="nc" id="L95">        setAutoRecoveryEnabled(true);</span>
+<span class="nc" id="L96">    }</span>
+
+    @Test
+    public void testLostBookieRecoveryDelayValue() throws Exception {
+<span class="nc" id="L100">        try (BookKeeperAdmin bkAdmin = new BookKeeperAdmin(zkUtil.getZooKeeperConnectString())) {</span>
+<span class="nc" id="L101">            assertEquals(&quot;LostBookieRecoveryDelay&quot;,</span>
+<span class="nc" id="L102">                lostBookieRecoveryDelayInitValue, bkAdmin.getLostBookieRecoveryDelay());</span>
+<span class="nc" id="L103">            int newLostBookieRecoveryDelayValue = 2400;</span>
+<span class="nc" id="L104">            bkAdmin.setLostBookieRecoveryDelay(newLostBookieRecoveryDelayValue);</span>
+<span class="nc" id="L105">            assertEquals(&quot;LostBookieRecoveryDelay&quot;,</span>
+<span class="nc" id="L106">                newLostBookieRecoveryDelayValue, bkAdmin.getLostBookieRecoveryDelay());</span>
+<span class="nc" id="L107">            newLostBookieRecoveryDelayValue = 3000;</span>
+<span class="nc" id="L108">            bkAdmin.setLostBookieRecoveryDelay(newLostBookieRecoveryDelayValue);</span>
+<span class="nc" id="L109">            assertEquals(&quot;LostBookieRecoveryDelay&quot;,</span>
+<span class="nc" id="L110">                newLostBookieRecoveryDelayValue, bkAdmin.getLostBookieRecoveryDelay());</span>
+<span class="nc" id="L111">            LOG.info(&quot;Test Done&quot;);</span>
+        }
+<span class="nc" id="L113">    }</span>
+
+    @Test
+    public void testTriggerAuditWithStoreSystemTimeAsLedgerUnderreplicatedMarkTime() throws Exception {
+<span class="nc" id="L117">        testTriggerAudit(true);</span>
+<span class="nc" id="L118">    }</span>
+
+    @Test
+    public void testTriggerAuditWithoutStoreSystemTimeAsLedgerUnderreplicatedMarkTime() throws Exception {
+<span class="nc" id="L122">        testTriggerAudit(false);</span>
+<span class="nc" id="L123">    }</span>
+
+    public void testTriggerAudit(boolean storeSystemTimeAsLedgerUnderreplicatedMarkTime) throws Exception {
+<span class="nc" id="L126">        ServerConfiguration thisServerConf = new ServerConfiguration(baseConf);</span>
+<span class="nc" id="L127">        thisServerConf</span>
+<span class="nc" id="L128">                .setStoreSystemTimeAsLedgerUnderreplicatedMarkTime(storeSystemTimeAsLedgerUnderreplicatedMarkTime);</span>
+<span class="nc" id="L129">        restartBookies(thisServerConf);</span>
+<span class="nc" id="L130">        ClientConfiguration thisClientConf = new ClientConfiguration(baseClientConf);</span>
+<span class="nc" id="L131">        thisClientConf</span>
+<span class="nc" id="L132">                .setStoreSystemTimeAsLedgerUnderreplicatedMarkTime(storeSystemTimeAsLedgerUnderreplicatedMarkTime);</span>
+<span class="nc" id="L133">        long testStartSystime = System.currentTimeMillis();</span>
+<span class="nc" id="L134">        ZkLedgerUnderreplicationManager urLedgerMgr = new ZkLedgerUnderreplicationManager(thisClientConf, zkc);</span>
+<span class="nc" id="L135">        BookKeeperAdmin bkAdmin = new BookKeeperAdmin(zkUtil.getZooKeeperConnectString());</span>
+<span class="nc" id="L136">        int lostBookieRecoveryDelayValue = bkAdmin.getLostBookieRecoveryDelay();</span>
+<span class="nc" id="L137">        urLedgerMgr.disableLedgerReplication();</span>
+        try {
+<span class="nc" id="L139">            bkAdmin.triggerAudit();</span>
+<span class="nc" id="L140">            fail(&quot;Trigger Audit should have failed because LedgerReplication is disabled&quot;);</span>
+<span class="nc" id="L141">        } catch (UnavailableException une) {</span>
+            // expected
+<span class="nc" id="L143">        }</span>
+<span class="nc" id="L144">        assertEquals(&quot;LostBookieRecoveryDelay&quot;, lostBookieRecoveryDelayValue, bkAdmin.getLostBookieRecoveryDelay());</span>
+<span class="nc" id="L145">        urLedgerMgr.enableLedgerReplication();</span>
+<span class="nc" id="L146">        bkAdmin.triggerAudit();</span>
+<span class="nc" id="L147">        assertEquals(&quot;LostBookieRecoveryDelay&quot;, lostBookieRecoveryDelayValue, bkAdmin.getLostBookieRecoveryDelay());</span>
+<span class="nc" id="L148">        long ledgerId = 1L;</span>
+<span class="nc" id="L149">        LedgerHandle ledgerHandle = bkc.createLedgerAdv(ledgerId, numBookies, numBookies, numBookies, digestType,</span>
+<span class="nc" id="L150">                PASSWORD.getBytes(), null);</span>
+<span class="nc" id="L151">        ledgerHandle.addEntry(0, &quot;data&quot;.getBytes());</span>
+<span class="nc" id="L152">        ledgerHandle.close();</span>
+
+<span class="nc" id="L154">        BookieServer bookieToKill = bs.get(1);</span>
+<span class="nc" id="L155">        killBookie(1);</span>
+        /*
+         * since lostBookieRecoveryDelay is set, when a bookie is died, it will
+         * not start Audit process immediately. But when triggerAudit is called
+         * it will force audit process.
+         */
+<span class="nc" id="L161">        bkAdmin.triggerAudit();</span>
+<span class="nc" id="L162">        Thread.sleep(500);</span>
+<span class="nc" id="L163">        Iterator&lt;UnderreplicatedLedger&gt; underreplicatedLedgerItr = urLedgerMgr.listLedgersToRereplicate(null);</span>
+<span class="nc" id="L164">        assertTrue(&quot;There are supposed to be underreplicatedledgers&quot;, underreplicatedLedgerItr.hasNext());</span>
+<span class="nc" id="L165">        UnderreplicatedLedger underreplicatedLedger = underreplicatedLedgerItr.next();</span>
+<span class="nc" id="L166">        assertEquals(&quot;Underreplicated ledgerId&quot;, ledgerId, underreplicatedLedger.getLedgerId());</span>
+<span class="nc" id="L167">        assertTrue(&quot;Missingreplica of Underreplicated ledgerId should contain &quot; + bookieToKill.getLocalAddress(),</span>
+<span class="nc" id="L168">                underreplicatedLedger.getReplicaList().contains(bookieToKill.getLocalAddress().toString()));</span>
+<span class="nc bnc" id="L169" title="All 2 branches missed.">        if (storeSystemTimeAsLedgerUnderreplicatedMarkTime) {</span>
+<span class="nc" id="L170">            long ctimeOfURL = underreplicatedLedger.getCtime();</span>
+<span class="nc bnc" id="L171" title="All 2 branches missed.">            assertTrue(&quot;ctime of underreplicated ledger should be greater than test starttime&quot;,</span>
+<span class="nc bnc" id="L172" title="All 2 branches missed.">                    (ctimeOfURL &gt; testStartSystime) &amp;&amp; (ctimeOfURL &lt; System.currentTimeMillis()));</span>
+<span class="nc" id="L173">        } else {</span>
+<span class="nc" id="L174">            assertEquals(&quot;ctime of underreplicated ledger should not be set&quot;, UnderreplicatedLedger.UNASSIGNED_CTIME,</span>
+<span class="nc" id="L175">                    underreplicatedLedger.getCtime());</span>
+        }
+<span class="nc" id="L177">        bkAdmin.close();</span>
+<span class="nc" id="L178">    }</span>
+
+    @Test
+    public void testBookieInit() throws Exception {
+<span class="nc" id="L182">        int bookieindex = 0;</span>
+<span class="nc" id="L183">        ServerConfiguration confOfExistingBookie = bsConfs.get(bookieindex);</span>
+<span class="nc" id="L184">        Assert.assertFalse(&quot;initBookie shouldn't have succeeded, since bookie is still running with that configuration&quot;,</span>
+<span class="nc" id="L185">                BookKeeperAdmin.initBookie(confOfExistingBookie));</span>
+<span class="nc" id="L186">        killBookie(bookieindex);</span>
+<span class="nc" id="L187">        Assert.assertFalse(&quot;initBookie shouldn't have succeeded, since previous bookie is not formatted yet&quot;,</span>
+<span class="nc" id="L188">                BookKeeperAdmin.initBookie(confOfExistingBookie));</span>
+
+<span class="nc" id="L190">        File[] journalDirs = confOfExistingBookie.getJournalDirs();</span>
+<span class="nc bnc" id="L191" title="All 2 branches missed.">        for (File journalDir : journalDirs) {</span>
+<span class="nc" id="L192">            FileUtils.deleteDirectory(journalDir);</span>
+        }
+<span class="nc" id="L194">        Assert.assertFalse(&quot;initBookie shouldn't have succeeded, since previous bookie is not formatted yet completely&quot;,</span>
+<span class="nc" id="L195">                BookKeeperAdmin.initBookie(confOfExistingBookie));</span>
+
+<span class="nc" id="L197">        File[] ledgerDirs = confOfExistingBookie.getLedgerDirs();</span>
+<span class="nc bnc" id="L198" title="All 2 branches missed.">        for (File ledgerDir : ledgerDirs) {</span>
+<span class="nc" id="L199">            FileUtils.deleteDirectory(ledgerDir);</span>
+        }
+<span class="nc" id="L201">        Assert.assertFalse(&quot;initBookie shouldn't have succeeded, since previous bookie is not formatted yet completely&quot;,</span>
+<span class="nc" id="L202">                BookKeeperAdmin.initBookie(confOfExistingBookie));</span>
+
+<span class="nc" id="L204">        File[] indexDirs = confOfExistingBookie.getIndexDirs();</span>
+<span class="nc bnc" id="L205" title="All 2 branches missed.">        if (indexDirs != null) {</span>
+<span class="nc bnc" id="L206" title="All 2 branches missed.">            for (File indexDir : indexDirs) {</span>
+<span class="nc" id="L207">                FileUtils.deleteDirectory(indexDir);</span>
+            }
+        }
+<span class="nc" id="L210">        Assert.assertFalse(&quot;initBookie shouldn't have succeeded, since cookie in ZK is not deleted yet&quot;,</span>
+<span class="nc" id="L211">                BookKeeperAdmin.initBookie(confOfExistingBookie));</span>
+<span class="nc" id="L212">        String bookieId = Bookie.getBookieAddress(confOfExistingBookie).toString();</span>
+<span class="nc" id="L213">        String bookieCookiePath =</span>
+<span class="nc" id="L214">            ZKMetadataDriverBase.resolveZkLedgersRootPath(confOfExistingBookie)</span>
+                + &quot;/&quot; + BookKeeperConstants.COOKIE_NODE
+                + &quot;/&quot; + bookieId;
+<span class="nc" id="L217">        zkc.delete(bookieCookiePath, -1);</span>
+
+<span class="nc" id="L219">        Assert.assertTrue(&quot;initBookie shouldn't succeeded&quot;,</span>
+<span class="nc" id="L220">                BookKeeperAdmin.initBookie(confOfExistingBookie));</span>
+<span class="nc" id="L221">    }</span>
+
+    @Test
+    public void testInitNewCluster() throws Exception {
+<span class="nc" id="L225">        ServerConfiguration newConfig = new ServerConfiguration(baseConf);</span>
+<span class="nc" id="L226">        String ledgersRootPath = &quot;/testledgers&quot;;</span>
+<span class="nc" id="L227">        newConfig.setMetadataServiceUri(newMetadataServiceUri(ledgersRootPath));</span>
+<span class="nc" id="L228">        Assert.assertTrue(&quot;New cluster should be initialized successfully&quot;, BookKeeperAdmin.initNewCluster(newConfig));</span>
+
+<span class="nc" id="L230">        Assert.assertTrue(&quot;Cluster rootpath should have been created successfully &quot; + ledgersRootPath,</span>
+<span class="nc bnc" id="L231" title="All 2 branches missed.">                (zkc.exists(ledgersRootPath, false) != null));</span>
+<span class="nc" id="L232">        String availableBookiesPath = ZKMetadataDriverBase.resolveZkLedgersRootPath(newConfig) + &quot;/&quot; + AVAILABLE_NODE;</span>
+<span class="nc" id="L233">        Assert.assertTrue(&quot;AvailableBookiesPath should have been created successfully &quot; + availableBookiesPath,</span>
+<span class="nc bnc" id="L234" title="All 2 branches missed.">                (zkc.exists(availableBookiesPath, false) != null));</span>
+<span class="nc" id="L235">        String readonlyBookiesPath = availableBookiesPath + &quot;/&quot; + READONLY;</span>
+<span class="nc" id="L236">        Assert.assertTrue(&quot;ReadonlyBookiesPath should have been created successfully &quot; + readonlyBookiesPath,</span>
+<span class="nc bnc" id="L237" title="All 2 branches missed.">            (zkc.exists(readonlyBookiesPath, false) != null));</span>
+<span class="nc" id="L238">        String instanceIdPath = ZKMetadataDriverBase.resolveZkLedgersRootPath(newConfig)</span>
+            + &quot;/&quot; + BookKeeperConstants.INSTANCEID;
+<span class="nc" id="L240">        Assert.assertTrue(&quot;InstanceId node should have been created successfully&quot; + instanceIdPath,</span>
+<span class="nc bnc" id="L241" title="All 2 branches missed.">                (zkc.exists(instanceIdPath, false) != null));</span>
+
+<span class="nc" id="L243">        String ledgersLayout = ledgersRootPath + &quot;/&quot; + BookKeeperConstants.LAYOUT_ZNODE;</span>
+<span class="nc" id="L244">        Assert.assertTrue(&quot;Layout node should have been created successfully&quot; + ledgersLayout,</span>
+<span class="nc bnc" id="L245" title="All 2 branches missed.">                (zkc.exists(ledgersLayout, false) != null));</span>
+
+        /**
+         * create znodes simulating existence of Bookies in the cluster
+         */
+<span class="nc" id="L250">        int numOfBookies = 3;</span>
+<span class="nc" id="L251">        Random rand = new Random();</span>
+<span class="nc bnc" id="L252" title="All 2 branches missed.">        for (int i = 0; i &lt; numOfBookies; i++) {</span>
+<span class="nc" id="L253">            String ipString = InetAddresses.fromInteger(rand.nextInt()).getHostAddress();</span>
+<span class="nc" id="L254">            String regPath = ZKMetadataDriverBase.resolveZkLedgersRootPath(newConfig)</span>
+                + &quot;/&quot; + AVAILABLE_NODE + &quot;/&quot; + ipString + &quot;:3181&quot;;
+<span class="nc" id="L256">            zkc.create(regPath, new byte[0], Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL);</span>
+        }
+
+        /*
+         * now it should be possible to create ledger and delete the same
+         */
+<span class="nc" id="L262">        BookKeeper bk = new BookKeeper(new ClientConfiguration(newConfig));</span>
+<span class="nc" id="L263">        LedgerHandle lh = bk.createLedger(numOfBookies, numOfBookies, numOfBookies, BookKeeper.DigestType.MAC,</span>
+                new byte[0]);
+<span class="nc" id="L265">        bk.deleteLedger(lh.ledgerId);</span>
+<span class="nc" id="L266">        bk.close();</span>
+<span class="nc" id="L267">    }</span>
+
+    @Test
+    public void testNukeExistingClusterWithForceOption() throws Exception {
+<span class="nc" id="L271">        String ledgersRootPath = &quot;/testledgers&quot;;</span>
+<span class="nc" id="L272">        ServerConfiguration newConfig = new ServerConfiguration(baseConf);</span>
+<span class="nc" id="L273">        newConfig.setMetadataServiceUri(newMetadataServiceUri(ledgersRootPath));</span>
+<span class="nc" id="L274">        List&lt;String&gt; bookiesRegPaths = new ArrayList&lt;String&gt;();</span>
+<span class="nc" id="L275">        initiateNewClusterAndCreateLedgers(newConfig, bookiesRegPaths);</span>
+
+        /*
+         * before nuking existing cluster, bookies shouldn't be registered
+         * anymore
+         */
+<span class="nc bnc" id="L281" title="All 2 branches missed.">        for (int i = 0; i &lt; bookiesRegPaths.size(); i++) {</span>
+<span class="nc" id="L282">            zkc.delete(bookiesRegPaths.get(i), -1);</span>
+        }
+
+<span class="nc" id="L285">        Assert.assertTrue(&quot;New cluster should be nuked successfully&quot;,</span>
+<span class="nc" id="L286">                BookKeeperAdmin.nukeExistingCluster(newConfig, ledgersRootPath, null, true));</span>
+<span class="nc" id="L287">        Assert.assertTrue(&quot;Cluster rootpath should have been deleted successfully &quot; + ledgersRootPath,</span>
+<span class="nc bnc" id="L288" title="All 2 branches missed.">                (zkc.exists(ledgersRootPath, false) == null));</span>
+<span class="nc" id="L289">    }</span>
+
+    @Test
+    public void testNukeExistingClusterWithInstanceId() throws Exception {
+<span class="nc" id="L293">        String ledgersRootPath = &quot;/testledgers&quot;;</span>
+<span class="nc" id="L294">        ServerConfiguration newConfig = new ServerConfiguration(baseConf);</span>
+<span class="nc" id="L295">        newConfig.setMetadataServiceUri(newMetadataServiceUri(ledgersRootPath));</span>
+<span class="nc" id="L296">        List&lt;String&gt; bookiesRegPaths = new ArrayList&lt;String&gt;();</span>
+<span class="nc" id="L297">        initiateNewClusterAndCreateLedgers(newConfig, bookiesRegPaths);</span>
+
+        /*
+         * before nuking existing cluster, bookies shouldn't be registered
+         * anymore
+         */
+<span class="nc bnc" id="L303" title="All 2 branches missed.">        for (int i = 0; i &lt; bookiesRegPaths.size(); i++) {</span>
+<span class="nc" id="L304">            zkc.delete(bookiesRegPaths.get(i), -1);</span>
+        }
+
+<span class="nc" id="L307">        byte[] data = zkc.getData(</span>
+<span class="nc" id="L308">            ZKMetadataDriverBase.resolveZkLedgersRootPath(newConfig) + &quot;/&quot; + BookKeeperConstants.INSTANCEID,</span>
+            false, null);
+<span class="nc" id="L310">        String readInstanceId = new String(data, UTF_8);</span>
+
+<span class="nc" id="L312">        Assert.assertTrue(&quot;New cluster should be nuked successfully&quot;,</span>
+<span class="nc" id="L313">                BookKeeperAdmin.nukeExistingCluster(newConfig, ledgersRootPath, readInstanceId, false));</span>
+<span class="nc" id="L314">        Assert.assertTrue(&quot;Cluster rootpath should have been deleted successfully &quot; + ledgersRootPath,</span>
+<span class="nc bnc" id="L315" title="All 2 branches missed.">                (zkc.exists(ledgersRootPath, false) == null));</span>
+<span class="nc" id="L316">    }</span>
+
+    @Test
+    public void tryNukingExistingClustersWithInvalidParams() throws Exception {
+<span class="nc" id="L320">        String ledgersRootPath = &quot;/testledgers&quot;;</span>
+<span class="nc" id="L321">        ServerConfiguration newConfig = new ServerConfiguration(baseConf);</span>
+<span class="nc" id="L322">        newConfig.setMetadataServiceUri(newMetadataServiceUri(ledgersRootPath));</span>
+<span class="nc" id="L323">        List&lt;String&gt; bookiesRegPaths = new ArrayList&lt;String&gt;();</span>
+<span class="nc" id="L324">        initiateNewClusterAndCreateLedgers(newConfig, bookiesRegPaths);</span>
+
+        /*
+         * create ledger with a specific ledgerid
+         */
+<span class="nc" id="L329">        BookKeeper bk = new BookKeeper(new ClientConfiguration(newConfig));</span>
+<span class="nc" id="L330">        long ledgerId = 23456789L;</span>
+<span class="nc" id="L331">        LedgerHandle lh = bk.createLedgerAdv(ledgerId, 1, 1, 1, BookKeeper.DigestType.MAC, new byte[0], null);</span>
+<span class="nc" id="L332">        lh.close();</span>
+
+        /*
+         * read instanceId
+         */
+<span class="nc" id="L337">        byte[] data = zkc.getData(</span>
+<span class="nc" id="L338">            ZKMetadataDriverBase.resolveZkLedgersRootPath(newConfig) + &quot;/&quot; + BookKeeperConstants.INSTANCEID,</span>
+            false, null);
+<span class="nc" id="L340">        String readInstanceId = new String(data, UTF_8);</span>
+
+        /*
+         * register a RO bookie
+         */
+<span class="nc" id="L345">        String ipString = InetAddresses.fromInteger((new Random()).nextInt()).getHostAddress();</span>
+<span class="nc" id="L346">        String roBookieRegPath = ZKMetadataDriverBase.resolveZkLedgersRootPath(newConfig)</span>
+            + &quot;/&quot; + AVAILABLE_NODE + &quot;/&quot; + READONLY + &quot;/&quot; + ipString + &quot;:3181&quot;;
+<span class="nc" id="L348">        zkc.create(roBookieRegPath, new byte[0], Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL);</span>
+
+<span class="nc" id="L350">        Assert.assertFalse(&quot;Cluster should'nt be nuked since instanceid is not provided and force option is not set&quot;,</span>
+<span class="nc" id="L351">                BookKeeperAdmin.nukeExistingCluster(newConfig, ledgersRootPath, null, false));</span>
+<span class="nc" id="L352">        Assert.assertFalse(&quot;Cluster should'nt be nuked since incorrect instanceid is provided&quot;,</span>
+<span class="nc" id="L353">                BookKeeperAdmin.nukeExistingCluster(newConfig, ledgersRootPath, &quot;incorrectinstanceid&quot;, false));</span>
+<span class="nc" id="L354">        Assert.assertFalse(&quot;Cluster should'nt be nuked since bookies are still registered&quot;,</span>
+<span class="nc" id="L355">                BookKeeperAdmin.nukeExistingCluster(newConfig, ledgersRootPath, readInstanceId, false));</span>
+        /*
+         * delete all rw bookies registration
+         */
+<span class="nc bnc" id="L359" title="All 2 branches missed.">        for (int i = 0; i &lt; bookiesRegPaths.size(); i++) {</span>
+<span class="nc" id="L360">            zkc.delete(bookiesRegPaths.get(i), -1);</span>
+        }
+<span class="nc" id="L362">        Assert.assertFalse(&quot;Cluster should'nt be nuked since ro bookie is still registered&quot;,</span>
+<span class="nc" id="L363">                BookKeeperAdmin.nukeExistingCluster(newConfig, ledgersRootPath, readInstanceId, false));</span>
+
+        /*
+         * make sure no node is deleted
+         */
+<span class="nc" id="L368">        Assert.assertTrue(&quot;Cluster rootpath should be existing &quot; + ledgersRootPath,</span>
+<span class="nc bnc" id="L369" title="All 2 branches missed.">                (zkc.exists(ledgersRootPath, false) != null));</span>
+<span class="nc" id="L370">        String availableBookiesPath = ZKMetadataDriverBase.resolveZkLedgersRootPath(newConfig) + &quot;/&quot; + AVAILABLE_NODE;</span>
+<span class="nc" id="L371">        Assert.assertTrue(&quot;AvailableBookiesPath should be existing &quot; + availableBookiesPath,</span>
+<span class="nc bnc" id="L372" title="All 2 branches missed.">                (zkc.exists(availableBookiesPath, false) != null));</span>
+<span class="nc" id="L373">        String instanceIdPath = ZKMetadataDriverBase.resolveZkLedgersRootPath(newConfig)</span>
+            + &quot;/&quot; + BookKeeperConstants.INSTANCEID;
+<span class="nc" id="L375">        Assert.assertTrue(&quot;InstanceId node should be existing&quot; + instanceIdPath,</span>
+<span class="nc bnc" id="L376" title="All 2 branches missed.">                (zkc.exists(instanceIdPath, false) != null));</span>
+<span class="nc" id="L377">        String ledgersLayout = ledgersRootPath + &quot;/&quot; + BookKeeperConstants.LAYOUT_ZNODE;</span>
+<span class="nc bnc" id="L378" title="All 2 branches missed.">        Assert.assertTrue(&quot;Layout node should be existing&quot; + ledgersLayout, (zkc.exists(ledgersLayout, false) != null));</span>
+
+        /*
+         * ledger should not be deleted.
+         */
+<span class="nc" id="L383">        lh = bk.openLedgerNoRecovery(ledgerId, BookKeeper.DigestType.MAC, new byte[0]);</span>
+<span class="nc" id="L384">        lh.close();</span>
+<span class="nc" id="L385">        bk.close();</span>
+
+        /*
+         * delete ro bookie reg znode
+         */
+<span class="nc" id="L390">        zkc.delete(roBookieRegPath, -1);</span>
+
+<span class="nc" id="L392">        Assert.assertTrue(&quot;Cluster should be nuked since no bookie is registered&quot;,</span>
+<span class="nc" id="L393">                BookKeeperAdmin.nukeExistingCluster(newConfig, ledgersRootPath, readInstanceId, false));</span>
+<span class="nc" id="L394">        Assert.assertTrue(&quot;Cluster rootpath should have been deleted successfully &quot; + ledgersRootPath,</span>
+<span class="nc bnc" id="L395" title="All 2 branches missed.">                (zkc.exists(ledgersRootPath, false) == null));</span>
+<span class="nc" id="L396">    }</span>
+
+    void initiateNewClusterAndCreateLedgers(ServerConfiguration newConfig, List&lt;String&gt; bookiesRegPaths)
+            throws Exception {
+<span class="nc" id="L400">        Assert.assertTrue(&quot;New cluster should be initialized successfully&quot;, BookKeeperAdmin.initNewCluster(newConfig));</span>
+
+        /**
+         * create znodes simulating existence of Bookies in the cluster
+         */
+<span class="nc" id="L405">        int numberOfBookies = 3;</span>
+<span class="nc" id="L406">        Random rand = new Random();</span>
+<span class="nc bnc" id="L407" title="All 2 branches missed.">        for (int i = 0; i &lt; numberOfBookies; i++) {</span>
+<span class="nc" id="L408">            String ipString = InetAddresses.fromInteger(rand.nextInt()).getHostAddress();</span>
+<span class="nc" id="L409">            bookiesRegPaths.add(ZKMetadataDriverBase.resolveZkLedgersRootPath(newConfig)</span>
+                + &quot;/&quot; + AVAILABLE_NODE + &quot;/&quot; + ipString + &quot;:3181&quot;);
+<span class="nc" id="L411">            zkc.create(bookiesRegPaths.get(i), new byte[0], Ids.OPEN_ACL_UNSAFE, CreateMode.EPHEMERAL);</span>
+        }
+
+        /*
+         * now it should be possible to create ledger and delete the same
+         */
+<span class="nc" id="L417">        BookKeeper bk = new BookKeeper(new ClientConfiguration(newConfig));</span>
+        LedgerHandle lh;
+<span class="nc" id="L419">        int numOfLedgers = 5;</span>
+<span class="nc bnc" id="L420" title="All 2 branches missed.">        for (int i = 0; i &lt; numOfLedgers; i++) {</span>
+<span class="nc" id="L421">            lh = bk.createLedger(numberOfBookies, numberOfBookies, numberOfBookies, BookKeeper.DigestType.MAC,</span>
+                    new byte[0]);
+<span class="nc" id="L423">            lh.close();</span>
+        }
+<span class="nc" id="L425">        bk.close();</span>
+<span class="nc" id="L426">    }</span>
+
+    @Test
+    public void testGetListOfEntriesOfClosedLedger() throws Exception {
+<span class="nc" id="L430">        testGetListOfEntriesOfLedger(true);</span>
+<span class="nc" id="L431">    }</span>
+
+    @Test
+    public void testGetListOfEntriesOfNotClosedLedger() throws Exception {
+<span class="nc" id="L435">        testGetListOfEntriesOfLedger(false);</span>
+<span class="nc" id="L436">    }</span>
+
+    @Test
+    public void testGetListOfEntriesOfNonExistingLedger() throws Exception {
+<span class="nc" id="L440">        long nonExistingLedgerId = 56789L;</span>
+<span class="nc" id="L441">        try (BookKeeperAdmin bkAdmin = new BookKeeperAdmin(zkUtil.getZooKeeperConnectString())) {</span>
+<span class="nc bnc" id="L442" title="All 2 branches missed.">            for (int i = 0; i &lt; bs.size(); i++) {</span>
+<span class="nc" id="L443">                CompletableFuture&lt;AvailabilityOfEntriesOfLedger&gt; futureResult = bkAdmin</span>
+<span class="nc" id="L444">                        .asyncGetListOfEntriesOfLedger(bs.get(i).getLocalAddress(), nonExistingLedgerId);</span>
+                try {
+<span class="nc" id="L446">                    futureResult.get();</span>
+<span class="nc" id="L447">                    fail(&quot;asyncGetListOfEntriesOfLedger is supposed to be failed with NoSuchLedgerExistsException&quot;);</span>
+<span class="nc" id="L448">                } catch (ExecutionException ee) {</span>
+<span class="nc" id="L449">                    assertTrue(ee.getCause() instanceof BKException);</span>
+<span class="nc" id="L450">                    BKException e = (BKException) ee.getCause();</span>
+<span class="nc" id="L451">                    assertEquals(e.getCode(), BKException.Code.NoSuchLedgerExistsException);</span>
+<span class="nc" id="L452">                }</span>
+            }
+        }
+<span class="nc" id="L455">    }</span>
+
+    public void testGetListOfEntriesOfLedger(boolean isLedgerClosed) throws Exception {
+<span class="nc" id="L458">        ClientConfiguration conf = new ClientConfiguration();</span>
+<span class="nc" id="L459">        conf.setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+<span class="nc" id="L460">        int numOfEntries = 6;</span>
+<span class="nc" id="L461">        BookKeeper bkc = new BookKeeper(conf);</span>
+<span class="nc" id="L462">        LedgerHandle lh = bkc.createLedger(numOfBookies, numOfBookies, digestType, &quot;testPasswd&quot;.getBytes());</span>
+<span class="nc" id="L463">        long lId = lh.getId();</span>
+<span class="nc bnc" id="L464" title="All 2 branches missed.">        for (int i = 0; i &lt; numOfEntries; i++) {</span>
+<span class="nc" id="L465">            lh.addEntry(&quot;000&quot;.getBytes());</span>
+        }
+<span class="nc bnc" id="L467" title="All 2 branches missed.">        if (isLedgerClosed) {</span>
+<span class="nc" id="L468">            lh.close();</span>
+        }
+<span class="nc" id="L470">        try (BookKeeperAdmin bkAdmin = new BookKeeperAdmin(zkUtil.getZooKeeperConnectString())) {</span>
+<span class="nc bnc" id="L471" title="All 2 branches missed.">            for (int i = 0; i &lt; bs.size(); i++) {</span>
+<span class="nc" id="L472">                CompletableFuture&lt;AvailabilityOfEntriesOfLedger&gt; futureResult = bkAdmin</span>
+<span class="nc" id="L473">                        .asyncGetListOfEntriesOfLedger(bs.get(i).getLocalAddress(), lId);</span>
+<span class="nc" id="L474">                AvailabilityOfEntriesOfLedger availabilityOfEntriesOfLedger = futureResult.get();</span>
+<span class="nc" id="L475">                assertEquals(&quot;Number of entries&quot;, numOfEntries,</span>
+<span class="nc" id="L476">                        availabilityOfEntriesOfLedger.getTotalNumOfAvailableEntries());</span>
+<span class="nc bnc" id="L477" title="All 2 branches missed.">                for (int j = 0; j &lt; numOfEntries; j++) {</span>
+<span class="nc" id="L478">                    assertTrue(&quot;Entry should be available: &quot; + j, availabilityOfEntriesOfLedger.isEntryAvailable(j));</span>
+                }
+<span class="nc" id="L480">                assertFalse(&quot;Entry should not be available: &quot; + numOfEntries,</span>
+<span class="nc" id="L481">                        availabilityOfEntriesOfLedger.isEntryAvailable(numOfEntries));</span>
+            }
+        }
+<span class="nc" id="L484">        bkc.close();</span>
+<span class="nc" id="L485">    }</span>
+
+    @Test
+    public void testGetListOfEntriesOfLedgerWithJustOneBookieInWriteQuorum() throws Exception {
+<span class="nc" id="L489">        ClientConfiguration conf = new ClientConfiguration();</span>
+<span class="nc" id="L490">        conf.setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+<span class="nc" id="L491">        int numOfEntries = 6;</span>
+<span class="nc" id="L492">        BookKeeper bkc = new BookKeeper(conf);</span>
+        /*
+         * in this testsuite there are going to be 2 (numOfBookies) and if
+         * writeQuorum is 1 then it will stripe entries to those two bookies.
+         */
+<span class="nc" id="L497">        LedgerHandle lh = bkc.createLedger(2, 1, digestType, &quot;testPasswd&quot;.getBytes());</span>
+<span class="nc" id="L498">        long lId = lh.getId();</span>
+<span class="nc bnc" id="L499" title="All 2 branches missed.">        for (int i = 0; i &lt; numOfEntries; i++) {</span>
+<span class="nc" id="L500">            lh.addEntry(&quot;000&quot;.getBytes());</span>
+        }
+
+<span class="nc" id="L503">        try (BookKeeperAdmin bkAdmin = new BookKeeperAdmin(zkUtil.getZooKeeperConnectString())) {</span>
+<span class="nc bnc" id="L504" title="All 2 branches missed.">            for (int i = 0; i &lt; bs.size(); i++) {</span>
+<span class="nc" id="L505">                CompletableFuture&lt;AvailabilityOfEntriesOfLedger&gt; futureResult = bkAdmin</span>
+<span class="nc" id="L506">                        .asyncGetListOfEntriesOfLedger(bs.get(i).getLocalAddress(), lId);</span>
+<span class="nc" id="L507">                AvailabilityOfEntriesOfLedger availabilityOfEntriesOfLedger = futureResult.get();</span>
+                /*
+                 * since num of bookies in the ensemble is 2 and
+                 * writeQuorum/ackQuorum is 1, it will stripe to these two
+                 * bookies and hence in each bookie there will be only
+                 * numOfEntries/2 entries.
+                 */
+<span class="nc" id="L514">                assertEquals(&quot;Number of entries&quot;, numOfEntries / 2,</span>
+<span class="nc" id="L515">                        availabilityOfEntriesOfLedger.getTotalNumOfAvailableEntries());</span>
+            }
+        }
+<span class="nc" id="L518">        bkc.close();</span>
+<span class="nc" id="L519">    }</span>
+
+    @Test
+    public void testGetBookies() throws Exception {
+<span class="nc" id="L523">        String ledgersRootPath = &quot;/ledgers&quot;;</span>
+<span class="nc" id="L524">        Assert.assertTrue(&quot;Cluster rootpath should have been created successfully &quot; + ledgersRootPath,</span>
+<span class="nc bnc" id="L525" title="All 2 branches missed.">                (zkc.exists(ledgersRootPath, false) != null));</span>
+<span class="nc" id="L526">        String bookieCookiePath = ZKMetadataDriverBase.resolveZkLedgersRootPath(baseConf)</span>
+                + &quot;/&quot; + BookKeeperConstants.COOKIE_NODE;
+<span class="nc" id="L528">        Assert.assertTrue(&quot;AvailableBookiesPath should have been created successfully &quot; + bookieCookiePath,</span>
+<span class="nc bnc" id="L529" title="All 2 branches missed.">                (zkc.exists(bookieCookiePath, false) != null));</span>
+
+<span class="nc" id="L531">        try (BookKeeperAdmin bkAdmin = new BookKeeperAdmin(zkUtil.getZooKeeperConnectString())) {</span>
+<span class="nc" id="L532">            Collection&lt;BookieSocketAddress&gt; availableBookies = bkAdmin.getAvailableBookies();</span>
+<span class="nc" id="L533">            Assert.assertEquals(availableBookies.size(), bs.size());</span>
+
+<span class="nc bnc" id="L535" title="All 2 branches missed.">            for (int i = 0; i &lt; bs.size(); i++) {</span>
+<span class="nc" id="L536">                availableBookies.contains(bs.get(i).getLocalAddress());</span>
+            }
+
+<span class="nc" id="L539">            BookieServer killedBookie = bs.get(1);</span>
+<span class="nc" id="L540">            killBookieAndWaitForZK(1);</span>
+
+<span class="nc" id="L542">            Collection&lt;BookieSocketAddress&gt; remainingBookies = bkAdmin.getAvailableBookies();</span>
+<span class="nc" id="L543">            Assert.assertFalse(remainingBookies.contains(killedBookie.getLocalAddress()));</span>
+
+<span class="nc" id="L545">            Collection&lt;BookieSocketAddress&gt; allBookies = bkAdmin.getAllBookies();</span>
+<span class="nc bnc" id="L546" title="All 2 branches missed.">            for (int i = 0; i &lt; bs.size(); i++) {</span>
+<span class="nc" id="L547">                remainingBookies.contains(bs.get(i).getLocalAddress());</span>
+<span class="nc" id="L548">                allBookies.contains(bs.get(i).getLocalAddress());</span>
+            }
+
+<span class="nc" id="L551">            Assert.assertEquals(remainingBookies.size(), allBookies.size() - 1);</span>
+<span class="nc" id="L552">            Assert.assertTrue(allBookies.contains(killedBookie.getLocalAddress()));</span>
+        }
+<span class="nc" id="L554">    }</span>
+
+    @Test
+    public void testGetListOfEntriesOfLedgerWithEntriesNotStripedToABookie() throws Exception {
+<span class="nc" id="L558">        ClientConfiguration conf = new ClientConfiguration();</span>
+<span class="nc" id="L559">        conf.setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+<span class="nc" id="L560">        BookKeeper bkc = new BookKeeper(conf);</span>
+        /*
+         * in this testsuite there are going to be 2 (numOfBookies) bookies and
+         * we are having ensemble of size 2.
+         */
+<span class="nc" id="L565">        LedgerHandle lh = bkc.createLedger(2, 1, digestType, &quot;testPasswd&quot;.getBytes());</span>
+<span class="nc" id="L566">        long lId = lh.getId();</span>
+        /*
+         * ledger is writeclosed without adding any entry.
+         */
+<span class="nc" id="L570">        lh.close();</span>
+<span class="nc" id="L571">        CountDownLatch callbackCalled = new CountDownLatch(1);</span>
+<span class="nc" id="L572">        AtomicBoolean exceptionInCallback = new AtomicBoolean(false);</span>
+<span class="nc" id="L573">        AtomicInteger exceptionCode = new AtomicInteger(BKException.Code.OK);</span>
+<span class="nc" id="L574">        BookKeeperAdmin bkAdmin = new BookKeeperAdmin(zkUtil.getZooKeeperConnectString());</span>
+        /*
+         * since no entry is added, callback is supposed to fail with
+         * NoSuchLedgerExistsException.
+         */
+<span class="nc" id="L579">        bkAdmin.asyncGetListOfEntriesOfLedger(bs.get(0).getLocalAddress(), lId)</span>
+<span class="nc" id="L580">                .whenComplete((availabilityOfEntriesOfLedger, throwable) -&gt; {</span>
+<span class="nc bnc" id="L581" title="All 2 branches missed.">                    exceptionInCallback.set(throwable != null);</span>
+<span class="nc bnc" id="L582" title="All 2 branches missed.">                    if (throwable != null) {</span>
+<span class="nc" id="L583">                        exceptionCode.set(BKException.getExceptionCode(throwable));</span>
+                    }
+<span class="nc" id="L585">                    callbackCalled.countDown();</span>
+<span class="nc" id="L586">                });</span>
+<span class="nc" id="L587">        callbackCalled.await();</span>
+<span class="nc" id="L588">        assertTrue(&quot;Exception occurred&quot;, exceptionInCallback.get());</span>
+<span class="nc" id="L589">        assertEquals(&quot;Exception code&quot;, BKException.Code.NoSuchLedgerExistsException, exceptionCode.get());</span>
+<span class="nc" id="L590">        bkAdmin.close();</span>
+<span class="nc" id="L591">        bkc.close();</span>
+<span class="nc" id="L592">    }</span>
+
+    @Test
+    public void testAreEntriesOfLedgerStoredInTheBookieForLastEmptySegment() throws Exception {
+<span class="nc" id="L596">        int lastEntryId = 10;</span>
+<span class="nc" id="L597">        long ledgerId = 100L;</span>
+<span class="nc" id="L598">        BookieSocketAddress bookie0 = new BookieSocketAddress(&quot;bookie0:3181&quot;);</span>
+<span class="nc" id="L599">        BookieSocketAddress bookie1 = new BookieSocketAddress(&quot;bookie1:3181&quot;);</span>
+<span class="nc" id="L600">        BookieSocketAddress bookie2 = new BookieSocketAddress(&quot;bookie2:3181&quot;);</span>
+<span class="nc" id="L601">        BookieSocketAddress bookie3 = new BookieSocketAddress(&quot;bookie3:3181&quot;);</span>
+
+<span class="nc" id="L603">        List&lt;BookieSocketAddress&gt; ensembleOfSegment1 = new ArrayList&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L604">        ensembleOfSegment1.add(bookie0);</span>
+<span class="nc" id="L605">        ensembleOfSegment1.add(bookie1);</span>
+<span class="nc" id="L606">        ensembleOfSegment1.add(bookie2);</span>
+
+<span class="nc" id="L608">        List&lt;BookieSocketAddress&gt; ensembleOfSegment2 = new ArrayList&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L609">        ensembleOfSegment2.add(bookie3);</span>
+<span class="nc" id="L610">        ensembleOfSegment2.add(bookie1);</span>
+<span class="nc" id="L611">        ensembleOfSegment2.add(bookie2);</span>
+
+<span class="nc" id="L613">        LedgerMetadataBuilder builder = LedgerMetadataBuilder.create();</span>
+<span class="nc" id="L614">        builder.withEnsembleSize(3)</span>
+<span class="nc" id="L615">                .withWriteQuorumSize(3)</span>
+<span class="nc" id="L616">                .withAckQuorumSize(2)</span>
+<span class="nc" id="L617">                .withDigestType(digestType.toApiDigestType())</span>
+<span class="nc" id="L618">                .withPassword(PASSWORD.getBytes())</span>
+<span class="nc" id="L619">                .newEnsembleEntry(0, ensembleOfSegment1)</span>
+<span class="nc" id="L620">                .newEnsembleEntry(lastEntryId + 1, ensembleOfSegment2)</span>
+<span class="nc" id="L621">                .withLastEntryId(lastEntryId).withLength(65576).withClosedState();</span>
+<span class="nc" id="L622">        LedgerMetadata meta = builder.build();</span>
+
+<span class="nc" id="L624">        assertFalse(&quot;expected areEntriesOfLedgerStoredInTheBookie to return False for bookie3&quot;,</span>
+<span class="nc" id="L625">                BookKeeperAdmin.areEntriesOfLedgerStoredInTheBookie(ledgerId, bookie3, meta));</span>
+<span class="nc" id="L626">        assertTrue(&quot;expected areEntriesOfLedgerStoredInTheBookie to return true for bookie2&quot;,</span>
+<span class="nc" id="L627">                BookKeeperAdmin.areEntriesOfLedgerStoredInTheBookie(ledgerId, bookie2, meta));</span>
+<span class="nc" id="L628">    }</span>
+
+    @Test
+    public void testBookkeeperAdminFormatResetsLedgerIds() throws Exception {
+<span class="nc" id="L632">        ClientConfiguration conf = new ClientConfiguration();</span>
+<span class="nc" id="L633">        conf.setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+
+        /*
+         * in this testsuite there are going to be 2 (numOfBookies) ledgers
+         * written and when formatting the BookieAdmin i expect that the
+         * ledger ids restart from 0
+         */
+<span class="nc" id="L640">        int numOfLedgers = 2;</span>
+<span class="nc" id="L641">        try (BookKeeper bkc = new BookKeeper(conf)) {</span>
+<span class="nc" id="L642">            Set&lt;Long&gt; ledgerIds = new HashSet&lt;&gt;();</span>
+<span class="nc bnc" id="L643" title="All 2 branches missed.">            for (int n = 0; n &lt; numOfLedgers; n++) {</span>
+<span class="nc" id="L644">                try (LedgerHandle lh = bkc.createLedger(numOfBookies, numOfBookies, digestType, &quot;L&quot;.getBytes())) {</span>
+<span class="nc" id="L645">                    ledgerIds.add(lh.getId());</span>
+<span class="nc" id="L646">                    lh.addEntry(&quot;000&quot;.getBytes());</span>
+                }
+            }
+
+<span class="nc" id="L650">            try (BookKeeperAdmin bkAdmin = new BookKeeperAdmin(zkUtil.getZooKeeperConnectString())) {</span>
+<span class="nc" id="L651">                bkAdmin.format(baseConf, false, true);</span>
+            }
+
+            /**
+             * ledgers created after format produce the same ids
+             */
+<span class="nc bnc" id="L657" title="All 2 branches missed.">            for (int n = 0; n &lt; numOfLedgers; n++) {</span>
+<span class="nc" id="L658">                try (LedgerHandle lh = bkc.createLedger(numOfBookies, numOfBookies, digestType, &quot;L&quot;.getBytes())) {</span>
+<span class="nc" id="L659">                    lh.addEntry(&quot;000&quot;.getBytes());</span>
+<span class="nc" id="L660">                    assertTrue(ledgerIds.contains(lh.getId()));</span>
+                }
+            }
+        }
+<span class="nc" id="L664">    }</span>
+
+    private void testBookieServiceInfo(boolean readonly, boolean legacy) throws Exception {
+<span class="nc" id="L667">        File tmpDir = createTempDir(&quot;bookie&quot;, &quot;test&quot;);</span>
+<span class="nc" id="L668">        final ServerConfiguration conf = TestBKConfiguration.newServerConfiguration()</span>
+<span class="nc" id="L669">                .setJournalDirName(tmpDir.getPath())</span>
+<span class="nc" id="L670">                .setLedgerDirNames(new String[]{tmpDir.getPath()})</span>
+<span class="nc" id="L671">                .setBookiePort(PortManager.nextFreePort())</span>
+<span class="nc" id="L672">                .setMetadataServiceUri(metadataServiceUri);</span>
+
+<span class="nc" id="L674">        LifecycleComponent server = Main.buildBookieServer(new BookieConfiguration(conf));</span>
+        // 2. start the server
+<span class="nc" id="L676">        CompletableFuture&lt;Void&gt; stackComponentFuture = ComponentStarter.startComponent(server);</span>
+<span class="nc bnc" id="L677" title="All 2 branches missed.">        while (server.lifecycleState() != Lifecycle.State.STARTED) {</span>
+<span class="nc" id="L678">            Thread.sleep(100);</span>
+        }
+
+<span class="nc" id="L681">        ServerConfiguration bkConf = newServerConfiguration().setForceReadOnlyBookie(readonly);</span>
+<span class="nc" id="L682">        BookieServer bkServer = startBookie(bkConf);</span>
+
+<span class="nc" id="L684">        String bookieId = bkServer.getLocalAddress().toString();</span>
+<span class="nc" id="L685">        String host = bkServer.getLocalAddress().getHostName();</span>
+<span class="nc" id="L686">        int port = bkServer.getLocalAddress().getPort();</span>
+
+<span class="nc bnc" id="L688" title="All 2 branches missed.">        if (legacy) {</span>
+<span class="nc" id="L689">            String regPath = ZKMetadataDriverBase.resolveZkLedgersRootPath(bkConf) + &quot;/&quot; + AVAILABLE_NODE;</span>
+<span class="nc bnc" id="L690" title="All 2 branches missed.">            regPath = readonly</span>
+                    ? regPath + READONLY + &quot;/&quot; + bookieId
+                    : regPath + &quot;/&quot; + bookieId;
+            // deleting the metadata, so that the bookie registration should
+            // continue successfully with legacy BookieServiceInfo
+<span class="nc" id="L695">            zkc.setData(regPath, new byte[]{}, -1);</span>
+        }
+
+<span class="nc" id="L698">        try (BookKeeperAdmin bkAdmin = new BookKeeperAdmin(zkUtil.getZooKeeperConnectString())) {</span>
+<span class="nc" id="L699">            BookieServiceInfo bookieServiceInfo = bkAdmin.getBookieServiceInfo(bookieId);</span>
+
+<span class="nc" id="L701">            assertThat(bookieServiceInfo.getEndpoints().size(), is(1));</span>
+<span class="nc" id="L702">            BookieServiceInfo.Endpoint endpoint = bookieServiceInfo.getEndpoints().stream()</span>
+<span class="nc" id="L703">                    .filter(e -&gt; Objects.equals(e.getId(), bookieId))</span>
+<span class="nc" id="L704">                    .findFirst()</span>
+<span class="nc" id="L705">                    .get();</span>
+<span class="nc" id="L706">            assertNotNull(&quot;Endpoint &quot; + bookieId + &quot; not found.&quot;, endpoint);</span>
+
+<span class="nc" id="L708">            assertThat(endpoint.getHost(), is(host));</span>
+<span class="nc" id="L709">            assertThat(endpoint.getPort(), is(port));</span>
+<span class="nc" id="L710">            assertThat(endpoint.getProtocol(), is(&quot;bookie-rpc&quot;));</span>
+        }
+
+<span class="nc" id="L713">        bkServer.shutdown();</span>
+<span class="nc" id="L714">        stackComponentFuture.cancel(true);</span>
+<span class="nc" id="L715">    }</span>
+
+    @Test
+    public void testBookieServiceInfoWritable() throws Exception {
+<span class="nc" id="L719">        testBookieServiceInfo(false, false);</span>
+<span class="nc" id="L720">    }</span>
+
+    @Test
+    public void testBookieServiceInfoReadonly() throws Exception {
+<span class="nc" id="L724">        testBookieServiceInfo(true, false);</span>
+<span class="nc" id="L725">    }</span>
+
+    @Test
+    public void testLegacyBookieServiceInfo() throws Exception {
+<span class="nc" id="L729">        testBookieServiceInfo(false, true);</span>
+<span class="nc" id="L730">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

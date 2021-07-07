@@ -1,0 +1,445 @@
+
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html id="htmlId">
+<head>
+  <title>Coverage Report :: BookieWatcherImpl</title>
+  <style type="text/css">
+    @import "../../.css/coverage.css";
+  </style>
+</head>
+
+<body>
+<div class="header"></div>
+
+<div class="content">
+<div class="breadCrumbs">
+    [ <a href="../../index.html">all classes</a> ]
+    [ <a href="../index.html">org.apache.bookkeeper.client</a> ]
+</div>
+
+<h1>Coverage Summary for Class: BookieWatcherImpl (org.apache.bookkeeper.client)</h1>
+
+<table class="coverageStats">
+
+<tr>
+  <th class="name">Class</th>
+<th class="coverageStat 
+">
+  Method, %
+</th>
+<th class="coverageStat 
+">
+  Line, %
+</th>
+</tr>
+<tr>
+  <td class="name">BookieWatcherImpl</td>
+<td class="coverageStat">
+  <span class="percent">
+    53,3%
+  </span>
+  <span class="absValue">
+    (8/ 15)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    43,1%
+  </span>
+  <span class="absValue">
+    (53/ 123)
+  </span>
+</td>
+</tr>
+  <tr>
+    <td class="name">BookieWatcherImpl$1</td>
+<td class="coverageStat">
+  <span class="percent">
+    50%
+  </span>
+  <span class="absValue">
+    (1/ 2)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    33,3%
+  </span>
+  <span class="absValue">
+    (1/ 3)
+  </span>
+</td>
+  </tr>
+<tr>
+  <td class="name"><strong>total</strong></td>
+<td class="coverageStat">
+  <span class="percent">
+    52,9%
+  </span>
+  <span class="absValue">
+    (9/ 17)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    42,9%
+  </span>
+  <span class="absValue">
+    (54/ 126)
+  </span>
+</td>
+</tr>
+</table>
+
+<br/>
+<br/>
+
+
+<div class="sourceCode"><i>1</i>&nbsp;/**
+<i>2</i>&nbsp; * Licensed to the Apache Software Foundation (ASF) under one
+<i>3</i>&nbsp; * or more contributor license agreements.  See the NOTICE file
+<i>4</i>&nbsp; * distributed with this work for additional information
+<i>5</i>&nbsp; * regarding copyright ownership.  The ASF licenses this file
+<i>6</i>&nbsp; * to you under the Apache License, Version 2.0 (the
+<i>7</i>&nbsp; * &quot;License&quot;); you may not use this file except in compliance
+<i>8</i>&nbsp; * with the License.  You may obtain a copy of the License at
+<i>9</i>&nbsp; *
+<i>10</i>&nbsp; *     http://www.apache.org/licenses/LICENSE-2.0
+<i>11</i>&nbsp; *
+<i>12</i>&nbsp; * Unless required by applicable law or agreed to in writing, software
+<i>13</i>&nbsp; * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+<i>14</i>&nbsp; * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+<i>15</i>&nbsp; * See the License for the specific language governing permissions and
+<i>16</i>&nbsp; * limitations under the License.
+<i>17</i>&nbsp; */
+<i>18</i>&nbsp;package org.apache.bookkeeper.client;
+<i>19</i>&nbsp;
+<i>20</i>&nbsp;import static org.apache.bookkeeper.bookie.BookKeeperServerStats.ENSEMBLE_NOT_ADHERING_TO_PLACEMENT_POLICY_COUNTER;
+<i>21</i>&nbsp;import static org.apache.bookkeeper.bookie.BookKeeperServerStats.NEW_ENSEMBLE_TIME;
+<i>22</i>&nbsp;import static org.apache.bookkeeper.bookie.BookKeeperServerStats.REPLACE_BOOKIE_TIME;
+<i>23</i>&nbsp;import static org.apache.bookkeeper.bookie.BookKeeperServerStats.WATCHER_SCOPE;
+<i>24</i>&nbsp;import static org.apache.bookkeeper.client.BookKeeperClientStats.CREATE_OP;
+<i>25</i>&nbsp;
+<i>26</i>&nbsp;import com.google.common.cache.Cache;
+<i>27</i>&nbsp;import com.google.common.cache.CacheBuilder;
+<i>28</i>&nbsp;import com.google.common.cache.RemovalListener;
+<i>29</i>&nbsp;import com.google.common.cache.RemovalNotification;
+<i>30</i>&nbsp;import java.util.Collections;
+<i>31</i>&nbsp;import java.util.HashSet;
+<i>32</i>&nbsp;import java.util.List;
+<i>33</i>&nbsp;import java.util.Map;
+<i>34</i>&nbsp;import java.util.Set;
+<i>35</i>&nbsp;import java.util.concurrent.CompletableFuture;
+<i>36</i>&nbsp;import java.util.concurrent.TimeUnit;
+<i>37</i>&nbsp;import java.util.function.Function;
+<i>38</i>&nbsp;import lombok.extern.slf4j.Slf4j;
+<i>39</i>&nbsp;
+<i>40</i>&nbsp;import org.apache.bookkeeper.bookie.BookKeeperServerStats;
+<i>41</i>&nbsp;import org.apache.bookkeeper.client.BKException.BKInterruptedException;
+<i>42</i>&nbsp;import org.apache.bookkeeper.client.BKException.BKNotEnoughBookiesException;
+<i>43</i>&nbsp;import org.apache.bookkeeper.client.BKException.MetaStoreException;
+<i>44</i>&nbsp;import org.apache.bookkeeper.client.EnsemblePlacementPolicy.PlacementPolicyAdherence;
+<i>45</i>&nbsp;import org.apache.bookkeeper.common.concurrent.FutureUtils;
+<i>46</i>&nbsp;import org.apache.bookkeeper.common.util.MathUtils;
+<i>47</i>&nbsp;import org.apache.bookkeeper.conf.ClientConfiguration;
+<i>48</i>&nbsp;import org.apache.bookkeeper.discover.RegistrationClient;
+<i>49</i>&nbsp;import org.apache.bookkeeper.net.BookieSocketAddress;
+<i>50</i>&nbsp;import org.apache.bookkeeper.stats.Counter;
+<i>51</i>&nbsp;import org.apache.bookkeeper.stats.OpStatsLogger;
+<i>52</i>&nbsp;import org.apache.bookkeeper.stats.StatsLogger;
+<i>53</i>&nbsp;import org.apache.bookkeeper.stats.annotations.StatsDoc;
+<i>54</i>&nbsp;
+<i>55</i>&nbsp;/**
+<i>56</i>&nbsp; * This class is responsible for maintaining a consistent view of what bookies
+<i>57</i>&nbsp; * are available by reading Zookeeper (and setting watches on the bookie nodes).
+<i>58</i>&nbsp; * When a bookie fails, the other parts of the code turn to this class to find a
+<i>59</i>&nbsp; * replacement
+<i>60</i>&nbsp; *
+<i>61</i>&nbsp; */
+<b class="pc"><i>62</i>&nbsp;@StatsDoc(</b>
+<i>63</i>&nbsp;    name = WATCHER_SCOPE,
+<i>64</i>&nbsp;    help = &quot;Bookie watcher related stats&quot;
+<i>65</i>&nbsp;)
+<b class="fc"><i>66</i>&nbsp;@Slf4j</b>
+<b class="nc"><i>67</i>&nbsp;class BookieWatcherImpl implements BookieWatcher {</b>
+<i>68</i>&nbsp;
+<b class="fc"><i>69</i>&nbsp;    private static final Function&lt;Throwable, BKException&gt; EXCEPTION_FUNC = cause -&gt; {</b>
+<b class="nc"><i>70</i>&nbsp;        if (cause instanceof BKException) {</b>
+<b class="nc"><i>71</i>&nbsp;            log.error(&quot;Failed to get bookie list : &quot;, cause);</b>
+<b class="nc"><i>72</i>&nbsp;            return (BKException) cause;</b>
+<b class="nc"><i>73</i>&nbsp;        } else if (cause instanceof InterruptedException) {</b>
+<b class="nc"><i>74</i>&nbsp;            log.error(&quot;Interrupted reading bookie list : &quot;, cause);</b>
+<b class="nc"><i>75</i>&nbsp;            return new BKInterruptedException();</b>
+<i>76</i>&nbsp;        } else {
+<b class="nc"><i>77</i>&nbsp;            MetaStoreException mse = new MetaStoreException(cause);</b>
+<b class="nc"><i>78</i>&nbsp;            return mse;</b>
+<i>79</i>&nbsp;        }
+<i>80</i>&nbsp;    };
+<i>81</i>&nbsp;
+<i>82</i>&nbsp;    private final ClientConfiguration conf;
+<i>83</i>&nbsp;    private final RegistrationClient registrationClient;
+<i>84</i>&nbsp;    private final EnsemblePlacementPolicy placementPolicy;
+<i>85</i>&nbsp;    @StatsDoc(
+<i>86</i>&nbsp;        name = NEW_ENSEMBLE_TIME,
+<i>87</i>&nbsp;        help = &quot;operation stats of new ensembles&quot;,
+<i>88</i>&nbsp;        parent = CREATE_OP
+<i>89</i>&nbsp;    )
+<i>90</i>&nbsp;    private final OpStatsLogger newEnsembleTimer;
+<i>91</i>&nbsp;    @StatsDoc(
+<i>92</i>&nbsp;        name = REPLACE_BOOKIE_TIME,
+<i>93</i>&nbsp;        help = &quot;operation stats of replacing bookie in an ensemble&quot;
+<i>94</i>&nbsp;    )
+<i>95</i>&nbsp;    private final OpStatsLogger replaceBookieTimer;
+<i>96</i>&nbsp;    @StatsDoc(
+<i>97</i>&nbsp;            name = ENSEMBLE_NOT_ADHERING_TO_PLACEMENT_POLICY_COUNTER,
+<i>98</i>&nbsp;            help = &quot;total number of newEnsemble/replaceBookie operations failed to adhere&quot;
+<i>99</i>&nbsp;            + &quot; EnsemblePlacementPolicy&quot;
+<i>100</i>&nbsp;    )
+<i>101</i>&nbsp;    private final Counter ensembleNotAdheringToPlacementPolicy;
+<i>102</i>&nbsp;
+<i>103</i>&nbsp;    // Bookies that will not be preferred to be chosen in a new ensemble
+<i>104</i>&nbsp;    final Cache&lt;BookieSocketAddress, Boolean&gt; quarantinedBookies;
+<i>105</i>&nbsp;
+<b class="fc"><i>106</i>&nbsp;    private volatile Set&lt;BookieSocketAddress&gt; writableBookies = Collections.emptySet();</b>
+<b class="fc"><i>107</i>&nbsp;    private volatile Set&lt;BookieSocketAddress&gt; readOnlyBookies = Collections.emptySet();</b>
+<i>108</i>&nbsp;
+<b class="fc"><i>109</i>&nbsp;    private CompletableFuture&lt;?&gt; initialWritableBookiesFuture = null;</b>
+<b class="fc"><i>110</i>&nbsp;    private CompletableFuture&lt;?&gt; initialReadonlyBookiesFuture = null;</b>
+<i>111</i>&nbsp;
+<i>112</i>&nbsp;    public BookieWatcherImpl(ClientConfiguration conf,
+<i>113</i>&nbsp;                             EnsemblePlacementPolicy placementPolicy,
+<i>114</i>&nbsp;                             RegistrationClient registrationClient,
+<b class="fc"><i>115</i>&nbsp;                             StatsLogger statsLogger)  {</b>
+<b class="fc"><i>116</i>&nbsp;        this.conf = conf;</b>
+<b class="fc"><i>117</i>&nbsp;        this.placementPolicy = placementPolicy;</b>
+<b class="fc"><i>118</i>&nbsp;        this.registrationClient = registrationClient;</b>
+<b class="fc"><i>119</i>&nbsp;        this.quarantinedBookies = CacheBuilder.newBuilder()</b>
+<b class="fc"><i>120</i>&nbsp;                .expireAfterWrite(conf.getBookieQuarantineTimeSeconds(), TimeUnit.SECONDS)</b>
+<b class="fc"><i>121</i>&nbsp;                .removalListener(new RemovalListener&lt;BookieSocketAddress, Boolean&gt;() {</b>
+<i>122</i>&nbsp;
+<i>123</i>&nbsp;                    @Override
+<i>124</i>&nbsp;                    public void onRemoval(RemovalNotification&lt;BookieSocketAddress, Boolean&gt; bookie) {
+<b class="nc"><i>125</i>&nbsp;                        log.info(&quot;Bookie {} is no longer quarantined&quot;, bookie.getKey());</b>
+<b class="nc"><i>126</i>&nbsp;                    }</b>
+<i>127</i>&nbsp;
+<b class="fc"><i>128</i>&nbsp;                }).build();</b>
+<b class="fc"><i>129</i>&nbsp;        this.newEnsembleTimer = statsLogger.getOpStatsLogger(NEW_ENSEMBLE_TIME);</b>
+<b class="fc"><i>130</i>&nbsp;        this.replaceBookieTimer = statsLogger.getOpStatsLogger(REPLACE_BOOKIE_TIME);</b>
+<b class="fc"><i>131</i>&nbsp;        this.ensembleNotAdheringToPlacementPolicy = statsLogger</b>
+<b class="fc"><i>132</i>&nbsp;                .getCounter(BookKeeperServerStats.ENSEMBLE_NOT_ADHERING_TO_PLACEMENT_POLICY_COUNTER);</b>
+<b class="fc"><i>133</i>&nbsp;    }</b>
+<i>134</i>&nbsp;
+<i>135</i>&nbsp;    @Override
+<i>136</i>&nbsp;    public Set&lt;BookieSocketAddress&gt; getBookies() throws BKException {
+<i>137</i>&nbsp;        try {
+<b class="nc"><i>138</i>&nbsp;            return FutureUtils.result(registrationClient.getWritableBookies(), EXCEPTION_FUNC).getValue();</b>
+<b class="nc"><i>139</i>&nbsp;        } catch (BKInterruptedException ie) {</b>
+<b class="nc"><i>140</i>&nbsp;            Thread.currentThread().interrupt();</b>
+<b class="nc"><i>141</i>&nbsp;            throw ie;</b>
+<i>142</i>&nbsp;        }
+<i>143</i>&nbsp;    }
+<i>144</i>&nbsp;
+<i>145</i>&nbsp;    @Override
+<i>146</i>&nbsp;    public Set&lt;BookieSocketAddress&gt; getAllBookies() throws BKException {
+<i>147</i>&nbsp;        try {
+<b class="nc"><i>148</i>&nbsp;            return FutureUtils.result(registrationClient.getAllBookies(), EXCEPTION_FUNC).getValue();</b>
+<b class="nc"><i>149</i>&nbsp;        } catch (BKInterruptedException ie) {</b>
+<b class="nc"><i>150</i>&nbsp;            Thread.currentThread().interrupt();</b>
+<b class="nc"><i>151</i>&nbsp;            throw ie;</b>
+<i>152</i>&nbsp;        }
+<i>153</i>&nbsp;    }
+<i>154</i>&nbsp;
+<i>155</i>&nbsp;    @Override
+<i>156</i>&nbsp;    public Set&lt;BookieSocketAddress&gt; getReadOnlyBookies()
+<i>157</i>&nbsp;            throws BKException {
+<i>158</i>&nbsp;        try {
+<b class="nc"><i>159</i>&nbsp;            return FutureUtils.result(registrationClient.getReadOnlyBookies(), EXCEPTION_FUNC).getValue();</b>
+<b class="nc"><i>160</i>&nbsp;        } catch (BKInterruptedException ie) {</b>
+<b class="nc"><i>161</i>&nbsp;            Thread.currentThread().interrupt();</b>
+<b class="nc"><i>162</i>&nbsp;            throw ie;</b>
+<i>163</i>&nbsp;        }
+<i>164</i>&nbsp;    }
+<i>165</i>&nbsp;
+<i>166</i>&nbsp;    // this callback is already not executed in zookeeper thread
+<i>167</i>&nbsp;    private synchronized void processWritableBookiesChanged(Set&lt;BookieSocketAddress&gt; newBookieAddrs) {
+<i>168</i>&nbsp;        // Update watcher outside ZK callback thread, to avoid deadlock in case some other
+<i>169</i>&nbsp;        // component is trying to do a blocking ZK operation
+<b class="fc"><i>170</i>&nbsp;        this.writableBookies = newBookieAddrs;</b>
+<b class="fc"><i>171</i>&nbsp;        placementPolicy.onClusterChanged(newBookieAddrs, readOnlyBookies);</b>
+<i>172</i>&nbsp;        // we don&#39;t need to close clients here, because:
+<i>173</i>&nbsp;        // a. the dead bookies will be removed from topology, which will not be used in new ensemble.
+<i>174</i>&nbsp;        // b. the read sequence will be reordered based on znode availability, so most of the reads
+<i>175</i>&nbsp;        //    will not be sent to them.
+<i>176</i>&nbsp;        // c. the close here is just to disconnect the channel, which doesn&#39;t remove the channel from
+<i>177</i>&nbsp;        //    from pcbc map. we don&#39;t really need to disconnect the channel here, since if a bookie is
+<i>178</i>&nbsp;        //    really down, PCBC will disconnect itself based on netty callback. if we try to disconnect
+<i>179</i>&nbsp;        //    here, it actually introduces side-effects on case d.
+<i>180</i>&nbsp;        // d. closing the client here will affect latency if the bookie is alive but just being flaky
+<i>181</i>&nbsp;        //    on its znode registration due zookeeper session expire.
+<i>182</i>&nbsp;        // e. if we want to permanently remove a bookkeeper client, we should watch on the cookies&#39; list.
+<i>183</i>&nbsp;        // if (bk.getBookieClient() != null) {
+<i>184</i>&nbsp;        //     bk.getBookieClient().closeClients(deadBookies);
+<i>185</i>&nbsp;        // }
+<b class="fc"><i>186</i>&nbsp;    }</b>
+<i>187</i>&nbsp;
+<i>188</i>&nbsp;    private synchronized void processReadOnlyBookiesChanged(Set&lt;BookieSocketAddress&gt; readOnlyBookies) {
+<b class="fc"><i>189</i>&nbsp;        this.readOnlyBookies = readOnlyBookies;</b>
+<b class="fc"><i>190</i>&nbsp;        placementPolicy.onClusterChanged(writableBookies, readOnlyBookies);</b>
+<b class="fc"><i>191</i>&nbsp;    }</b>
+<i>192</i>&nbsp;
+<i>193</i>&nbsp;    /**
+<i>194</i>&nbsp;     * Blocks until bookies are read from zookeeper, used in the {@link BookKeeper} constructor.
+<i>195</i>&nbsp;     *
+<i>196</i>&nbsp;     * @throws BKException when failed to read bookies
+<i>197</i>&nbsp;     */
+<i>198</i>&nbsp;    public void initialBlockingBookieRead() throws BKException {
+<i>199</i>&nbsp;        CompletableFuture&lt;?&gt; writable;
+<i>200</i>&nbsp;        CompletableFuture&lt;?&gt; readonly;
+<b class="fc"><i>201</i>&nbsp;        synchronized (this) {</b>
+<b class="pc"><i>202</i>&nbsp;            if (initialReadonlyBookiesFuture == null) {</b>
+<b class="pc"><i>203</i>&nbsp;                assert initialWritableBookiesFuture == null;</b>
+<i>204</i>&nbsp;
+<b class="fc"><i>205</i>&nbsp;                writable = this.registrationClient.watchWritableBookies(</b>
+<b class="fc"><i>206</i>&nbsp;                            bookies -&gt; processWritableBookiesChanged(bookies.getValue()));</b>
+<i>207</i>&nbsp;
+<b class="fc"><i>208</i>&nbsp;                readonly = this.registrationClient.watchReadOnlyBookies(</b>
+<b class="fc"><i>209</i>&nbsp;                            bookies -&gt; processReadOnlyBookiesChanged(bookies.getValue()));</b>
+<b class="fc"><i>210</i>&nbsp;                initialWritableBookiesFuture = writable;</b>
+<b class="fc"><i>211</i>&nbsp;                initialReadonlyBookiesFuture = readonly;</b>
+<i>212</i>&nbsp;            } else {
+<b class="nc"><i>213</i>&nbsp;                writable = initialWritableBookiesFuture;</b>
+<b class="nc"><i>214</i>&nbsp;                readonly = initialReadonlyBookiesFuture;</b>
+<i>215</i>&nbsp;            }
+<b class="fc"><i>216</i>&nbsp;        }</b>
+<i>217</i>&nbsp;
+<i>218</i>&nbsp;        try {
+<b class="fc"><i>219</i>&nbsp;            FutureUtils.result(writable, EXCEPTION_FUNC);</b>
+<b class="nc"><i>220</i>&nbsp;        } catch (BKInterruptedException ie) {</b>
+<b class="nc"><i>221</i>&nbsp;            Thread.currentThread().interrupt();</b>
+<b class="nc"><i>222</i>&nbsp;            throw ie;</b>
+<b class="fc"><i>223</i>&nbsp;        }</b>
+<i>224</i>&nbsp;        try {
+<b class="fc"><i>225</i>&nbsp;            FutureUtils.result(readonly, EXCEPTION_FUNC);</b>
+<b class="nc"><i>226</i>&nbsp;        } catch (BKInterruptedException ie) {</b>
+<b class="nc"><i>227</i>&nbsp;            Thread.currentThread().interrupt();</b>
+<b class="nc"><i>228</i>&nbsp;            throw ie;</b>
+<b class="nc"><i>229</i>&nbsp;        } catch (Exception e) {</b>
+<b class="nc"><i>230</i>&nbsp;            log.error(&quot;Failed getReadOnlyBookies: &quot;, e);</b>
+<b class="fc"><i>231</i>&nbsp;        }</b>
+<b class="fc"><i>232</i>&nbsp;    }</b>
+<i>233</i>&nbsp;
+<i>234</i>&nbsp;    @Override
+<i>235</i>&nbsp;    public List&lt;BookieSocketAddress&gt; newEnsemble(int ensembleSize, int writeQuorumSize,
+<i>236</i>&nbsp;        int ackQuorumSize, Map&lt;String, byte[]&gt; customMetadata)
+<i>237</i>&nbsp;            throws BKNotEnoughBookiesException {
+<b class="fc"><i>238</i>&nbsp;        long startTime = MathUtils.nowInNano();</b>
+<i>239</i>&nbsp;        EnsemblePlacementPolicy.PlacementResult&lt;List&lt;BookieSocketAddress&gt;&gt; newEnsembleResponse;
+<i>240</i>&nbsp;        List&lt;BookieSocketAddress&gt; socketAddresses;
+<i>241</i>&nbsp;        PlacementPolicyAdherence isEnsembleAdheringToPlacementPolicy;
+<i>242</i>&nbsp;        try {
+<b class="fc"><i>243</i>&nbsp;            Set&lt;BookieSocketAddress&gt; quarantinedBookiesSet = quarantinedBookies.asMap().keySet();</b>
+<b class="fc"><i>244</i>&nbsp;            newEnsembleResponse = placementPolicy.newEnsemble(ensembleSize, writeQuorumSize, ackQuorumSize,</b>
+<i>245</i>&nbsp;                    customMetadata, new HashSet&lt;BookieSocketAddress&gt;(quarantinedBookiesSet));
+<b class="fc"><i>246</i>&nbsp;            socketAddresses = newEnsembleResponse.getResult();</b>
+<b class="fc"><i>247</i>&nbsp;            isEnsembleAdheringToPlacementPolicy = newEnsembleResponse.isAdheringToPolicy();</b>
+<b class="pc"><i>248</i>&nbsp;            if (isEnsembleAdheringToPlacementPolicy == PlacementPolicyAdherence.FAIL) {</b>
+<b class="fc"><i>249</i>&nbsp;                ensembleNotAdheringToPlacementPolicy.inc();</b>
+<b class="pc"><i>250</i>&nbsp;                if (ensembleSize &gt; 1) {</b>
+<b class="fc"><i>251</i>&nbsp;                    log.warn(&quot;New ensemble: {} is not adhering to Placement Policy. quarantinedBookies: {}&quot;,</b>
+<i>252</i>&nbsp;                            socketAddresses, quarantinedBookiesSet);
+<i>253</i>&nbsp;                }
+<i>254</i>&nbsp;            }
+<i>255</i>&nbsp;            // we try to only get from the healthy bookies first
+<b class="fc"><i>256</i>&nbsp;            newEnsembleTimer.registerSuccessfulEvent(MathUtils.nowInNano() - startTime, TimeUnit.NANOSECONDS);</b>
+<b class="nc"><i>257</i>&nbsp;        } catch (BKNotEnoughBookiesException e) {</b>
+<b class="nc"><i>258</i>&nbsp;            if (log.isDebugEnabled()) {</b>
+<b class="nc"><i>259</i>&nbsp;                log.debug(&quot;Not enough healthy bookies available, using quarantined bookies&quot;);</b>
+<i>260</i>&nbsp;            }
+<b class="nc"><i>261</i>&nbsp;            newEnsembleResponse = placementPolicy.newEnsemble(</b>
+<i>262</i>&nbsp;                    ensembleSize, writeQuorumSize, ackQuorumSize, customMetadata, new HashSet&lt;&gt;());
+<b class="nc"><i>263</i>&nbsp;            socketAddresses = newEnsembleResponse.getResult();</b>
+<b class="nc"><i>264</i>&nbsp;            isEnsembleAdheringToPlacementPolicy = newEnsembleResponse.isAdheringToPolicy();</b>
+<b class="nc"><i>265</i>&nbsp;            if (isEnsembleAdheringToPlacementPolicy == PlacementPolicyAdherence.FAIL) {</b>
+<b class="nc"><i>266</i>&nbsp;                ensembleNotAdheringToPlacementPolicy.inc();</b>
+<b class="nc"><i>267</i>&nbsp;                log.warn(&quot;New ensemble: {} is not adhering to Placement Policy&quot;, socketAddresses);</b>
+<i>268</i>&nbsp;            }
+<b class="nc"><i>269</i>&nbsp;            newEnsembleTimer.registerFailedEvent(MathUtils.nowInNano() - startTime, TimeUnit.NANOSECONDS);</b>
+<b class="fc"><i>270</i>&nbsp;        }</b>
+<b class="fc"><i>271</i>&nbsp;        return socketAddresses;</b>
+<i>272</i>&nbsp;    }
+<i>273</i>&nbsp;
+<i>274</i>&nbsp;    @Override
+<i>275</i>&nbsp;    public BookieSocketAddress replaceBookie(int ensembleSize, int writeQuorumSize, int ackQuorumSize,
+<i>276</i>&nbsp;                                             Map&lt;String, byte[]&gt; customMetadata,
+<i>277</i>&nbsp;                                             List&lt;BookieSocketAddress&gt; existingBookies, int bookieIdx,
+<i>278</i>&nbsp;                                             Set&lt;BookieSocketAddress&gt; excludeBookies)
+<i>279</i>&nbsp;            throws BKNotEnoughBookiesException {
+<b class="nc"><i>280</i>&nbsp;        long startTime = MathUtils.nowInNano();</b>
+<b class="nc"><i>281</i>&nbsp;        BookieSocketAddress addr = existingBookies.get(bookieIdx);</b>
+<i>282</i>&nbsp;        EnsemblePlacementPolicy.PlacementResult&lt;BookieSocketAddress&gt; replaceBookieResponse;
+<i>283</i>&nbsp;        BookieSocketAddress socketAddress;
+<b class="nc"><i>284</i>&nbsp;        PlacementPolicyAdherence isEnsembleAdheringToPlacementPolicy = PlacementPolicyAdherence.FAIL;</b>
+<i>285</i>&nbsp;        try {
+<i>286</i>&nbsp;            // we exclude the quarantined bookies also first
+<b class="nc"><i>287</i>&nbsp;            Set&lt;BookieSocketAddress&gt; excludedBookiesAndQuarantinedBookies = new HashSet&lt;BookieSocketAddress&gt;(</b>
+<i>288</i>&nbsp;                    excludeBookies);
+<b class="nc"><i>289</i>&nbsp;            Set&lt;BookieSocketAddress&gt; quarantinedBookiesSet = quarantinedBookies.asMap().keySet();</b>
+<b class="nc"><i>290</i>&nbsp;            excludedBookiesAndQuarantinedBookies.addAll(quarantinedBookiesSet);</b>
+<b class="nc"><i>291</i>&nbsp;            replaceBookieResponse = placementPolicy.replaceBookie(</b>
+<i>292</i>&nbsp;                    ensembleSize, writeQuorumSize, ackQuorumSize, customMetadata,
+<i>293</i>&nbsp;                    existingBookies, addr, excludedBookiesAndQuarantinedBookies);
+<b class="nc"><i>294</i>&nbsp;            socketAddress = replaceBookieResponse.getResult();</b>
+<b class="nc"><i>295</i>&nbsp;            isEnsembleAdheringToPlacementPolicy = replaceBookieResponse.isAdheringToPolicy();</b>
+<b class="nc"><i>296</i>&nbsp;            if (isEnsembleAdheringToPlacementPolicy == PlacementPolicyAdherence.FAIL) {</b>
+<b class="nc"><i>297</i>&nbsp;                ensembleNotAdheringToPlacementPolicy.inc();</b>
+<b class="nc"><i>298</i>&nbsp;                log.warn(</b>
+<i>299</i>&nbsp;                        &quot;replaceBookie for bookie: {} in ensemble: {} is not adhering to placement policy and&quot;
+<i>300</i>&nbsp;                                + &quot; chose {}. excludedBookies {} and quarantinedBookies {}&quot;,
+<i>301</i>&nbsp;                        addr, existingBookies, socketAddress, excludeBookies, quarantinedBookiesSet);
+<i>302</i>&nbsp;            }
+<b class="nc"><i>303</i>&nbsp;            replaceBookieTimer.registerSuccessfulEvent(MathUtils.nowInNano() - startTime, TimeUnit.NANOSECONDS);</b>
+<b class="nc"><i>304</i>&nbsp;        } catch (BKNotEnoughBookiesException e) {</b>
+<b class="nc"><i>305</i>&nbsp;            if (log.isDebugEnabled()) {</b>
+<b class="nc"><i>306</i>&nbsp;                log.debug(&quot;Not enough healthy bookies available, using quarantined bookies&quot;);</b>
+<i>307</i>&nbsp;            }
+<b class="nc"><i>308</i>&nbsp;            replaceBookieResponse = placementPolicy.replaceBookie(ensembleSize, writeQuorumSize, ackQuorumSize,</b>
+<i>309</i>&nbsp;                    customMetadata, existingBookies, addr, excludeBookies);
+<b class="nc"><i>310</i>&nbsp;            socketAddress = replaceBookieResponse.getResult();</b>
+<b class="nc"><i>311</i>&nbsp;            isEnsembleAdheringToPlacementPolicy = replaceBookieResponse.isAdheringToPolicy();</b>
+<b class="nc"><i>312</i>&nbsp;            if (isEnsembleAdheringToPlacementPolicy == PlacementPolicyAdherence.FAIL) {</b>
+<b class="nc"><i>313</i>&nbsp;                ensembleNotAdheringToPlacementPolicy.inc();</b>
+<b class="nc"><i>314</i>&nbsp;                log.warn(</b>
+<i>315</i>&nbsp;                        &quot;replaceBookie for bookie: {} in ensemble: {} is not adhering to placement policy and&quot;
+<i>316</i>&nbsp;                                + &quot; chose {}. excludedBookies {}&quot;,
+<i>317</i>&nbsp;                        addr, existingBookies, socketAddress, excludeBookies);
+<i>318</i>&nbsp;            }
+<b class="nc"><i>319</i>&nbsp;            replaceBookieTimer.registerFailedEvent(MathUtils.nowInNano() - startTime, TimeUnit.NANOSECONDS);</b>
+<b class="nc"><i>320</i>&nbsp;        }</b>
+<b class="nc"><i>321</i>&nbsp;        return socketAddress;</b>
+<i>322</i>&nbsp;    }
+<i>323</i>&nbsp;
+<i>324</i>&nbsp;    /**
+<i>325</i>&nbsp;     * Quarantine &lt;i&gt;bookie&lt;/i&gt; so it will not be preferred to be chosen for new ensembles.
+<i>326</i>&nbsp;     * @param bookie
+<i>327</i>&nbsp;     */
+<i>328</i>&nbsp;    @Override
+<i>329</i>&nbsp;    public void quarantineBookie(BookieSocketAddress bookie) {
+<b class="nc"><i>330</i>&nbsp;        if (quarantinedBookies.getIfPresent(bookie) == null) {</b>
+<b class="nc"><i>331</i>&nbsp;            quarantinedBookies.put(bookie, Boolean.TRUE);</b>
+<b class="nc"><i>332</i>&nbsp;            log.warn(&quot;Bookie {} has been quarantined because of read/write errors.&quot;, bookie);</b>
+<i>333</i>&nbsp;        }
+<b class="nc"><i>334</i>&nbsp;    }</b>
+<i>335</i>&nbsp;
+<i>336</i>&nbsp;}
+</div>
+</div>
+
+<div class="footer">
+    
+    <div style="float:right;">generated on 2021-06-28 15:57</div>
+</div>
+</body>
+</html>

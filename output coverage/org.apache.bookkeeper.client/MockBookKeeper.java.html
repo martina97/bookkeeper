@@ -1,0 +1,323 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MockBookKeeper.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">MockBookKeeper.java</span></div><h1>MockBookKeeper.java</h1><pre class="source lang-java linenums">/**
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+package org.apache.bookkeeper.client;
+
+import io.netty.util.concurrent.DefaultThreadFactory;
+
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+
+import org.apache.bookkeeper.client.AsyncCallback.CreateCallback;
+import org.apache.bookkeeper.client.AsyncCallback.DeleteCallback;
+import org.apache.bookkeeper.client.AsyncCallback.OpenCallback;
+import org.apache.bookkeeper.client.api.BKException.Code;
+import org.apache.bookkeeper.client.api.OpenBuilder;
+import org.apache.bookkeeper.client.api.ReadHandle;
+import org.apache.bookkeeper.client.impl.OpenBuilderBase;
+import org.apache.bookkeeper.conf.ClientConfiguration;
+import org.apache.zookeeper.ZooKeeper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Mocked version of BookKeeper client that keeps all ledgers data in memory.
+ *
+ * &lt;p&gt;This mocked client is meant to be used in unit tests for applications using the BookKeeper API.
+ */
+public class MockBookKeeper extends BookKeeper {
+
+<span class="nc" id="L54">    final ExecutorService executor = Executors.newFixedThreadPool(1, new DefaultThreadFactory(&quot;mock-bookkeeper&quot;));</span>
+    final ZooKeeper zkc;
+
+    @Override
+    public ZooKeeper getZkHandle() {
+<span class="nc" id="L59">        return zkc;</span>
+    }
+
+    @Override
+    public ClientConfiguration getConf() {
+<span class="nc" id="L64">        return super.getConf();</span>
+    }
+
+<span class="nc" id="L67">    Map&lt;Long, MockLedgerHandle&gt; ledgers = new ConcurrentHashMap&lt;Long, MockLedgerHandle&gt;();</span>
+<span class="nc" id="L68">    AtomicLong sequence = new AtomicLong(3);</span>
+<span class="nc" id="L69">    AtomicBoolean stopped = new AtomicBoolean(false);</span>
+<span class="nc" id="L70">    AtomicInteger stepsToFail = new AtomicInteger(-1);</span>
+<span class="nc" id="L71">    int failReturnCode = BKException.Code.OK;</span>
+<span class="nc" id="L72">    int nextFailReturnCode = BKException.Code.OK;</span>
+
+<span class="nc" id="L74">    public MockBookKeeper(ZooKeeper zkc) throws Exception {</span>
+<span class="nc" id="L75">        this.zkc = zkc;</span>
+<span class="nc" id="L76">    }</span>
+
+    @Override
+    public LedgerHandle createLedger(DigestType digestType, byte[] passwd) throws BKException {
+<span class="nc" id="L80">        return createLedger(3, 2, digestType, passwd);</span>
+    }
+
+    @Override
+    public LedgerHandle createLedger(int ensSize, int qSize, DigestType digestType, byte[] passwd) throws BKException {
+<span class="nc" id="L85">        return createLedger(ensSize, qSize, qSize, digestType, passwd);</span>
+    }
+
+    @Override
+    public void asyncCreateLedger(int ensSize, int writeQuorumSize, int ackQuorumSize, final DigestType digestType,
+            final byte[] passwd, final CreateCallback cb, final Object ctx, Map&lt;String, byte[]&gt; properties) {
+<span class="nc bnc" id="L91" title="All 2 branches missed.">        if (stopped.get()) {</span>
+<span class="nc" id="L92">            cb.createComplete(BKException.Code.WriteException, null, ctx);</span>
+<span class="nc" id="L93">            return;</span>
+        }
+
+<span class="nc" id="L96">        executor.execute(new Runnable() {</span>
+            public void run() {
+<span class="nc bnc" id="L98" title="All 2 branches missed.">                if (getProgrammedFailStatus()) {</span>
+<span class="nc bnc" id="L99" title="All 2 branches missed.">                    if (failReturnCode != BkTimeoutOperation) {</span>
+<span class="nc" id="L100">                        cb.createComplete(failReturnCode, null, ctx);</span>
+                    }
+<span class="nc" id="L102">                    return;</span>
+                }
+
+<span class="nc bnc" id="L105" title="All 2 branches missed.">                if (stopped.get()) {</span>
+<span class="nc" id="L106">                    cb.createComplete(BKException.Code.WriteException, null, ctx);</span>
+<span class="nc" id="L107">                    return;</span>
+                }
+
+                try {
+<span class="nc" id="L111">                    long id = sequence.getAndIncrement();</span>
+<span class="nc" id="L112">                    log.info(&quot;Creating ledger {}&quot;, id);</span>
+<span class="nc" id="L113">                    MockLedgerHandle lh = new MockLedgerHandle(MockBookKeeper.this, id, digestType, passwd);</span>
+<span class="nc" id="L114">                    ledgers.put(id, lh);</span>
+<span class="nc" id="L115">                    cb.createComplete(0, lh, ctx);</span>
+<span class="nc" id="L116">                } catch (Throwable t) {</span>
+<span class="nc" id="L117">                    t.printStackTrace();</span>
+<span class="nc" id="L118">                }</span>
+<span class="nc" id="L119">            }</span>
+        });
+<span class="nc" id="L121">    }</span>
+
+    @Override
+    public LedgerHandle createLedger(int ensSize, int writeQuorumSize, int ackQuorumSize, DigestType digestType,
+            byte[] passwd) throws BKException {
+<span class="nc" id="L126">        checkProgrammedFail();</span>
+
+<span class="nc bnc" id="L128" title="All 2 branches missed.">        if (stopped.get()) {</span>
+<span class="nc" id="L129">            throw BKException.create(BKException.Code.WriteException);</span>
+        }
+
+        try {
+<span class="nc" id="L133">            long id = sequence.getAndIncrement();</span>
+<span class="nc" id="L134">            log.info(&quot;Creating ledger {}&quot;, id);</span>
+<span class="nc" id="L135">            MockLedgerHandle lh = new MockLedgerHandle(this, id, digestType, passwd);</span>
+<span class="nc" id="L136">            ledgers.put(id, lh);</span>
+<span class="nc" id="L137">            return lh;</span>
+<span class="nc" id="L138">        } catch (Throwable t) {</span>
+<span class="nc" id="L139">            log.error(&quot;Exception:&quot;, t);</span>
+<span class="nc" id="L140">            return null;</span>
+        }
+    }
+
+    @Override
+    public void asyncCreateLedger(int ensSize, int qSize, DigestType digestType, byte[] passwd, CreateCallback cb,
+            Object ctx) {
+<span class="nc" id="L147">        asyncCreateLedger(ensSize, qSize, qSize, digestType, passwd, cb, ctx, Collections.emptyMap());</span>
+<span class="nc" id="L148">    }</span>
+
+    @Override
+    public void asyncOpenLedger(long lId, DigestType digestType, byte[] passwd, OpenCallback cb, Object ctx) {
+<span class="nc bnc" id="L152" title="All 2 branches missed.">        if (getProgrammedFailStatus()) {</span>
+<span class="nc bnc" id="L153" title="All 2 branches missed.">            if (failReturnCode != BkTimeoutOperation) {</span>
+<span class="nc" id="L154">                cb.openComplete(failReturnCode, null, ctx);</span>
+            }
+<span class="nc" id="L156">            return;</span>
+        }
+
+<span class="nc bnc" id="L159" title="All 2 branches missed.">        if (stopped.get()) {</span>
+<span class="nc" id="L160">            cb.openComplete(BKException.Code.WriteException, null, ctx);</span>
+<span class="nc" id="L161">            return;</span>
+        }
+
+<span class="nc" id="L164">        MockLedgerHandle lh = ledgers.get(lId);</span>
+<span class="nc bnc" id="L165" title="All 2 branches missed.">        if (lh == null) {</span>
+<span class="nc" id="L166">            cb.openComplete(BKException.Code.NoSuchLedgerExistsOnMetadataServerException, null, ctx);</span>
+<span class="nc bnc" id="L167" title="All 2 branches missed.">        } else if (lh.digest != digestType) {</span>
+<span class="nc" id="L168">            cb.openComplete(BKException.Code.DigestMatchException, null, ctx);</span>
+<span class="nc bnc" id="L169" title="All 2 branches missed.">        } else if (!Arrays.equals(lh.passwd, passwd)) {</span>
+<span class="nc" id="L170">            cb.openComplete(BKException.Code.UnauthorizedAccessException, null, ctx);</span>
+        } else {
+<span class="nc" id="L172">            cb.openComplete(0, lh, ctx);</span>
+        }
+<span class="nc" id="L174">    }</span>
+
+    @Override
+    public void asyncOpenLedgerNoRecovery(long lId, DigestType digestType, byte[] passwd, OpenCallback cb, Object ctx) {
+<span class="nc" id="L178">        asyncOpenLedger(lId, digestType, passwd, cb, ctx);</span>
+<span class="nc" id="L179">    }</span>
+
+    @Override
+    public void asyncDeleteLedger(long lId, DeleteCallback cb, Object ctx) {
+<span class="nc bnc" id="L183" title="All 2 branches missed.">        if (getProgrammedFailStatus()) {</span>
+<span class="nc bnc" id="L184" title="All 2 branches missed.">            if (failReturnCode != BkTimeoutOperation) {</span>
+<span class="nc" id="L185">                cb.deleteComplete(failReturnCode, ctx);</span>
+            }
+<span class="nc bnc" id="L187" title="All 2 branches missed.">        } else if (stopped.get()) {</span>
+<span class="nc" id="L188">            cb.deleteComplete(BKException.Code.WriteException, ctx);</span>
+<span class="nc bnc" id="L189" title="All 2 branches missed.">        } else if (ledgers.containsKey(lId)) {</span>
+<span class="nc" id="L190">            ledgers.remove(lId);</span>
+<span class="nc" id="L191">            cb.deleteComplete(0, ctx);</span>
+        } else {
+<span class="nc" id="L193">            cb.deleteComplete(BKException.Code.NoSuchLedgerExistsOnMetadataServerException, ctx);</span>
+        }
+<span class="nc" id="L195">    }</span>
+
+    @Override
+    public void deleteLedger(long lId) throws InterruptedException, BKException {
+<span class="nc" id="L199">        checkProgrammedFail();</span>
+
+<span class="nc bnc" id="L201" title="All 2 branches missed.">        if (stopped.get()) {</span>
+<span class="nc" id="L202">            throw BKException.create(BKException.Code.WriteException);</span>
+        }
+
+<span class="nc bnc" id="L205" title="All 2 branches missed.">        if (!ledgers.containsKey(lId)) {</span>
+<span class="nc" id="L206">            throw BKException.create(BKException.Code.NoSuchLedgerExistsOnMetadataServerException);</span>
+        }
+
+<span class="nc" id="L209">        ledgers.remove(lId);</span>
+<span class="nc" id="L210">    }</span>
+
+    @Override
+    public void close() throws InterruptedException, BKException {
+<span class="nc" id="L214">        checkProgrammedFail();</span>
+<span class="nc" id="L215">        shutdown();</span>
+<span class="nc" id="L216">    }</span>
+
+    @Override
+    public OpenBuilder newOpenLedgerOp() {
+<span class="nc" id="L220">        return new OpenBuilderBase() {</span>
+            @Override
+            public CompletableFuture&lt;ReadHandle&gt; execute() {
+<span class="nc" id="L223">                CompletableFuture&lt;ReadHandle&gt; promise = new CompletableFuture&lt;ReadHandle&gt;();</span>
+
+<span class="nc" id="L225">                final int validateRc = validate();</span>
+<span class="nc bnc" id="L226" title="All 2 branches missed.">                if (Code.OK != validateRc) {</span>
+<span class="nc" id="L227">                    promise.completeExceptionally(BKException.create(validateRc));</span>
+<span class="nc" id="L228">                    return promise;</span>
+<span class="nc bnc" id="L229" title="All 2 branches missed.">                } else if (getProgrammedFailStatus()) {</span>
+<span class="nc bnc" id="L230" title="All 2 branches missed.">                    if (failReturnCode != BkTimeoutOperation) {</span>
+<span class="nc" id="L231">                        promise.completeExceptionally(BKException.create(failReturnCode));</span>
+                    }
+<span class="nc" id="L233">                    return promise;</span>
+<span class="nc bnc" id="L234" title="All 2 branches missed.">                } else if (stopped.get()) {</span>
+<span class="nc" id="L235">                    promise.completeExceptionally(new BKException.BKClientClosedException());</span>
+<span class="nc" id="L236">                    return promise;</span>
+                }
+
+<span class="nc" id="L239">                MockLedgerHandle lh = ledgers.get(ledgerId);</span>
+<span class="nc bnc" id="L240" title="All 2 branches missed.">                if (lh == null) {</span>
+<span class="nc" id="L241">                    promise.completeExceptionally(new BKException.BKNoSuchLedgerExistsOnMetadataServerException());</span>
+<span class="nc bnc" id="L242" title="All 2 branches missed.">                } else if (lh.digest != DigestType.fromApiDigestType(digestType)) {</span>
+<span class="nc" id="L243">                    promise.completeExceptionally(new BKException.BKDigestMatchException());</span>
+<span class="nc bnc" id="L244" title="All 2 branches missed.">                } else if (!Arrays.equals(lh.passwd, password)) {</span>
+<span class="nc" id="L245">                    promise.completeExceptionally(new BKException.BKUnauthorizedAccessException());</span>
+                } else {
+<span class="nc" id="L247">                    promise.complete(new MockReadHandle(MockBookKeeper.this, ledgerId,</span>
+<span class="nc" id="L248">                                                        lh.getLedgerMetadata(), lh.entries));</span>
+                }
+<span class="nc" id="L250">                return promise;</span>
+            }
+        };
+    }
+
+    public void shutdown() {
+        try {
+<span class="nc" id="L257">            super.close();</span>
+<span class="nc" id="L258">        } catch (Exception e) {</span>
+<span class="nc" id="L259">        }</span>
+<span class="nc" id="L260">        stopped.set(true);</span>
+<span class="nc bnc" id="L261" title="All 2 branches missed.">        for (MockLedgerHandle ledger : ledgers.values()) {</span>
+<span class="nc" id="L262">            ledger.entries.clear();</span>
+<span class="nc" id="L263">        }</span>
+
+<span class="nc" id="L265">        ledgers.clear();</span>
+<span class="nc" id="L266">        executor.shutdownNow();</span>
+<span class="nc" id="L267">    }</span>
+
+    public boolean isStopped() {
+<span class="nc" id="L270">        return stopped.get();</span>
+    }
+
+    public Set&lt;Long&gt; getLedgers() {
+<span class="nc" id="L274">        return ledgers.keySet();</span>
+    }
+
+    void checkProgrammedFail() throws BKException {
+<span class="nc" id="L278">        int steps = stepsToFail.getAndDecrement();</span>
+<span class="nc" id="L279">        log.debug(&quot;Steps to fail: {}&quot;, steps);</span>
+<span class="nc bnc" id="L280" title="All 2 branches missed.">        if (steps &lt;= 0) {</span>
+<span class="nc bnc" id="L281" title="All 2 branches missed.">            if (failReturnCode != BKException.Code.OK) {</span>
+<span class="nc" id="L282">                int rc = failReturnCode;</span>
+<span class="nc" id="L283">                failReturnCode = nextFailReturnCode;</span>
+<span class="nc" id="L284">                nextFailReturnCode = BKException.Code.OK;</span>
+<span class="nc" id="L285">                throw BKException.create(rc);</span>
+            }
+        }
+<span class="nc" id="L288">    }</span>
+
+    boolean getProgrammedFailStatus() {
+<span class="nc" id="L291">        int steps = stepsToFail.getAndDecrement();</span>
+<span class="nc" id="L292">        log.debug(&quot;Steps to fail: {}&quot;, steps);</span>
+<span class="nc bnc" id="L293" title="All 2 branches missed.">        return steps == 0;</span>
+    }
+
+    public void failNow(int rc) {
+<span class="nc" id="L297">        failNow(rc, BKException.Code.OK);</span>
+<span class="nc" id="L298">    }</span>
+
+    public void failNow(int rc, int nextErrorCode) {
+<span class="nc" id="L301">        failAfter(0, rc);</span>
+<span class="nc" id="L302">    }</span>
+
+    public void failAfter(int steps, int rc) {
+<span class="nc" id="L305">        failAfter(steps, rc, BKException.Code.OK);</span>
+<span class="nc" id="L306">    }</span>
+
+    public void failAfter(int steps, int rc, int nextErrorCode) {
+<span class="nc" id="L309">        stepsToFail.set(steps);</span>
+<span class="nc" id="L310">        failReturnCode = rc;</span>
+<span class="nc" id="L311">        this.nextFailReturnCode = nextErrorCode;</span>
+<span class="nc" id="L312">    }</span>
+
+    public void timeoutAfter(int steps) {
+<span class="nc" id="L315">        stepsToFail.set(steps);</span>
+<span class="nc" id="L316">        failReturnCode = BkTimeoutOperation;</span>
+<span class="nc" id="L317">    }</span>
+
+    private static final int BkTimeoutOperation = 1000;
+
+<span class="nc" id="L321">    private static final Logger log = LoggerFactory.getLogger(MockBookKeeper.class);</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

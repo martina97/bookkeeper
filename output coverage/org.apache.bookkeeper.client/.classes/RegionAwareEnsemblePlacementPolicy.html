@@ -1,0 +1,672 @@
+
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html id="htmlId">
+<head>
+  <title>Coverage Report :: RegionAwareEnsemblePlacementPolicy</title>
+  <style type="text/css">
+    @import "../../.css/coverage.css";
+  </style>
+</head>
+
+<body>
+<div class="header"></div>
+
+<div class="content">
+<div class="breadCrumbs">
+    [ <a href="../../index.html">all classes</a> ]
+    [ <a href="../index.html">org.apache.bookkeeper.client</a> ]
+</div>
+
+<h1>Coverage Summary for Class: RegionAwareEnsemblePlacementPolicy (org.apache.bookkeeper.client)</h1>
+
+<table class="coverageStats">
+<tr>
+  <th class="name">Class</th>
+<th class="coverageStat 
+">
+  Class, %
+</th>
+<th class="coverageStat 
+">
+  Method, %
+</th>
+<th class="coverageStat 
+">
+  Line, %
+</th>
+</tr>
+<tr>
+  <td class="name">RegionAwareEnsemblePlacementPolicy</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 1)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 14)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 267)
+  </span>
+</td>
+</tr>
+
+</table>
+
+<br/>
+<br/>
+
+
+<div class="sourceCode"><i>1</i>&nbsp;/*
+<i>2</i>&nbsp; * Licensed to the Apache Software Foundation (ASF) under one
+<i>3</i>&nbsp; * or more contributor license agreements.  See the NOTICE file
+<i>4</i>&nbsp; * distributed with this work for additional information
+<i>5</i>&nbsp; * regarding copyright ownership.  The ASF licenses this file
+<i>6</i>&nbsp; * to you under the Apache License, Version 2.0 (the
+<i>7</i>&nbsp; * &quot;License&quot;); you may not use this file except in compliance
+<i>8</i>&nbsp; * with the License.  You may obtain a copy of the License at
+<i>9</i>&nbsp; *
+<i>10</i>&nbsp; *     http://www.apache.org/licenses/LICENSE-2.0
+<i>11</i>&nbsp; *
+<i>12</i>&nbsp; * Unless required by applicable law or agreed to in writing, software
+<i>13</i>&nbsp; * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+<i>14</i>&nbsp; * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+<i>15</i>&nbsp; * See the License for the specific language governing permissions and
+<i>16</i>&nbsp; * limitations under the License.
+<i>17</i>&nbsp; */
+<i>18</i>&nbsp;package org.apache.bookkeeper.client;
+<i>19</i>&nbsp;
+<i>20</i>&nbsp;import io.netty.util.HashedWheelTimer;
+<i>21</i>&nbsp;
+<i>22</i>&nbsp;import java.util.ArrayList;
+<i>23</i>&nbsp;import java.util.HashMap;
+<i>24</i>&nbsp;import java.util.HashSet;
+<i>25</i>&nbsp;import java.util.List;
+<i>26</i>&nbsp;import java.util.Map;
+<i>27</i>&nbsp;import java.util.Optional;
+<i>28</i>&nbsp;import java.util.Set;
+<i>29</i>&nbsp;import java.util.concurrent.ConcurrentHashMap;
+<i>30</i>&nbsp;import java.util.concurrent.ConcurrentMap;
+<i>31</i>&nbsp;
+<i>32</i>&nbsp;import org.apache.bookkeeper.conf.ClientConfiguration;
+<i>33</i>&nbsp;import org.apache.bookkeeper.feature.Feature;
+<i>34</i>&nbsp;import org.apache.bookkeeper.feature.FeatureProvider;
+<i>35</i>&nbsp;import org.apache.bookkeeper.net.BookieNode;
+<i>36</i>&nbsp;import org.apache.bookkeeper.net.BookieSocketAddress;
+<i>37</i>&nbsp;import org.apache.bookkeeper.net.DNSToSwitchMapping;
+<i>38</i>&nbsp;import org.apache.bookkeeper.net.NetworkTopology;
+<i>39</i>&nbsp;import org.apache.bookkeeper.net.Node;
+<i>40</i>&nbsp;import org.apache.bookkeeper.net.NodeBase;
+<i>41</i>&nbsp;import org.apache.bookkeeper.stats.StatsLogger;
+<i>42</i>&nbsp;import org.apache.bookkeeper.util.BookKeeperConstants;
+<i>43</i>&nbsp;import org.apache.commons.lang3.tuple.Pair;
+<i>44</i>&nbsp;import org.slf4j.Logger;
+<i>45</i>&nbsp;import org.slf4j.LoggerFactory;
+<i>46</i>&nbsp;
+<i>47</i>&nbsp;/**
+<i>48</i>&nbsp; * A placement policy use region information in the network topology for placing ensembles.
+<i>49</i>&nbsp; *
+<i>50</i>&nbsp; * @see EnsemblePlacementPolicy
+<i>51</i>&nbsp; */
+<i>52</i>&nbsp;public class RegionAwareEnsemblePlacementPolicy extends RackawareEnsemblePlacementPolicy {
+<b class="nc"><i>53</i>&nbsp;    static final Logger LOG = LoggerFactory.getLogger(RegionAwareEnsemblePlacementPolicy.class);</b>
+<i>54</i>&nbsp;
+<i>55</i>&nbsp;    public static final String REPP_REGIONS_TO_WRITE = &quot;reppRegionsToWrite&quot;;
+<i>56</i>&nbsp;    public static final String REPP_MINIMUM_REGIONS_FOR_DURABILITY = &quot;reppMinimumRegionsForDurability&quot;;
+<i>57</i>&nbsp;    public static final String REPP_ENABLE_DURABILITY_ENFORCEMENT_IN_REPLACE =
+<i>58</i>&nbsp;        &quot;reppEnableDurabilityEnforcementInReplace&quot;;
+<i>59</i>&nbsp;    public static final String REPP_DISABLE_DURABILITY_FEATURE_NAME = &quot;reppDisableDurabilityFeatureName&quot;;
+<i>60</i>&nbsp;    public static final String REPP_DISALLOW_BOOKIE_PLACEMENT_IN_REGION_FEATURE_NAME =
+<i>61</i>&nbsp;        &quot;reppDisallowBookiePlacementInRegionFeatureName&quot;;
+<i>62</i>&nbsp;    public static final String REPP_DISABLE_DURABILITY_ENFORCEMENT_FEATURE = &quot;reppDisableDurabilityEnforcementFeature&quot;;
+<i>63</i>&nbsp;    public static final String REPP_ENABLE_VALIDATION = &quot;reppEnableValidation&quot;;
+<i>64</i>&nbsp;    public static final String REGION_AWARE_ANOMALOUS_ENSEMBLE = &quot;region_aware_anomalous_ensemble&quot;;
+<i>65</i>&nbsp;    static final int MINIMUM_REGIONS_FOR_DURABILITY_DEFAULT = 2;
+<i>66</i>&nbsp;    static final int REGIONID_DISTANCE_FROM_LEAVES = 2;
+<i>67</i>&nbsp;    static final String UNKNOWN_REGION = &quot;UnknownRegion&quot;;
+<i>68</i>&nbsp;    static final int REMOTE_NODE_IN_REORDER_SEQUENCE = 2;
+<i>69</i>&nbsp;
+<i>70</i>&nbsp;    protected final Map&lt;String, TopologyAwareEnsemblePlacementPolicy&gt; perRegionPlacement;
+<i>71</i>&nbsp;    protected final ConcurrentMap&lt;BookieSocketAddress, String&gt; address2Region;
+<i>72</i>&nbsp;    protected FeatureProvider featureProvider;
+<i>73</i>&nbsp;    protected String disallowBookiePlacementInRegionFeatureName;
+<b class="nc"><i>74</i>&nbsp;    protected String myRegion = null;</b>
+<b class="nc"><i>75</i>&nbsp;    protected int minRegionsForDurability = 0;</b>
+<b class="nc"><i>76</i>&nbsp;    protected boolean enableValidation = true;</b>
+<b class="nc"><i>77</i>&nbsp;    protected boolean enforceDurabilityInReplace = false;</b>
+<i>78</i>&nbsp;    protected Feature disableDurabilityFeature;
+<i>79</i>&nbsp;
+<i>80</i>&nbsp;    RegionAwareEnsemblePlacementPolicy() {
+<b class="nc"><i>81</i>&nbsp;        super();</b>
+<b class="nc"><i>82</i>&nbsp;        perRegionPlacement = new HashMap&lt;String, TopologyAwareEnsemblePlacementPolicy&gt;();</b>
+<b class="nc"><i>83</i>&nbsp;        address2Region = new ConcurrentHashMap&lt;BookieSocketAddress, String&gt;();</b>
+<b class="nc"><i>84</i>&nbsp;    }</b>
+<i>85</i>&nbsp;
+<i>86</i>&nbsp;    protected String getRegion(BookieSocketAddress addr) {
+<b class="nc"><i>87</i>&nbsp;        String region = address2Region.get(addr);</b>
+<b class="nc"><i>88</i>&nbsp;        if (null == region) {</b>
+<b class="nc"><i>89</i>&nbsp;            String networkLocation = resolveNetworkLocation(addr);</b>
+<b class="nc"><i>90</i>&nbsp;            if (NetworkTopology.DEFAULT_REGION_AND_RACK.equals(networkLocation)) {</b>
+<b class="nc"><i>91</i>&nbsp;                region = UNKNOWN_REGION;</b>
+<i>92</i>&nbsp;            } else {
+<b class="nc"><i>93</i>&nbsp;                String[] parts = networkLocation.split(NodeBase.PATH_SEPARATOR_STR);</b>
+<b class="nc"><i>94</i>&nbsp;                if (parts.length &lt;= 1) {</b>
+<b class="nc"><i>95</i>&nbsp;                    region = UNKNOWN_REGION;</b>
+<i>96</i>&nbsp;                } else {
+<b class="nc"><i>97</i>&nbsp;                    region = parts[1];</b>
+<i>98</i>&nbsp;                }
+<i>99</i>&nbsp;            }
+<b class="nc"><i>100</i>&nbsp;            address2Region.putIfAbsent(addr, region);</b>
+<i>101</i>&nbsp;        }
+<b class="nc"><i>102</i>&nbsp;        return region;</b>
+<i>103</i>&nbsp;    }
+<i>104</i>&nbsp;
+<i>105</i>&nbsp;    protected String getLocalRegion(BookieNode node) {
+<b class="nc"><i>106</i>&nbsp;        if (null == node || null == node.getAddr()) {</b>
+<b class="nc"><i>107</i>&nbsp;            return UNKNOWN_REGION;</b>
+<i>108</i>&nbsp;        }
+<b class="nc"><i>109</i>&nbsp;        return getRegion(node.getAddr());</b>
+<i>110</i>&nbsp;    }
+<i>111</i>&nbsp;
+<i>112</i>&nbsp;    @Override
+<i>113</i>&nbsp;    public void handleBookiesThatLeft(Set&lt;BookieSocketAddress&gt; leftBookies) {
+<b class="nc"><i>114</i>&nbsp;        super.handleBookiesThatLeft(leftBookies);</b>
+<i>115</i>&nbsp;
+<b class="nc"><i>116</i>&nbsp;        for (TopologyAwareEnsemblePlacementPolicy policy: perRegionPlacement.values()) {</b>
+<b class="nc"><i>117</i>&nbsp;            policy.handleBookiesThatLeft(leftBookies);</b>
+<b class="nc"><i>118</i>&nbsp;        }</b>
+<b class="nc"><i>119</i>&nbsp;    }</b>
+<i>120</i>&nbsp;
+<i>121</i>&nbsp;    @Override
+<i>122</i>&nbsp;    public void handleBookiesThatJoined(Set&lt;BookieSocketAddress&gt; joinedBookies) {
+<b class="nc"><i>123</i>&nbsp;        Map&lt;String, Set&lt;BookieSocketAddress&gt;&gt; perRegionClusterChange = new HashMap&lt;String, Set&lt;BookieSocketAddress&gt;&gt;();</b>
+<i>124</i>&nbsp;
+<i>125</i>&nbsp;        // node joined
+<b class="nc"><i>126</i>&nbsp;        for (BookieSocketAddress addr : joinedBookies) {</b>
+<b class="nc"><i>127</i>&nbsp;            BookieNode node = createBookieNode(addr);</b>
+<b class="nc"><i>128</i>&nbsp;            topology.add(node);</b>
+<b class="nc"><i>129</i>&nbsp;            knownBookies.put(addr, node);</b>
+<b class="nc"><i>130</i>&nbsp;            String region = getLocalRegion(node);</b>
+<b class="nc"><i>131</i>&nbsp;            if (null == perRegionPlacement.get(region)) {</b>
+<b class="nc"><i>132</i>&nbsp;                perRegionPlacement.put(region, new RackawareEnsemblePlacementPolicy()</b>
+<b class="nc"><i>133</i>&nbsp;                        .initialize(dnsResolver, timer, this.reorderReadsRandom, this.stabilizePeriodSeconds,</b>
+<i>134</i>&nbsp;                                this.reorderThresholdPendingRequests, this.isWeighted, this.maxWeightMultiple,
+<i>135</i>&nbsp;                                this.minNumRacksPerWriteQuorum, this.enforceMinNumRacksPerWriteQuorum,
+<i>136</i>&nbsp;                                this.ignoreLocalNodeInPlacementPolicy, statsLogger)
+<b class="nc"><i>137</i>&nbsp;                        .withDefaultRack(NetworkTopology.DEFAULT_REGION_AND_RACK));</b>
+<i>138</i>&nbsp;            }
+<i>139</i>&nbsp;
+<b class="nc"><i>140</i>&nbsp;            Set&lt;BookieSocketAddress&gt; regionSet = perRegionClusterChange.get(region);</b>
+<b class="nc"><i>141</i>&nbsp;            if (null == regionSet) {</b>
+<b class="nc"><i>142</i>&nbsp;                regionSet = new HashSet&lt;BookieSocketAddress&gt;();</b>
+<b class="nc"><i>143</i>&nbsp;                regionSet.add(addr);</b>
+<b class="nc"><i>144</i>&nbsp;                perRegionClusterChange.put(region, regionSet);</b>
+<i>145</i>&nbsp;            } else {
+<b class="nc"><i>146</i>&nbsp;                regionSet.add(addr);</b>
+<i>147</i>&nbsp;            }
+<i>148</i>&nbsp;
+<b class="nc"><i>149</i>&nbsp;            if (LOG.isDebugEnabled()) {</b>
+<b class="nc"><i>150</i>&nbsp;                LOG.debug(&quot;Cluster changed : bookie {} joined the cluster.&quot;, addr);</b>
+<i>151</i>&nbsp;            }
+<b class="nc"><i>152</i>&nbsp;        }</b>
+<i>153</i>&nbsp;
+<b class="nc"><i>154</i>&nbsp;        for (Map.Entry&lt;String, TopologyAwareEnsemblePlacementPolicy&gt; regionEntry : perRegionPlacement.entrySet()) {</b>
+<b class="nc"><i>155</i>&nbsp;            Set&lt;BookieSocketAddress&gt; regionSet = perRegionClusterChange.get(regionEntry.getKey());</b>
+<b class="nc"><i>156</i>&nbsp;            if (null == regionSet) {</b>
+<b class="nc"><i>157</i>&nbsp;                regionSet = new HashSet&lt;BookieSocketAddress&gt;();</b>
+<i>158</i>&nbsp;            }
+<b class="nc"><i>159</i>&nbsp;            regionEntry.getValue().handleBookiesThatJoined(regionSet);</b>
+<b class="nc"><i>160</i>&nbsp;        }</b>
+<b class="nc"><i>161</i>&nbsp;    }</b>
+<i>162</i>&nbsp;
+<i>163</i>&nbsp;    @Override
+<i>164</i>&nbsp;    public RegionAwareEnsemblePlacementPolicy initialize(ClientConfiguration conf,
+<i>165</i>&nbsp;                                                         Optional&lt;DNSToSwitchMapping&gt; optionalDnsResolver,
+<i>166</i>&nbsp;                                                         HashedWheelTimer timer,
+<i>167</i>&nbsp;                                                         FeatureProvider featureProvider,
+<i>168</i>&nbsp;                                                         StatsLogger statsLogger) {
+<b class="nc"><i>169</i>&nbsp;        super.initialize(conf, optionalDnsResolver, timer, featureProvider, statsLogger)</b>
+<b class="nc"><i>170</i>&nbsp;                .withDefaultRack(NetworkTopology.DEFAULT_REGION_AND_RACK);</b>
+<b class="nc"><i>171</i>&nbsp;        myRegion = getLocalRegion(localNode);</b>
+<b class="nc"><i>172</i>&nbsp;        enableValidation = conf.getBoolean(REPP_ENABLE_VALIDATION, true);</b>
+<i>173</i>&nbsp;        // We have to statically provide regions we want the writes to go through and how many regions
+<i>174</i>&nbsp;        // are required for durability. This decision cannot be driven by the active bookies as the
+<i>175</i>&nbsp;        // current topology will not be indicative of constraints that must be enforced for durability
+<b class="nc"><i>176</i>&nbsp;        String regionsString = conf.getString(REPP_REGIONS_TO_WRITE, null);</b>
+<b class="nc"><i>177</i>&nbsp;        if (null != regionsString) {</b>
+<i>178</i>&nbsp;            // Regions are specified as
+<i>179</i>&nbsp;            // R1;R2;...
+<b class="nc"><i>180</i>&nbsp;            String[] regions = regionsString.split(&quot;;&quot;);</b>
+<b class="nc"><i>181</i>&nbsp;            for (String region : regions) {</b>
+<b class="nc"><i>182</i>&nbsp;                perRegionPlacement.put(region, new RackawareEnsemblePlacementPolicy(true)</b>
+<b class="nc"><i>183</i>&nbsp;                        .initialize(dnsResolver, timer, this.reorderReadsRandom, this.stabilizePeriodSeconds,</b>
+<i>184</i>&nbsp;                                this.reorderThresholdPendingRequests, this.isWeighted, this.maxWeightMultiple,
+<i>185</i>&nbsp;                                this.minNumRacksPerWriteQuorum, this.enforceMinNumRacksPerWriteQuorum,
+<i>186</i>&nbsp;                                this.ignoreLocalNodeInPlacementPolicy, statsLogger)
+<b class="nc"><i>187</i>&nbsp;                        .withDefaultRack(NetworkTopology.DEFAULT_REGION_AND_RACK));</b>
+<i>188</i>&nbsp;            }
+<b class="nc"><i>189</i>&nbsp;            minRegionsForDurability = conf.getInt(REPP_MINIMUM_REGIONS_FOR_DURABILITY,</b>
+<i>190</i>&nbsp;                    MINIMUM_REGIONS_FOR_DURABILITY_DEFAULT);
+<b class="nc"><i>191</i>&nbsp;            if (minRegionsForDurability &gt; 0) {</b>
+<b class="nc"><i>192</i>&nbsp;                enforceDurability = true;</b>
+<b class="nc"><i>193</i>&nbsp;                enforceDurabilityInReplace = conf.getBoolean(REPP_ENABLE_DURABILITY_ENFORCEMENT_IN_REPLACE, true);</b>
+<i>194</i>&nbsp;            }
+<b class="nc"><i>195</i>&nbsp;            if (regions.length &lt; minRegionsForDurability) {</b>
+<b class="nc"><i>196</i>&nbsp;                throw new IllegalArgumentException(</b>
+<i>197</i>&nbsp;                        &quot;Regions provided are insufficient to meet the durability constraints&quot;);
+<i>198</i>&nbsp;            }
+<i>199</i>&nbsp;        }
+<b class="nc"><i>200</i>&nbsp;        this.featureProvider = featureProvider;</b>
+<b class="nc"><i>201</i>&nbsp;        this.disallowBookiePlacementInRegionFeatureName =</b>
+<b class="nc"><i>202</i>&nbsp;            conf.getString(REPP_DISALLOW_BOOKIE_PLACEMENT_IN_REGION_FEATURE_NAME);</b>
+<b class="nc"><i>203</i>&nbsp;        this.disableDurabilityFeature = conf.getFeature(REPP_DISABLE_DURABILITY_ENFORCEMENT_FEATURE, null);</b>
+<b class="nc"><i>204</i>&nbsp;        if (null == disableDurabilityFeature) {</b>
+<b class="nc"><i>205</i>&nbsp;            this.disableDurabilityFeature =</b>
+<b class="nc"><i>206</i>&nbsp;                    featureProvider.getFeature(</b>
+<b class="nc"><i>207</i>&nbsp;                        conf.getString(REPP_DISABLE_DURABILITY_FEATURE_NAME,</b>
+<i>208</i>&nbsp;                                BookKeeperConstants.FEATURE_REPP_DISABLE_DURABILITY_ENFORCEMENT));
+<i>209</i>&nbsp;        }
+<b class="nc"><i>210</i>&nbsp;        return this;</b>
+<i>211</i>&nbsp;    }
+<i>212</i>&nbsp;
+<i>213</i>&nbsp;    protected List&lt;BookieNode&gt; selectRandomFromRegions(Set&lt;String&gt; availableRegions,
+<i>214</i>&nbsp;                                            int numBookies,
+<i>215</i>&nbsp;                                            Set&lt;Node&gt; excludeBookies,
+<i>216</i>&nbsp;                                            Predicate&lt;BookieNode&gt; predicate,
+<i>217</i>&nbsp;                                            Ensemble&lt;BookieNode&gt; ensemble)
+<i>218</i>&nbsp;        throws BKException.BKNotEnoughBookiesException {
+<b class="nc"><i>219</i>&nbsp;        List&lt;BookieNode&gt; availableBookies = new ArrayList&lt;BookieNode&gt;();</b>
+<b class="nc"><i>220</i>&nbsp;        for (BookieNode bookieNode: knownBookies.values()) {</b>
+<b class="nc"><i>221</i>&nbsp;            if (availableRegions.contains(getLocalRegion(bookieNode))) {</b>
+<b class="nc"><i>222</i>&nbsp;                availableBookies.add(bookieNode);</b>
+<i>223</i>&nbsp;            }
+<b class="nc"><i>224</i>&nbsp;        }</b>
+<i>225</i>&nbsp;
+<b class="nc"><i>226</i>&nbsp;        return selectRandomInternal(availableBookies,  numBookies, excludeBookies, predicate, ensemble);</b>
+<i>227</i>&nbsp;    }
+<i>228</i>&nbsp;
+<i>229</i>&nbsp;
+<i>230</i>&nbsp;    @Override
+<i>231</i>&nbsp;    public PlacementResult&lt;List&lt;BookieSocketAddress&gt;&gt; newEnsemble(int ensembleSize, int writeQuorumSize,
+<i>232</i>&nbsp;            int ackQuorumSize, Map&lt;String, byte[]&gt; customMetadata, Set&lt;BookieSocketAddress&gt; excludedBookies)
+<i>233</i>&nbsp;            throws BKException.BKNotEnoughBookiesException {
+<i>234</i>&nbsp;
+<b class="nc"><i>235</i>&nbsp;        int effectiveMinRegionsForDurability = disableDurabilityFeature.isAvailable() ? 1 : minRegionsForDurability;</b>
+<i>236</i>&nbsp;
+<i>237</i>&nbsp;        // All of these conditions indicate bad configuration
+<b class="nc"><i>238</i>&nbsp;        if (ackQuorumSize &lt; effectiveMinRegionsForDurability) {</b>
+<b class="nc"><i>239</i>&nbsp;            throw new IllegalArgumentException(</b>
+<i>240</i>&nbsp;                    &quot;Ack Quorum size provided are insufficient to meet the durability constraints&quot;);
+<b class="nc"><i>241</i>&nbsp;        } else if (ensembleSize &lt; writeQuorumSize) {</b>
+<b class="nc"><i>242</i>&nbsp;            throw new IllegalArgumentException(</b>
+<i>243</i>&nbsp;                    &quot;write quorum (&quot; + writeQuorumSize + &quot;) cannot exceed ensemble size (&quot; + ensembleSize + &quot;)&quot;);
+<b class="nc"><i>244</i>&nbsp;        } else if (writeQuorumSize &lt; ackQuorumSize) {</b>
+<b class="nc"><i>245</i>&nbsp;            throw new IllegalArgumentException(</b>
+<i>246</i>&nbsp;                    &quot;ack quorum (&quot; + ackQuorumSize + &quot;) cannot exceed write quorum size (&quot; + writeQuorumSize + &quot;)&quot;);
+<b class="nc"><i>247</i>&nbsp;        } else if (effectiveMinRegionsForDurability &gt; 0) {</b>
+<i>248</i>&nbsp;            // We must survive the failure of numRegions - effectiveMinRegionsForDurability. When these
+<i>249</i>&nbsp;            // regions have failed we would spread the replicas over the remaining
+<i>250</i>&nbsp;            // effectiveMinRegionsForDurability regions; we have to make sure that the ack quorum is large
+<i>251</i>&nbsp;            // enough such that there is a configuration for spreading the replicas across
+<i>252</i>&nbsp;            // effectiveMinRegionsForDurability - 1 regions
+<b class="nc"><i>253</i>&nbsp;            if (ackQuorumSize &lt;= (writeQuorumSize - (writeQuorumSize / effectiveMinRegionsForDurability))) {</b>
+<b class="nc"><i>254</i>&nbsp;                throw new IllegalArgumentException(&quot;ack quorum (&quot; + ackQuorumSize + &quot;) &quot;</b>
+<i>255</i>&nbsp;                    + &quot;violates the requirement to satisfy durability constraints when running in degraded mode&quot;);
+<i>256</i>&nbsp;            }
+<i>257</i>&nbsp;        }
+<i>258</i>&nbsp;
+<b class="nc"><i>259</i>&nbsp;        rwLock.readLock().lock();</b>
+<i>260</i>&nbsp;        try {
+<b class="nc"><i>261</i>&nbsp;            Set&lt;BookieSocketAddress&gt; comprehensiveExclusionBookiesSet = addDefaultRackBookiesIfMinNumRacksIsEnforced(</b>
+<i>262</i>&nbsp;                    excludedBookies);
+<b class="nc"><i>263</i>&nbsp;            Set&lt;Node&gt; excludeNodes = convertBookiesToNodes(comprehensiveExclusionBookiesSet);</b>
+<b class="nc"><i>264</i>&nbsp;            Set&lt;String&gt; availableRegions = new HashSet&lt;String&gt;();</b>
+<b class="nc"><i>265</i>&nbsp;            for (String region: perRegionPlacement.keySet()) {</b>
+<b class="nc"><i>266</i>&nbsp;                if ((null == disallowBookiePlacementInRegionFeatureName)</b>
+<b class="nc"><i>267</i>&nbsp;                        || !featureProvider.scope(region).getFeature(disallowBookiePlacementInRegionFeatureName)</b>
+<b class="nc"><i>268</i>&nbsp;                            .isAvailable()) {</b>
+<b class="nc"><i>269</i>&nbsp;                    availableRegions.add(region);</b>
+<i>270</i>&nbsp;                }
+<b class="nc"><i>271</i>&nbsp;            }</b>
+<b class="nc"><i>272</i>&nbsp;            int numRegionsAvailable = availableRegions.size();</b>
+<i>273</i>&nbsp;
+<i>274</i>&nbsp;            // If we were unable to get region information or all regions are disallowed which is
+<i>275</i>&nbsp;            // an invalid configuration; default to random selection from the set of nodes
+<b class="nc"><i>276</i>&nbsp;            if (numRegionsAvailable &lt; 1) {</b>
+<i>277</i>&nbsp;                // We cant disallow all regions; if we did, raise an alert to draw attention
+<b class="nc"><i>278</i>&nbsp;                if (perRegionPlacement.keySet().size() &gt;= 1) {</b>
+<b class="nc"><i>279</i>&nbsp;                    LOG.error(&quot;No regions available, invalid configuration&quot;);</b>
+<i>280</i>&nbsp;                }
+<b class="nc"><i>281</i>&nbsp;                List&lt;BookieNode&gt; bns = selectRandom(ensembleSize, excludeNodes, TruePredicate.INSTANCE,</b>
+<i>282</i>&nbsp;                    EnsembleForReplacementWithNoConstraints.INSTANCE);
+<b class="nc"><i>283</i>&nbsp;                ArrayList&lt;BookieSocketAddress&gt; addrs = new ArrayList&lt;BookieSocketAddress&gt;(ensembleSize);</b>
+<b class="nc"><i>284</i>&nbsp;                for (BookieNode bn : bns) {</b>
+<b class="nc"><i>285</i>&nbsp;                    addrs.add(bn.getAddr());</b>
+<b class="nc"><i>286</i>&nbsp;                }</b>
+<b class="nc"><i>287</i>&nbsp;                return PlacementResult.of(addrs,</b>
+<b class="nc"><i>288</i>&nbsp;                                          isEnsembleAdheringToPlacementPolicy(</b>
+<i>289</i>&nbsp;                                                  addrs, writeQuorumSize, ackQuorumSize));
+<i>290</i>&nbsp;            }
+<i>291</i>&nbsp;
+<i>292</i>&nbsp;            // Single region, fall back to RackAwareEnsemblePlacement
+<b class="nc"><i>293</i>&nbsp;            if (numRegionsAvailable &lt; 2) {</b>
+<b class="nc"><i>294</i>&nbsp;                RRTopologyAwareCoverageEnsemble ensemble = new RRTopologyAwareCoverageEnsemble(ensembleSize,</b>
+<i>295</i>&nbsp;                        writeQuorumSize, ackQuorumSize, REGIONID_DISTANCE_FROM_LEAVES,
+<b class="nc"><i>296</i>&nbsp;                        effectiveMinRegionsForDurability &gt; 0 ? new HashSet&lt;&gt;(perRegionPlacement.keySet()) : null,</b>
+<i>297</i>&nbsp;                        effectiveMinRegionsForDurability, minNumRacksPerWriteQuorum);
+<b class="nc"><i>298</i>&nbsp;                TopologyAwareEnsemblePlacementPolicy nextPolicy = perRegionPlacement.get(</b>
+<b class="nc"><i>299</i>&nbsp;                        availableRegions.iterator().next());</b>
+<b class="nc"><i>300</i>&nbsp;                return nextPolicy.newEnsemble(ensembleSize, writeQuorumSize, writeQuorumSize,</b>
+<i>301</i>&nbsp;                        comprehensiveExclusionBookiesSet, ensemble, ensemble);
+<i>302</i>&nbsp;            }
+<i>303</i>&nbsp;
+<b class="nc"><i>304</i>&nbsp;            int remainingEnsemble = ensembleSize;</b>
+<b class="nc"><i>305</i>&nbsp;            int remainingWriteQuorum = writeQuorumSize;</b>
+<i>306</i>&nbsp;
+<i>307</i>&nbsp;            // Equally distribute the nodes across all regions to whatever extent possible
+<i>308</i>&nbsp;            // with the hierarchy in mind
+<i>309</i>&nbsp;            // Try and place as many nodes in a region as possible, the ones that cannot be
+<i>310</i>&nbsp;            // accommodated are placed on other regions
+<i>311</i>&nbsp;            // Within each region try and follow rack aware placement
+<b class="nc"><i>312</i>&nbsp;            Map&lt;String, Pair&lt;Integer, Integer&gt;&gt; regionsWiseAllocation = new HashMap&lt;&gt;();</b>
+<b class="nc"><i>313</i>&nbsp;            for (String region: availableRegions) {</b>
+<b class="nc"><i>314</i>&nbsp;                regionsWiseAllocation.put(region, Pair.of(0, 0));</b>
+<b class="nc"><i>315</i>&nbsp;            }</b>
+<i>316</i>&nbsp;            int remainingEnsembleBeforeIteration;
+<i>317</i>&nbsp;            int numRemainingRegions;
+<b class="nc"><i>318</i>&nbsp;            Set&lt;String&gt; regionsReachedMaxAllocation = new HashSet&lt;String&gt;();</b>
+<i>319</i>&nbsp;            RRTopologyAwareCoverageEnsemble ensemble;
+<i>320</i>&nbsp;            do {
+<b class="nc"><i>321</i>&nbsp;                numRemainingRegions = numRegionsAvailable - regionsReachedMaxAllocation.size();</b>
+<b class="nc"><i>322</i>&nbsp;                ensemble = new RRTopologyAwareCoverageEnsemble(ensembleSize, writeQuorumSize, ackQuorumSize,</b>
+<i>323</i>&nbsp;                        REGIONID_DISTANCE_FROM_LEAVES,
+<i>324</i>&nbsp;                        // We pass all regions we know off to the coverage ensemble as
+<i>325</i>&nbsp;                        // regardless of regions that are available; constraints are
+<i>326</i>&nbsp;                        // always applied based on all possible regions
+<b class="nc"><i>327</i>&nbsp;                        effectiveMinRegionsForDurability &gt; 0 ? new HashSet&lt;&gt;(perRegionPlacement.keySet()) : null,</b>
+<i>328</i>&nbsp;                        effectiveMinRegionsForDurability, minNumRacksPerWriteQuorum);
+<b class="nc"><i>329</i>&nbsp;                remainingEnsembleBeforeIteration = remainingEnsemble;</b>
+<b class="nc"><i>330</i>&nbsp;                int regionsToAllocate = numRemainingRegions;</b>
+<b class="nc"><i>331</i>&nbsp;                for (Map.Entry&lt;String, Pair&lt;Integer, Integer&gt;&gt; regionEntry: regionsWiseAllocation.entrySet()) {</b>
+<b class="nc"><i>332</i>&nbsp;                    String region = regionEntry.getKey();</b>
+<b class="nc"><i>333</i>&nbsp;                    final Pair&lt;Integer, Integer&gt; currentAllocation = regionEntry.getValue();</b>
+<b class="nc"><i>334</i>&nbsp;                    TopologyAwareEnsemblePlacementPolicy policyWithinRegion = perRegionPlacement.get(region);</b>
+<b class="nc"><i>335</i>&nbsp;                    if (!regionsReachedMaxAllocation.contains(region)) {</b>
+<b class="nc"><i>336</i>&nbsp;                        if (numRemainingRegions &lt;= 0) {</b>
+<b class="nc"><i>337</i>&nbsp;                            LOG.error(&quot;Inconsistent State: This should never happen&quot;);</b>
+<b class="nc"><i>338</i>&nbsp;                            throw new BKException.BKNotEnoughBookiesException();</b>
+<i>339</i>&nbsp;                        }
+<i>340</i>&nbsp;                        // try to place the bookies as balance as possible across all the regions
+<b class="nc"><i>341</i>&nbsp;                        int addToEnsembleSize = Math.min(remainingEnsemble, remainingEnsemble / regionsToAllocate</b>
+<i>342</i>&nbsp;                                + (remainingEnsemble % regionsToAllocate == 0 ? 0 : 1));
+<b class="nc"><i>343</i>&nbsp;                        boolean success = false;</b>
+<b class="nc"><i>344</i>&nbsp;                        while (addToEnsembleSize &gt; 0) {</b>
+<b class="nc"><i>345</i>&nbsp;                            int addToWriteQuorum = Math.max(1, Math.min(remainingWriteQuorum,</b>
+<b class="nc"><i>346</i>&nbsp;                                        Math.round(1.0f * writeQuorumSize * addToEnsembleSize / ensembleSize)));</b>
+<i>347</i>&nbsp;                            // Temp ensemble will be merged back into the ensemble only if we are able to successfully
+<i>348</i>&nbsp;                            // allocate the target number of bookies in this region; if we fail because we dont have
+<i>349</i>&nbsp;                            // enough bookies; then we retry the process with a smaller target
+<b class="nc"><i>350</i>&nbsp;                            RRTopologyAwareCoverageEnsemble tempEnsemble =</b>
+<i>351</i>&nbsp;                                new RRTopologyAwareCoverageEnsemble(ensemble);
+<b class="nc"><i>352</i>&nbsp;                            int newEnsembleSize = currentAllocation.getLeft() + addToEnsembleSize;</b>
+<b class="nc"><i>353</i>&nbsp;                            int newWriteQuorumSize = currentAllocation.getRight() + addToWriteQuorum;</b>
+<i>354</i>&nbsp;                            try {
+<b class="nc"><i>355</i>&nbsp;                                List&lt;BookieSocketAddress&gt; allocated = policyWithinRegion</b>
+<b class="nc"><i>356</i>&nbsp;                                        .newEnsemble(newEnsembleSize, newWriteQuorumSize, newWriteQuorumSize,</b>
+<i>357</i>&nbsp;                                                comprehensiveExclusionBookiesSet, tempEnsemble, tempEnsemble)
+<b class="nc"><i>358</i>&nbsp;                                        .getResult();</b>
+<b class="nc"><i>359</i>&nbsp;                                ensemble = tempEnsemble;</b>
+<b class="nc"><i>360</i>&nbsp;                                remainingEnsemble -= addToEnsembleSize;</b>
+<b class="nc"><i>361</i>&nbsp;                                remainingWriteQuorum -= addToWriteQuorum;</b>
+<b class="nc"><i>362</i>&nbsp;                                regionsWiseAllocation.put(region, Pair.of(newEnsembleSize, newWriteQuorumSize));</b>
+<b class="nc"><i>363</i>&nbsp;                                success = true;</b>
+<b class="nc"><i>364</i>&nbsp;                                regionsToAllocate--;</b>
+<b class="nc"><i>365</i>&nbsp;                                LOG.info(&quot;Region {} allocating bookies with ensemble size {} &quot;</b>
+<i>366</i>&nbsp;                                        + &quot;and write quorum size {} : {}&quot;,
+<b class="nc"><i>367</i>&nbsp;                                        region, newEnsembleSize, newWriteQuorumSize, allocated);</b>
+<b class="nc"><i>368</i>&nbsp;                                break;</b>
+<b class="nc"><i>369</i>&nbsp;                            } catch (BKException.BKNotEnoughBookiesException exc) {</b>
+<b class="nc"><i>370</i>&nbsp;                                LOG.warn(&quot;Could not allocate {} bookies in region {}, try allocating {} bookies&quot;,</b>
+<b class="nc"><i>371</i>&nbsp;                                        newEnsembleSize, region, (newEnsembleSize - 1));</b>
+<b class="nc"><i>372</i>&nbsp;                                addToEnsembleSize--;</b>
+<i>373</i>&nbsp;                            }
+<b class="nc"><i>374</i>&nbsp;                        }</b>
+<i>375</i>&nbsp;
+<i>376</i>&nbsp;                        // we couldn&#39;t allocate additional bookies from the region,
+<i>377</i>&nbsp;                        // it should have reached its max allocation.
+<b class="nc"><i>378</i>&nbsp;                        if (!success) {</b>
+<b class="nc"><i>379</i>&nbsp;                            regionsReachedMaxAllocation.add(region);</b>
+<i>380</i>&nbsp;                        }
+<i>381</i>&nbsp;                    }
+<i>382</i>&nbsp;
+<b class="nc"><i>383</i>&nbsp;                    if (regionsReachedMaxAllocation.contains(region)) {</b>
+<b class="nc"><i>384</i>&nbsp;                        if (currentAllocation.getLeft() &gt; 0) {</b>
+<b class="nc"><i>385</i>&nbsp;                            LOG.info(&quot;Allocating {} bookies in region {} : ensemble {} exclude {}&quot;,</b>
+<b class="nc"><i>386</i>&nbsp;                                    currentAllocation.getLeft(), region, comprehensiveExclusionBookiesSet, ensemble);</b>
+<b class="nc"><i>387</i>&nbsp;                            policyWithinRegion.newEnsemble(</b>
+<b class="nc"><i>388</i>&nbsp;                                    currentAllocation.getLeft(),</b>
+<b class="nc"><i>389</i>&nbsp;                                    currentAllocation.getRight(),</b>
+<b class="nc"><i>390</i>&nbsp;                                    currentAllocation.getRight(),</b>
+<i>391</i>&nbsp;                                    comprehensiveExclusionBookiesSet,
+<i>392</i>&nbsp;                                    ensemble,
+<i>393</i>&nbsp;                                    ensemble);
+<b class="nc"><i>394</i>&nbsp;                            LOG.info(&quot;Allocated {} bookies in region {} : {}&quot;,</b>
+<b class="nc"><i>395</i>&nbsp;                                    currentAllocation.getLeft(), region, ensemble);</b>
+<i>396</i>&nbsp;                        }
+<i>397</i>&nbsp;                    }
+<b class="nc"><i>398</i>&nbsp;                }</b>
+<i>399</i>&nbsp;
+<b class="nc"><i>400</i>&nbsp;                if (regionsReachedMaxAllocation.containsAll(regionsWiseAllocation.keySet())) {</b>
+<b class="nc"><i>401</i>&nbsp;                    break;</b>
+<i>402</i>&nbsp;                }
+<b class="nc"><i>403</i>&nbsp;            } while ((remainingEnsemble &gt; 0) &amp;&amp; (remainingEnsemble &lt; remainingEnsembleBeforeIteration));</b>
+<i>404</i>&nbsp;
+<b class="nc"><i>405</i>&nbsp;            List&lt;BookieSocketAddress&gt; bookieList = ensemble.toList();</b>
+<b class="nc"><i>406</i>&nbsp;            if (ensembleSize != bookieList.size()) {</b>
+<b class="nc"><i>407</i>&nbsp;                LOG.error(&quot;Not enough {} bookies are available to form an ensemble : {}.&quot;,</b>
+<b class="nc"><i>408</i>&nbsp;                          ensembleSize, bookieList);</b>
+<b class="nc"><i>409</i>&nbsp;                throw new BKException.BKNotEnoughBookiesException();</b>
+<i>410</i>&nbsp;            }
+<i>411</i>&nbsp;
+<b class="nc"><i>412</i>&nbsp;            if (enableValidation &amp;&amp; !ensemble.validate()) {</b>
+<b class="nc"><i>413</i>&nbsp;                LOG.error(&quot;Not enough {} bookies are available to form a valid ensemble : {}.&quot;,</b>
+<b class="nc"><i>414</i>&nbsp;                    ensembleSize, bookieList);</b>
+<b class="nc"><i>415</i>&nbsp;                throw new BKException.BKNotEnoughBookiesException();</b>
+<i>416</i>&nbsp;            }
+<b class="nc"><i>417</i>&nbsp;            LOG.info(&quot;Bookies allocated successfully {}&quot;, ensemble);</b>
+<b class="nc"><i>418</i>&nbsp;            List&lt;BookieSocketAddress&gt; ensembleList = ensemble.toList();</b>
+<b class="nc"><i>419</i>&nbsp;            return PlacementResult.of(ensembleList,</b>
+<b class="nc"><i>420</i>&nbsp;                    isEnsembleAdheringToPlacementPolicy(ensembleList, writeQuorumSize, ackQuorumSize));</b>
+<i>421</i>&nbsp;        } finally {
+<b class="nc"><i>422</i>&nbsp;            rwLock.readLock().unlock();</b>
+<i>423</i>&nbsp;        }
+<i>424</i>&nbsp;    }
+<i>425</i>&nbsp;
+<i>426</i>&nbsp;    @Override
+<i>427</i>&nbsp;    public PlacementResult&lt;BookieSocketAddress&gt; replaceBookie(int ensembleSize, int writeQuorumSize, int ackQuorumSize,
+<i>428</i>&nbsp;            Map&lt;String, byte[]&gt; customMetadata, List&lt;BookieSocketAddress&gt; currentEnsemble,
+<i>429</i>&nbsp;            BookieSocketAddress bookieToReplace, Set&lt;BookieSocketAddress&gt; excludeBookies)
+<i>430</i>&nbsp;            throws BKException.BKNotEnoughBookiesException {
+<b class="nc"><i>431</i>&nbsp;        rwLock.readLock().lock();</b>
+<i>432</i>&nbsp;        try {
+<b class="nc"><i>433</i>&nbsp;            boolean enforceDurability = enforceDurabilityInReplace &amp;&amp; !disableDurabilityFeature.isAvailable();</b>
+<b class="nc"><i>434</i>&nbsp;            int effectiveMinRegionsForDurability = enforceDurability ? minRegionsForDurability : 1;</b>
+<b class="nc"><i>435</i>&nbsp;            Set&lt;BookieSocketAddress&gt; comprehensiveExclusionBookiesSet = addDefaultRackBookiesIfMinNumRacksIsEnforced(</b>
+<i>436</i>&nbsp;                    excludeBookies);
+<b class="nc"><i>437</i>&nbsp;            Set&lt;Node&gt; excludeNodes = convertBookiesToNodes(comprehensiveExclusionBookiesSet);</b>
+<b class="nc"><i>438</i>&nbsp;            RRTopologyAwareCoverageEnsemble ensemble = new RRTopologyAwareCoverageEnsemble(ensembleSize,</b>
+<i>439</i>&nbsp;                writeQuorumSize,
+<i>440</i>&nbsp;                ackQuorumSize,
+<i>441</i>&nbsp;                REGIONID_DISTANCE_FROM_LEAVES,
+<b class="nc"><i>442</i>&nbsp;                effectiveMinRegionsForDurability &gt; 0 ? new HashSet&lt;String&gt;(perRegionPlacement.keySet()) : null,</b>
+<i>443</i>&nbsp;                effectiveMinRegionsForDurability, minNumRacksPerWriteQuorum);
+<i>444</i>&nbsp;
+<b class="nc"><i>445</i>&nbsp;            BookieNode bookieNodeToReplace = knownBookies.get(bookieToReplace);</b>
+<b class="nc"><i>446</i>&nbsp;            if (null == bookieNodeToReplace) {</b>
+<b class="nc"><i>447</i>&nbsp;                bookieNodeToReplace = createBookieNode(bookieToReplace);</b>
+<i>448</i>&nbsp;            }
+<b class="nc"><i>449</i>&nbsp;            excludeNodes.add(bookieNodeToReplace);</b>
+<i>450</i>&nbsp;
+<b class="nc"><i>451</i>&nbsp;            for (BookieSocketAddress bookieAddress: currentEnsemble) {</b>
+<b class="nc"><i>452</i>&nbsp;                if (bookieAddress.equals(bookieToReplace)) {</b>
+<b class="nc"><i>453</i>&nbsp;                    continue;</b>
+<i>454</i>&nbsp;                }
+<i>455</i>&nbsp;
+<b class="nc"><i>456</i>&nbsp;                BookieNode bn = knownBookies.get(bookieAddress);</b>
+<b class="nc"><i>457</i>&nbsp;                if (null == bn) {</b>
+<b class="nc"><i>458</i>&nbsp;                    bn = createBookieNode(bookieAddress);</b>
+<i>459</i>&nbsp;                }
+<i>460</i>&nbsp;
+<b class="nc"><i>461</i>&nbsp;                excludeNodes.add(bn);</b>
+<i>462</i>&nbsp;
+<b class="nc"><i>463</i>&nbsp;                if (!ensemble.apply(bn, ensemble)) {</b>
+<b class="nc"><i>464</i>&nbsp;                    LOG.warn(&quot;Anomalous ensemble detected&quot;);</b>
+<b class="nc"><i>465</i>&nbsp;                    if (null != statsLogger) {</b>
+<b class="nc"><i>466</i>&nbsp;                        statsLogger.getCounter(REGION_AWARE_ANOMALOUS_ENSEMBLE).inc();</b>
+<i>467</i>&nbsp;                    }
+<b class="nc"><i>468</i>&nbsp;                    enforceDurability = false;</b>
+<i>469</i>&nbsp;                }
+<i>470</i>&nbsp;
+<b class="nc"><i>471</i>&nbsp;                ensemble.addNode(bn);</b>
+<b class="nc"><i>472</i>&nbsp;            }</b>
+<i>473</i>&nbsp;
+<b class="nc"><i>474</i>&nbsp;            if (LOG.isDebugEnabled()) {</b>
+<b class="nc"><i>475</i>&nbsp;                LOG.debug(&quot;Try to choose a new bookie to replace {}, excluding {}.&quot;, bookieToReplace,</b>
+<i>476</i>&nbsp;                    excludeNodes);
+<i>477</i>&nbsp;            }
+<i>478</i>&nbsp;            // pick a candidate from same rack to replace
+<b class="nc"><i>479</i>&nbsp;            BookieNode candidate = replaceFromRack(bookieNodeToReplace, excludeNodes,</b>
+<i>480</i>&nbsp;                ensemble, ensemble, enforceDurability);
+<b class="nc"><i>481</i>&nbsp;            if (LOG.isDebugEnabled()) {</b>
+<b class="nc"><i>482</i>&nbsp;                LOG.debug(&quot;Bookie {} is chosen to replace bookie {}.&quot;, candidate, bookieNodeToReplace);</b>
+<i>483</i>&nbsp;            }
+<b class="nc"><i>484</i>&nbsp;            BookieSocketAddress candidateAddr = candidate.getAddr();</b>
+<b class="nc"><i>485</i>&nbsp;            List&lt;BookieSocketAddress&gt; newEnsemble = new ArrayList&lt;BookieSocketAddress&gt;(currentEnsemble);</b>
+<b class="nc"><i>486</i>&nbsp;            if (currentEnsemble.isEmpty()) {</b>
+<i>487</i>&nbsp;                /*
+<i>488</i>&nbsp;                 * in testing code there are test cases which would pass empty
+<i>489</i>&nbsp;                 * currentEnsemble
+<i>490</i>&nbsp;                 */
+<b class="nc"><i>491</i>&nbsp;                newEnsemble.add(candidateAddr);</b>
+<i>492</i>&nbsp;            } else {
+<b class="nc"><i>493</i>&nbsp;                newEnsemble.set(currentEnsemble.indexOf(bookieToReplace), candidateAddr);</b>
+<i>494</i>&nbsp;            }
+<b class="nc"><i>495</i>&nbsp;            return PlacementResult.of(candidateAddr,</b>
+<b class="nc"><i>496</i>&nbsp;                    isEnsembleAdheringToPlacementPolicy(newEnsemble, writeQuorumSize, ackQuorumSize));</b>
+<i>497</i>&nbsp;        } finally {
+<b class="nc"><i>498</i>&nbsp;            rwLock.readLock().unlock();</b>
+<i>499</i>&nbsp;        }
+<i>500</i>&nbsp;    }
+<i>501</i>&nbsp;
+<i>502</i>&nbsp;    protected BookieNode replaceFromRack(BookieNode bookieNodeToReplace,
+<i>503</i>&nbsp;                                         Set&lt;Node&gt; excludeBookies,
+<i>504</i>&nbsp;                                         Predicate&lt;BookieNode&gt; predicate,
+<i>505</i>&nbsp;                                         Ensemble&lt;BookieNode&gt; ensemble,
+<i>506</i>&nbsp;                                         boolean enforceDurability)
+<i>507</i>&nbsp;        throws BKException.BKNotEnoughBookiesException {
+<b class="nc"><i>508</i>&nbsp;        Set&lt;String&gt; availableRegions = new HashSet&lt;String&gt;();</b>
+<b class="nc"><i>509</i>&nbsp;        for (String region: perRegionPlacement.keySet()) {</b>
+<b class="nc"><i>510</i>&nbsp;            if ((null == disallowBookiePlacementInRegionFeatureName)</b>
+<b class="nc"><i>511</i>&nbsp;                    || !featureProvider.scope(region).getFeature(disallowBookiePlacementInRegionFeatureName)</b>
+<b class="nc"><i>512</i>&nbsp;                        .isAvailable()) {</b>
+<b class="nc"><i>513</i>&nbsp;                availableRegions.add(region);</b>
+<i>514</i>&nbsp;            }
+<b class="nc"><i>515</i>&nbsp;        }</b>
+<b class="nc"><i>516</i>&nbsp;        String regionForBookieToReplace = getLocalRegion(bookieNodeToReplace);</b>
+<b class="nc"><i>517</i>&nbsp;        if (availableRegions.contains(regionForBookieToReplace)) {</b>
+<b class="nc"><i>518</i>&nbsp;            TopologyAwareEnsemblePlacementPolicy regionPolicy = perRegionPlacement.get(regionForBookieToReplace);</b>
+<b class="nc"><i>519</i>&nbsp;            if (null != regionPolicy) {</b>
+<i>520</i>&nbsp;                try {
+<i>521</i>&nbsp;                    // select one from local rack =&gt; it falls back to selecting a node from the region
+<i>522</i>&nbsp;                    // if the rack does not have an available node, selecting from the same region
+<i>523</i>&nbsp;                    // should not violate durability constraints so we can simply not have to check
+<i>524</i>&nbsp;                    // for that.
+<b class="nc"><i>525</i>&nbsp;                    return regionPolicy.selectFromNetworkLocation(</b>
+<b class="nc"><i>526</i>&nbsp;                        bookieNodeToReplace.getNetworkLocation(),</b>
+<i>527</i>&nbsp;                        excludeBookies,
+<i>528</i>&nbsp;                        TruePredicate.INSTANCE,
+<i>529</i>&nbsp;                        EnsembleForReplacementWithNoConstraints.INSTANCE,
+<i>530</i>&nbsp;                        true);
+<b class="nc"><i>531</i>&nbsp;                } catch (BKException.BKNotEnoughBookiesException e) {</b>
+<b class="nc"><i>532</i>&nbsp;                    LOG.warn(&quot;Failed to choose a bookie from {} : &quot;</b>
+<i>533</i>&nbsp;                            + &quot;excluded {}, fallback to choose bookie randomly from the cluster.&quot;,
+<b class="nc"><i>534</i>&nbsp;                        bookieNodeToReplace.getNetworkLocation(), excludeBookies);</b>
+<i>535</i>&nbsp;                }
+<i>536</i>&nbsp;            }
+<i>537</i>&nbsp;        }
+<i>538</i>&nbsp;
+<i>539</i>&nbsp;        // randomly choose one from all the regions that are available, ignore the provided predicate if we are not
+<i>540</i>&nbsp;        // enforcing durability.
+<b class="nc"><i>541</i>&nbsp;        return selectRandomFromRegions(availableRegions, 1,</b>
+<i>542</i>&nbsp;            excludeBookies,
+<i>543</i>&nbsp;            enforceDurability ? predicate : TruePredicate.INSTANCE,
+<b class="nc"><i>544</i>&nbsp;            enforceDurability ? ensemble : EnsembleForReplacementWithNoConstraints.INSTANCE).get(0);</b>
+<i>545</i>&nbsp;    }
+<i>546</i>&nbsp;
+<i>547</i>&nbsp;    @Override
+<i>548</i>&nbsp;    public final DistributionSchedule.WriteSet reorderReadSequence(
+<i>549</i>&nbsp;            List&lt;BookieSocketAddress&gt; ensemble,
+<i>550</i>&nbsp;            BookiesHealthInfo bookiesHealthInfo,
+<i>551</i>&nbsp;            DistributionSchedule.WriteSet writeSet) {
+<b class="nc"><i>552</i>&nbsp;        if (UNKNOWN_REGION.equals(myRegion)) {</b>
+<b class="nc"><i>553</i>&nbsp;            return super.reorderReadSequence(ensemble, bookiesHealthInfo, writeSet);</b>
+<i>554</i>&nbsp;        } else {
+<b class="nc"><i>555</i>&nbsp;            Map&lt;Integer, String&gt; writeSetWithRegion = new HashMap&lt;&gt;();</b>
+<b class="nc"><i>556</i>&nbsp;            for (int i = 0; i &lt; writeSet.size(); i++) {</b>
+<b class="nc"><i>557</i>&nbsp;                int idx = writeSet.get(i);</b>
+<b class="nc"><i>558</i>&nbsp;                writeSetWithRegion.put(idx, getRegion(ensemble.get(idx)));</b>
+<i>559</i>&nbsp;            }
+<b class="nc"><i>560</i>&nbsp;            return super.reorderReadSequenceWithRegion(ensemble, writeSet, writeSetWithRegion,</b>
+<i>561</i>&nbsp;                bookiesHealthInfo, true, myRegion, REMOTE_NODE_IN_REORDER_SEQUENCE);
+<i>562</i>&nbsp;        }
+<i>563</i>&nbsp;    }
+<i>564</i>&nbsp;
+<i>565</i>&nbsp;    @Override
+<i>566</i>&nbsp;    public final DistributionSchedule.WriteSet reorderReadLACSequence(
+<i>567</i>&nbsp;            List&lt;BookieSocketAddress&gt; ensemble,
+<i>568</i>&nbsp;            BookiesHealthInfo bookiesHealthInfo,
+<i>569</i>&nbsp;            DistributionSchedule.WriteSet writeSet) {
+<b class="nc"><i>570</i>&nbsp;        if (UNKNOWN_REGION.equals(myRegion)) {</b>
+<b class="nc"><i>571</i>&nbsp;            return super.reorderReadLACSequence(ensemble, bookiesHealthInfo, writeSet);</b>
+<i>572</i>&nbsp;        }
+<b class="nc"><i>573</i>&nbsp;        DistributionSchedule.WriteSet finalList = reorderReadSequence(ensemble, bookiesHealthInfo, writeSet);</b>
+<b class="nc"><i>574</i>&nbsp;        finalList.addMissingIndices(ensemble.size());</b>
+<b class="nc"><i>575</i>&nbsp;        return finalList;</b>
+<i>576</i>&nbsp;    }
+<i>577</i>&nbsp;
+<i>578</i>&nbsp;    @Override
+<i>579</i>&nbsp;    public PlacementPolicyAdherence isEnsembleAdheringToPlacementPolicy(List&lt;BookieSocketAddress&gt; ensembleList,
+<i>580</i>&nbsp;            int writeQuorumSize, int ackQuorumSize) {
+<i>581</i>&nbsp;        /**
+<i>582</i>&nbsp;         * TODO: have to implement actual logic for this method for
+<i>583</i>&nbsp;         * RegionAwareEnsemblePlacementPolicy. For now return true value.
+<i>584</i>&nbsp;         *
+<i>585</i>&nbsp;         * - https://github.com/apache/bookkeeper/issues/1898
+<i>586</i>&nbsp;         */
+<b class="nc"><i>587</i>&nbsp;        return PlacementPolicyAdherence.MEETS_STRICT;</b>
+<i>588</i>&nbsp;    }
+<i>589</i>&nbsp;}
+</div>
+</div>
+
+<div class="footer">
+    
+    <div style="float:right;">generated on 2021-06-28 15:57</div>
+</div>
+</body>
+</html>

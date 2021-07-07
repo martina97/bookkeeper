@@ -1,0 +1,258 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ReadLastConfirmedAndEntryOpTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">ReadLastConfirmedAndEntryOpTest.java</span></div><h1>ReadLastConfirmedAndEntryOpTest.java</h1><pre class="source lang-java linenums">/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+package org.apache.bookkeeper.client;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import io.netty.buffer.UnpooledByteBufAllocator;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import lombok.Data;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.bookkeeper.client.BKException.Code;
+import org.apache.bookkeeper.client.BookKeeper.DigestType;
+import org.apache.bookkeeper.client.ReadLastConfirmedAndEntryOp.LastConfirmedAndEntryCallback;
+import org.apache.bookkeeper.client.api.LastConfirmedAndEntry;
+import org.apache.bookkeeper.client.api.LedgerMetadata;
+import org.apache.bookkeeper.client.impl.LastConfirmedAndEntryImpl;
+import org.apache.bookkeeper.client.impl.LedgerEntryImpl;
+import org.apache.bookkeeper.common.concurrent.FutureUtils;
+import org.apache.bookkeeper.common.util.OrderedScheduler;
+import org.apache.bookkeeper.conf.ClientConfiguration;
+import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.proto.BookieClient;
+import org.apache.bookkeeper.proto.BookieProtocol;
+import org.apache.bookkeeper.proto.BookkeeperInternalCallbacks.ReadEntryCallback;
+import org.apache.bookkeeper.proto.ReadLastConfirmedAndEntryContext;
+import org.apache.bookkeeper.proto.checksum.DigestManager;
+import org.apache.bookkeeper.proto.checksum.DummyDigestManager;
+import org.apache.bookkeeper.test.TestStatsProvider;
+import org.apache.bookkeeper.util.ByteBufList;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+
+/**
+ * Unit test {@link ReadLastConfirmedAndEntryOp} with mocks.
+ */
+<span class="nc" id="L74">@Slf4j</span>
+<span class="nc" id="L75">public class ReadLastConfirmedAndEntryOpTest {</span>
+
+<span class="nc" id="L77">    private static final long LEDGERID = System.currentTimeMillis();</span>
+
+<span class="nc" id="L79">    private final TestStatsProvider testStatsProvider = new TestStatsProvider();</span>
+    private BookKeeperClientStats clientStats;
+    private ClientContext mockClientCtx;
+    private BookieClient mockBookieClient;
+    private LedgerHandle mockLh;
+    private ScheduledExecutorService scheduler;
+    private OrderedScheduler orderedScheduler;
+    private ClientInternalConf internalConf;
+    private EnsemblePlacementPolicy mockPlacementPolicy;
+    private LedgerMetadata ledgerMetadata;
+    private DistributionSchedule distributionSchedule;
+    private DigestManager digestManager;
+
+    @Before
+    public void setup() throws Exception {
+        // stats
+<span class="nc" id="L95">        clientStats = BookKeeperClientStats.newInstance(testStatsProvider.getStatsLogger(&quot;&quot;));</span>
+        // policy
+<span class="nc" id="L97">        ClientConfiguration conf = new ClientConfiguration();</span>
+<span class="nc" id="L98">        conf.setFirstSpeculativeReadLACTimeout(100);</span>
+<span class="nc" id="L99">        conf.setMaxSpeculativeReadLACTimeout(200);</span>
+<span class="nc" id="L100">        conf.setSpeculativeReadLACTimeoutBackoffMultiplier(2);</span>
+
+<span class="nc" id="L102">        internalConf = ClientInternalConf.fromConfig(conf);</span>
+
+        // metadata
+<span class="nc" id="L105">        ArrayList&lt;BookieSocketAddress&gt; ensemble = new ArrayList&lt;&gt;(3);</span>
+<span class="nc bnc" id="L106" title="All 2 branches missed.">        for (int i = 0; i &lt; 3; i++) {</span>
+<span class="nc" id="L107">            ensemble.add(new BookieSocketAddress(&quot;127.0.0.1&quot;, 3181 + i));</span>
+        }
+<span class="nc" id="L109">        this.ledgerMetadata = LedgerMetadataBuilder.create()</span>
+<span class="nc" id="L110">            .withEnsembleSize(3).withWriteQuorumSize(2).withAckQuorumSize(2)</span>
+<span class="nc" id="L111">            .withPassword(new byte[0])</span>
+<span class="nc" id="L112">            .withDigestType(DigestType.CRC32.toApiDigestType())</span>
+<span class="nc" id="L113">            .newEnsembleEntry(0L, ensemble).build();</span>
+<span class="nc" id="L114">        this.distributionSchedule = new RoundRobinDistributionSchedule(3, 2, 3);</span>
+        // schedulers
+<span class="nc" id="L116">        this.scheduler = Executors.newSingleThreadScheduledExecutor();</span>
+<span class="nc" id="L117">        this.orderedScheduler = OrderedScheduler.newSchedulerBuilder()</span>
+<span class="nc" id="L118">            .name(&quot;test-ordered-scheduler&quot;)</span>
+<span class="nc" id="L119">            .numThreads(1)</span>
+<span class="nc" id="L120">            .build();</span>
+
+<span class="nc" id="L122">        this.mockBookieClient = mock(BookieClient.class);</span>
+<span class="nc" id="L123">        this.mockPlacementPolicy = mock(EnsemblePlacementPolicy.class);</span>
+<span class="nc" id="L124">        this.mockClientCtx = mock(ClientContext.class);</span>
+<span class="nc" id="L125">        when(mockClientCtx.getBookieClient()).thenReturn(mockBookieClient);</span>
+<span class="nc" id="L126">        when(mockClientCtx.getPlacementPolicy()).thenReturn(mockPlacementPolicy);</span>
+<span class="nc" id="L127">        when(mockClientCtx.getConf()).thenReturn(internalConf);</span>
+<span class="nc" id="L128">        when(mockClientCtx.getScheduler()).thenReturn(orderedScheduler);</span>
+<span class="nc" id="L129">        when(mockClientCtx.getMainWorkerPool()).thenReturn(orderedScheduler);</span>
+<span class="nc" id="L130">        when(mockClientCtx.getClientStats()).thenReturn(clientStats);</span>
+<span class="nc" id="L131">        this.mockLh = mock(LedgerHandle.class);</span>
+
+<span class="nc" id="L133">        when(mockLh.getId()).thenReturn(LEDGERID);</span>
+<span class="nc" id="L134">        when(mockLh.getCurrentEnsemble()).thenReturn(ensemble);</span>
+<span class="nc" id="L135">        when(mockLh.getLedgerMetadata()).thenReturn(ledgerMetadata);</span>
+<span class="nc" id="L136">        when(mockLh.getDistributionSchedule()).thenReturn(distributionSchedule);</span>
+<span class="nc" id="L137">        digestManager = new DummyDigestManager(LEDGERID, false, UnpooledByteBufAllocator.DEFAULT);</span>
+<span class="nc" id="L138">        when(mockLh.getDigestManager()).thenReturn(digestManager);</span>
+<span class="nc" id="L139">    }</span>
+
+    @After
+    public void teardown() {
+<span class="nc" id="L143">        this.scheduler.shutdown();</span>
+<span class="nc" id="L144">        this.orderedScheduler.shutdown();</span>
+<span class="nc" id="L145">    }</span>
+
+<span class="nc bnc" id="L147" title="All 30 branches missed.">    @Data</span>
+    static class ReadLastConfirmedAndEntryHolder {
+
+<span class="nc" id="L150">        private final BookieSocketAddress address;</span>
+<span class="nc" id="L151">        private final ReadEntryCallback callback;</span>
+<span class="nc" id="L152">        private final ReadLastConfirmedAndEntryContext context;</span>
+
+    }
+
+    /**
+     * Test case: handling different speculative responses. one speculative response might return a valid response
+     * with a read entry, while the other speculative response might return a valid response without an entry.
+     * {@link ReadLastConfirmedAndEntryOp} should handle both responses well.
+     *
+     * &lt;p&gt;This test case covers {@link https://github.com/apache/bookkeeper/issues/1476}.
+     */
+    @Test
+    public void testSpeculativeResponses() throws Exception {
+<span class="nc" id="L165">        final long entryId = 2L;</span>
+<span class="nc" id="L166">        final long lac = 1L;</span>
+
+<span class="nc" id="L168">        ByteBuf data = Unpooled.copiedBuffer(&quot;test-speculative-responses&quot;, UTF_8);</span>
+<span class="nc" id="L169">        ByteBufList dataWithDigest = digestManager.computeDigestAndPackageForSending(</span>
+<span class="nc" id="L170">            entryId, lac, data.readableBytes(), data);</span>
+<span class="nc" id="L171">        byte[] bytesWithDigest = new byte[dataWithDigest.readableBytes()];</span>
+<span class="nc" id="L172">        assertEquals(bytesWithDigest.length, dataWithDigest.getBytes(bytesWithDigest));</span>
+
+<span class="nc" id="L174">        final Map&lt;BookieSocketAddress, ReadLastConfirmedAndEntryHolder&gt; callbacks =</span>
+<span class="nc" id="L175">            Collections.synchronizedMap(new HashMap&lt;&gt;());</span>
+<span class="nc" id="L176">        doAnswer(invocationOnMock -&gt; {</span>
+<span class="nc" id="L177">            BookieSocketAddress address = invocationOnMock.getArgument(0);</span>
+<span class="nc" id="L178">            ReadEntryCallback callback = invocationOnMock.getArgument(6);</span>
+<span class="nc" id="L179">            ReadLastConfirmedAndEntryContext context = invocationOnMock.getArgument(7);</span>
+
+<span class="nc" id="L181">            ReadLastConfirmedAndEntryHolder holder = new ReadLastConfirmedAndEntryHolder(address, callback, context);</span>
+
+<span class="nc" id="L183">            log.info(&quot;Received read request to bookie {}&quot;, address);</span>
+
+<span class="nc" id="L185">            callbacks.put(address, holder);</span>
+<span class="nc" id="L186">            return null;</span>
+<span class="nc" id="L187">        }).when(mockBookieClient).readEntryWaitForLACUpdate(</span>
+<span class="nc" id="L188">            any(BookieSocketAddress.class),</span>
+<span class="nc" id="L189">            anyLong(),</span>
+<span class="nc" id="L190">            anyLong(),</span>
+<span class="nc" id="L191">            anyLong(),</span>
+<span class="nc" id="L192">            anyLong(),</span>
+<span class="nc" id="L193">            anyBoolean(),</span>
+<span class="nc" id="L194">            any(ReadEntryCallback.class),</span>
+<span class="nc" id="L195">            any()</span>
+        );
+
+<span class="nc" id="L198">        CompletableFuture&lt;LastConfirmedAndEntry&gt; resultFuture = new CompletableFuture&lt;&gt;();</span>
+<span class="nc" id="L199">        LastConfirmedAndEntryCallback resultCallback = (rc, lastAddConfirmed, entry) -&gt; {</span>
+<span class="nc bnc" id="L200" title="All 2 branches missed.">            if (Code.OK != rc) {</span>
+<span class="nc" id="L201">                FutureUtils.completeExceptionally(resultFuture, BKException.create(rc));</span>
+            } else {
+<span class="nc" id="L203">                FutureUtils.complete(resultFuture, LastConfirmedAndEntryImpl.create(lastAddConfirmed, entry));</span>
+            }
+<span class="nc" id="L205">        };</span>
+
+<span class="nc" id="L207">        ReadLastConfirmedAndEntryOp op = new ReadLastConfirmedAndEntryOp(</span>
+<span class="nc" id="L208">                mockLh, mockClientCtx, mockLh.getCurrentEnsemble(), resultCallback, 1L, 10000);</span>
+<span class="nc" id="L209">        op.initiate();</span>
+
+        // wait until all speculative requests are sent
+<span class="nc bnc" id="L212" title="All 2 branches missed.">        while (callbacks.size() &lt; 3) {</span>
+<span class="nc" id="L213">            log.info(&quot;Received {} read requests&quot;, callbacks.size());</span>
+<span class="nc" id="L214">            Thread.sleep(100);</span>
+        }
+
+<span class="nc" id="L217">        log.info(&quot;All speculative reads are outstanding now.&quot;);</span>
+
+        // once all the speculative reads are outstanding. complete the requests in following sequence:
+
+        // 1) complete one bookie with empty response (OK, entryId = INVALID_ENTRY_ID)
+        // 2) complete second bookie with valid entry response. this will trigger double-release bug described in
+        //    {@link https://github.com/apache/bookkeeper/issues/1476}
+
+<span class="nc" id="L225">        Iterator&lt;Entry&lt;BookieSocketAddress, ReadLastConfirmedAndEntryHolder&gt;&gt; iter = callbacks.entrySet().iterator();</span>
+<span class="nc" id="L226">        assertTrue(iter.hasNext());</span>
+<span class="nc" id="L227">        Entry&lt;BookieSocketAddress, ReadLastConfirmedAndEntryHolder&gt; firstBookieEntry = iter.next();</span>
+<span class="nc" id="L228">        ReadLastConfirmedAndEntryHolder firstBookieHolder = firstBookieEntry.getValue();</span>
+<span class="nc" id="L229">        ReadLastConfirmedAndEntryContext firstContext = firstBookieHolder.context;</span>
+<span class="nc" id="L230">        firstContext.setLastAddConfirmed(entryId);</span>
+<span class="nc" id="L231">        firstBookieHolder.getCallback()</span>
+<span class="nc" id="L232">            .readEntryComplete(Code.OK, LEDGERID, BookieProtocol.INVALID_ENTRY_ID, null, firstContext);</span>
+
+        // readEntryComplete above will release the entry impl back to the object pools.
+        // we want to make sure after the entry is recycled, it will not be mutated by any future callbacks.
+<span class="nc" id="L236">        LedgerEntryImpl entry = LedgerEntryImpl.create(LEDGERID, Long.MAX_VALUE);</span>
+
+<span class="nc" id="L238">        assertTrue(iter.hasNext());</span>
+<span class="nc" id="L239">        Entry&lt;BookieSocketAddress, ReadLastConfirmedAndEntryHolder&gt; secondBookieEntry = iter.next();</span>
+<span class="nc" id="L240">        ReadLastConfirmedAndEntryHolder secondBookieHolder = secondBookieEntry.getValue();</span>
+<span class="nc" id="L241">        ReadLastConfirmedAndEntryContext secondContext = secondBookieHolder.context;</span>
+<span class="nc" id="L242">        secondContext.setLastAddConfirmed(entryId);</span>
+<span class="nc" id="L243">        secondBookieHolder.getCallback().readEntryComplete(</span>
+<span class="nc" id="L244">            Code.OK, LEDGERID, entryId, Unpooled.wrappedBuffer(bytesWithDigest), secondContext);</span>
+
+        // the recycled entry shouldn't be updated by any future callbacks.
+<span class="nc" id="L247">        assertNull(entry.getEntryBuffer());</span>
+<span class="nc" id="L248">        entry.close();</span>
+
+        // wait for results
+<span class="nc" id="L251">        try (LastConfirmedAndEntry lacAndEntry = FutureUtils.result(resultFuture)) {</span>
+<span class="nc" id="L252">            assertEquals(entryId, lacAndEntry.getLastAddConfirmed());</span>
+<span class="nc" id="L253">            assertNull(lacAndEntry.getEntry());</span>
+        }
+<span class="nc" id="L255">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

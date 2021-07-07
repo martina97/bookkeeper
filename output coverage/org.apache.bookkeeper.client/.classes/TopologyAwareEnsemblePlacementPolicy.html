@@ -1,0 +1,1020 @@
+
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html id="htmlId">
+<head>
+  <title>Coverage Report :: TopologyAwareEnsemblePlacementPolicy</title>
+  <style type="text/css">
+    @import "../../.css/coverage.css";
+  </style>
+</head>
+
+<body>
+<div class="header"></div>
+
+<div class="content">
+<div class="breadCrumbs">
+    [ <a href="../../index.html">all classes</a> ]
+    [ <a href="../index.html">org.apache.bookkeeper.client</a> ]
+</div>
+
+<h1>Coverage Summary for Class: TopologyAwareEnsemblePlacementPolicy (org.apache.bookkeeper.client)</h1>
+
+<table class="coverageStats">
+
+<tr>
+  <th class="name">Class</th>
+<th class="coverageStat 
+">
+  Method, %
+</th>
+<th class="coverageStat 
+">
+  Line, %
+</th>
+</tr>
+<tr>
+  <td class="name">TopologyAwareEnsemblePlacementPolicy</td>
+<td class="coverageStat">
+  <span class="percent">
+    57,1%
+  </span>
+  <span class="absValue">
+    (8/ 14)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    32,7%
+  </span>
+  <span class="absValue">
+    (37/ 113)
+  </span>
+</td>
+</tr>
+  <tr>
+    <td class="name">TopologyAwareEnsemblePlacementPolicy$DefaultResolver</td>
+<td class="coverageStat">
+  <span class="percent">
+    66,7%
+  </span>
+  <span class="absValue">
+    (2/ 3)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    91,7%
+  </span>
+  <span class="absValue">
+    (11/ 12)
+  </span>
+</td>
+  </tr>
+  <tr>
+    <td class="name">TopologyAwareEnsemblePlacementPolicy$DNSResolverDecorator</td>
+<td class="coverageStat">
+  <span class="percent">
+    75%
+  </span>
+  <span class="absValue">
+    (3/ 4)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    55,2%
+  </span>
+  <span class="absValue">
+    (16/ 29)
+  </span>
+</td>
+  </tr>
+  <tr>
+    <td class="name">TopologyAwareEnsemblePlacementPolicy$EnsembleForReplacementWithNoConstraints</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 5)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 6)
+  </span>
+</td>
+  </tr>
+  <tr>
+    <td class="name">TopologyAwareEnsemblePlacementPolicy$RRTopologyAwareCoverageEnsemble</td>
+<td class="coverageStat">
+  <span class="percent">
+    33,3%
+  </span>
+  <span class="absValue">
+    (3/ 9)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    30,8%
+  </span>
+  <span class="absValue">
+    (28/ 91)
+  </span>
+</td>
+  </tr>
+  <tr>
+    <td class="name">TopologyAwareEnsemblePlacementPolicy$RRTopologyAwareCoverageEnsemble$CoverageSet</td>
+  </tr>
+  <tr>
+    <td class="name">TopologyAwareEnsemblePlacementPolicy$RRTopologyAwareCoverageEnsemble$RackOrRegionDurabilityCoverageSet</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 5)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 62)
+  </span>
+</td>
+  </tr>
+  <tr>
+    <td class="name">TopologyAwareEnsemblePlacementPolicy$RRTopologyAwareCoverageEnsemble$RackQuorumCoverageSet</td>
+<td class="coverageStat">
+  <span class="percent">
+    50%
+  </span>
+  <span class="absValue">
+    (2/ 4)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    36,4%
+  </span>
+  <span class="absValue">
+    (8/ 22)
+  </span>
+</td>
+  </tr>
+  <tr>
+    <td class="name">TopologyAwareEnsemblePlacementPolicy$TruePredicate</td>
+<td class="coverageStat">
+  <span class="percent">
+    66,7%
+  </span>
+  <span class="absValue">
+    (2/ 3)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    66,7%
+  </span>
+  <span class="absValue">
+    (2/ 3)
+  </span>
+</td>
+  </tr>
+<tr>
+  <td class="name"><strong>total</strong></td>
+<td class="coverageStat">
+  <span class="percent">
+    42,6%
+  </span>
+  <span class="absValue">
+    (20/ 47)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    30,2%
+  </span>
+  <span class="absValue">
+    (102/ 338)
+  </span>
+</td>
+</tr>
+</table>
+
+<br/>
+<br/>
+
+
+<div class="sourceCode"><i>1</i>&nbsp;/*
+<i>2</i>&nbsp; * Licensed to the Apache Software Foundation (ASF) under one
+<i>3</i>&nbsp; * or more contributor license agreements.  See the NOTICE file
+<i>4</i>&nbsp; * distributed with this work for additional information
+<i>5</i>&nbsp; * regarding copyright ownership.  The ASF licenses this file
+<i>6</i>&nbsp; * to you under the Apache License, Version 2.0 (the
+<i>7</i>&nbsp; * &quot;License&quot;); you may not use this file except in compliance
+<i>8</i>&nbsp; * with the License.  You may obtain a copy of the License at
+<i>9</i>&nbsp; *
+<i>10</i>&nbsp; *     http://www.apache.org/licenses/LICENSE-2.0
+<i>11</i>&nbsp; *
+<i>12</i>&nbsp; * Unless required by applicable law or agreed to in writing, software
+<i>13</i>&nbsp; * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+<i>14</i>&nbsp; * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+<i>15</i>&nbsp; * See the License for the specific language governing permissions and
+<i>16</i>&nbsp; * limitations under the License.
+<i>17</i>&nbsp; */
+<i>18</i>&nbsp;package org.apache.bookkeeper.client;
+<i>19</i>&nbsp;
+<i>20</i>&nbsp;import static com.google.common.base.Preconditions.checkNotNull;
+<i>21</i>&nbsp;import static org.apache.bookkeeper.bookie.BookKeeperServerStats.BOOKIES_JOINED;
+<i>22</i>&nbsp;import static org.apache.bookkeeper.bookie.BookKeeperServerStats.BOOKIES_LEFT;
+<i>23</i>&nbsp;import static org.apache.bookkeeper.bookie.BookKeeperServerStats.FAILED_TO_RESOLVE_NETWORK_LOCATION_COUNTER;
+<i>24</i>&nbsp;
+<i>25</i>&nbsp;import com.google.common.collect.ImmutableSet;
+<i>26</i>&nbsp;import com.google.common.collect.Lists;
+<i>27</i>&nbsp;import com.google.common.collect.Maps;
+<i>28</i>&nbsp;import com.google.common.collect.Sets;
+<i>29</i>&nbsp;
+<i>30</i>&nbsp;import java.util.ArrayList;
+<i>31</i>&nbsp;import java.util.Collection;
+<i>32</i>&nbsp;import java.util.Collections;
+<i>33</i>&nbsp;import java.util.HashMap;
+<i>34</i>&nbsp;import java.util.HashSet;
+<i>35</i>&nbsp;import java.util.List;
+<i>36</i>&nbsp;import java.util.Map;
+<i>37</i>&nbsp;import java.util.Set;
+<i>38</i>&nbsp;import java.util.concurrent.ThreadLocalRandom;
+<i>39</i>&nbsp;import java.util.concurrent.locks.ReentrantReadWriteLock;
+<i>40</i>&nbsp;import java.util.function.Supplier;
+<i>41</i>&nbsp;
+<i>42</i>&nbsp;import org.apache.bookkeeper.client.BookieInfoReader.BookieInfo;
+<i>43</i>&nbsp;import org.apache.bookkeeper.client.WeightedRandomSelection.WeightedObject;
+<i>44</i>&nbsp;import org.apache.bookkeeper.net.BookieNode;
+<i>45</i>&nbsp;import org.apache.bookkeeper.net.BookieSocketAddress;
+<i>46</i>&nbsp;import org.apache.bookkeeper.net.DNSToSwitchMapping;
+<i>47</i>&nbsp;import org.apache.bookkeeper.net.NetUtils;
+<i>48</i>&nbsp;import org.apache.bookkeeper.net.NetworkTopology;
+<i>49</i>&nbsp;import org.apache.bookkeeper.net.Node;
+<i>50</i>&nbsp;import org.apache.bookkeeper.net.NodeBase;
+<i>51</i>&nbsp;import org.apache.bookkeeper.stats.Counter;
+<i>52</i>&nbsp;import org.apache.bookkeeper.stats.OpStatsLogger;
+<i>53</i>&nbsp;import org.apache.bookkeeper.stats.annotations.StatsDoc;
+<i>54</i>&nbsp;import org.slf4j.Logger;
+<i>55</i>&nbsp;import org.slf4j.LoggerFactory;
+<i>56</i>&nbsp;
+<b class="fc"><i>57</i>&nbsp;abstract class TopologyAwareEnsemblePlacementPolicy implements</b>
+<i>58</i>&nbsp;        ITopologyAwareEnsemblePlacementPolicy&lt;BookieNode&gt; {
+<b class="fc"><i>59</i>&nbsp;    static final Logger LOG = LoggerFactory.getLogger(TopologyAwareEnsemblePlacementPolicy.class);</b>
+<i>60</i>&nbsp;    public static final String REPP_DNS_RESOLVER_CLASS = &quot;reppDnsResolverClass&quot;;
+<b class="fc"><i>61</i>&nbsp;    protected final Map&lt;BookieSocketAddress, BookieNode&gt; knownBookies = new HashMap&lt;BookieSocketAddress, BookieNode&gt;();</b>
+<b class="fc"><i>62</i>&nbsp;    protected final ReentrantReadWriteLock rwLock = new ReentrantReadWriteLock();</b>
+<b class="fc"><i>63</i>&nbsp;    protected Map&lt;BookieNode, WeightedObject&gt; bookieInfoMap = new HashMap&lt;BookieNode, WeightedObject&gt;();</b>
+<i>64</i>&nbsp;    // Initialize to empty set
+<b class="fc"><i>65</i>&nbsp;    protected ImmutableSet&lt;BookieSocketAddress&gt; readOnlyBookies = ImmutableSet.of();</b>
+<i>66</i>&nbsp;    boolean isWeighted;
+<i>67</i>&nbsp;    protected WeightedRandomSelection&lt;BookieNode&gt; weightedSelection;
+<i>68</i>&nbsp;    // for now, we just maintain the writable bookies&#39; topology
+<i>69</i>&nbsp;    protected NetworkTopology topology;
+<i>70</i>&nbsp;    protected DNSToSwitchMapping dnsResolver;
+<b class="fc"><i>71</i>&nbsp;    @StatsDoc(</b>
+<i>72</i>&nbsp;            name = BOOKIES_JOINED,
+<i>73</i>&nbsp;            help = &quot;The distribution of number of bookies joined the cluster on each network topology change&quot;
+<i>74</i>&nbsp;    )
+<i>75</i>&nbsp;    protected OpStatsLogger bookiesJoinedCounter = null;
+<b class="fc"><i>76</i>&nbsp;    @StatsDoc(</b>
+<i>77</i>&nbsp;        name = BOOKIES_LEFT,
+<i>78</i>&nbsp;        help = &quot;The distribution of number of bookies left the cluster on each network topology change&quot;
+<i>79</i>&nbsp;    )
+<i>80</i>&nbsp;    protected OpStatsLogger bookiesLeftCounter = null;
+<i>81</i>&nbsp;
+<b class="fc"><i>82</i>&nbsp;    protected static class TruePredicate implements Predicate&lt;BookieNode&gt; {</b>
+<b class="fc"><i>83</i>&nbsp;        public static final TruePredicate INSTANCE = new TruePredicate();</b>
+<i>84</i>&nbsp;
+<i>85</i>&nbsp;        @Override
+<i>86</i>&nbsp;        public boolean apply(BookieNode candidate, Ensemble chosenNodes) {
+<b class="nc"><i>87</i>&nbsp;            return true;</b>
+<i>88</i>&nbsp;        }
+<i>89</i>&nbsp;    }
+<i>90</i>&nbsp;
+<b class="nc"><i>91</i>&nbsp;    protected static class EnsembleForReplacementWithNoConstraints implements Ensemble&lt;BookieNode&gt; {</b>
+<i>92</i>&nbsp;
+<b class="nc"><i>93</i>&nbsp;        public static final EnsembleForReplacementWithNoConstraints INSTANCE =</b>
+<i>94</i>&nbsp;            new EnsembleForReplacementWithNoConstraints();
+<b class="nc"><i>95</i>&nbsp;        static final List&lt;BookieSocketAddress&gt; EMPTY_LIST = new ArrayList&lt;BookieSocketAddress&gt;(0);</b>
+<i>96</i>&nbsp;
+<i>97</i>&nbsp;        @Override
+<i>98</i>&nbsp;        public boolean addNode(BookieNode node) {
+<i>99</i>&nbsp;            // do nothing
+<b class="nc"><i>100</i>&nbsp;            return true;</b>
+<i>101</i>&nbsp;        }
+<i>102</i>&nbsp;
+<i>103</i>&nbsp;        @Override
+<i>104</i>&nbsp;        public List&lt;BookieSocketAddress&gt; toList() {
+<b class="nc"><i>105</i>&nbsp;            return EMPTY_LIST;</b>
+<i>106</i>&nbsp;        }
+<i>107</i>&nbsp;
+<i>108</i>&nbsp;        /**
+<i>109</i>&nbsp;         * Validates if an ensemble is valid.
+<i>110</i>&nbsp;         *
+<i>111</i>&nbsp;         * @return true if the ensemble is valid; false otherwise
+<i>112</i>&nbsp;         */
+<i>113</i>&nbsp;        @Override
+<i>114</i>&nbsp;        public boolean validate() {
+<b class="nc"><i>115</i>&nbsp;            return true;</b>
+<i>116</i>&nbsp;        }
+<i>117</i>&nbsp;
+<i>118</i>&nbsp;    }
+<i>119</i>&nbsp;
+<i>120</i>&nbsp;    /**
+<i>121</i>&nbsp;     * A predicate checking the rack coverage for write quorum in {@link RoundRobinDistributionSchedule},
+<i>122</i>&nbsp;     * which ensures that a write quorum should be covered by at least two racks.
+<i>123</i>&nbsp;     */
+<i>124</i>&nbsp;    protected static class RRTopologyAwareCoverageEnsemble implements Predicate&lt;BookieNode&gt;, Ensemble&lt;BookieNode&gt; {
+<i>125</i>&nbsp;
+<i>126</i>&nbsp;        protected interface CoverageSet {
+<i>127</i>&nbsp;            boolean apply(BookieNode candidate);
+<i>128</i>&nbsp;            void addBookie(BookieNode candidate);
+<i>129</i>&nbsp;            CoverageSet duplicate();
+<i>130</i>&nbsp;        }
+<i>131</i>&nbsp;
+<i>132</i>&nbsp;        protected class RackQuorumCoverageSet implements CoverageSet {
+<b class="fc"><i>133</i>&nbsp;            HashSet&lt;String&gt; racksOrRegionsInQuorum = new HashSet&lt;String&gt;();</b>
+<b class="fc"><i>134</i>&nbsp;            int seenBookies = 0;</b>
+<i>135</i>&nbsp;            private final int minNumRacksPerWriteQuorum;
+<i>136</i>&nbsp;
+<b class="fc"><i>137</i>&nbsp;            protected RackQuorumCoverageSet(int minNumRacksPerWriteQuorum) {</b>
+<b class="fc"><i>138</i>&nbsp;                this.minNumRacksPerWriteQuorum = Math.min(writeQuorumSize, minNumRacksPerWriteQuorum);</b>
+<b class="fc"><i>139</i>&nbsp;            }</b>
+<i>140</i>&nbsp;
+<i>141</i>&nbsp;            @Override
+<i>142</i>&nbsp;            public boolean apply(BookieNode candidate) {
+<i>143</i>&nbsp;                // If we don&#39;t have sufficient members in the write quorum; then we cant enforce
+<i>144</i>&nbsp;                // rack/region diversity
+<b class="nc"><i>145</i>&nbsp;                if (writeQuorumSize &lt; 2) {</b>
+<b class="nc"><i>146</i>&nbsp;                    return true;</b>
+<i>147</i>&nbsp;                }
+<i>148</i>&nbsp;
+<i>149</i>&nbsp;                /*
+<i>150</i>&nbsp;                 * allow the initial writeQuorumSize-minRacksToWriteTo+1 bookies
+<i>151</i>&nbsp;                 * to be placed on any rack(including on a single rack). But
+<i>152</i>&nbsp;                 * after that make sure that with each new bookie chosen, we
+<i>153</i>&nbsp;                 * will be able to satisfy the minRackToWriteTo condition
+<i>154</i>&nbsp;                 * eventually
+<i>155</i>&nbsp;                 */
+<b class="nc"><i>156</i>&nbsp;                if (seenBookies + minNumRacksPerWriteQuorum - 1 &gt;= writeQuorumSize) {</b>
+<b class="nc"><i>157</i>&nbsp;                    int numRacks = racksOrRegionsInQuorum.size();</b>
+<b class="nc"><i>158</i>&nbsp;                    if (!racksOrRegionsInQuorum.contains(candidate.getNetworkLocation(distanceFromLeaves))) {</b>
+<b class="nc"><i>159</i>&nbsp;                        numRacks++;</b>
+<i>160</i>&nbsp;                    }
+<b class="nc"><i>161</i>&nbsp;                    if (numRacks &gt;= minNumRacksPerWriteQuorum</b>
+<i>162</i>&nbsp;                            || ((writeQuorumSize - seenBookies - 1) &gt;= (minNumRacksPerWriteQuorum - numRacks))) {
+<i>163</i>&nbsp;                        /*
+<i>164</i>&nbsp;                         * either we have reached our goal or we still have a
+<i>165</i>&nbsp;                         * few bookies to be selected with which to catch up to
+<i>166</i>&nbsp;                         * the goal
+<i>167</i>&nbsp;                         */
+<b class="nc"><i>168</i>&nbsp;                        return true;</b>
+<i>169</i>&nbsp;                    } else {
+<b class="nc"><i>170</i>&nbsp;                        return false;</b>
+<i>171</i>&nbsp;                    }
+<i>172</i>&nbsp;                }
+<b class="nc"><i>173</i>&nbsp;                return true;</b>
+<i>174</i>&nbsp;            }
+<i>175</i>&nbsp;
+<i>176</i>&nbsp;            @Override
+<i>177</i>&nbsp;            public void addBookie(BookieNode candidate) {
+<b class="fc"><i>178</i>&nbsp;                ++seenBookies;</b>
+<b class="fc"><i>179</i>&nbsp;                racksOrRegionsInQuorum.add(candidate.getNetworkLocation(distanceFromLeaves));</b>
+<b class="fc"><i>180</i>&nbsp;            }</b>
+<i>181</i>&nbsp;
+<i>182</i>&nbsp;            @Override
+<i>183</i>&nbsp;            public RackQuorumCoverageSet duplicate() {
+<b class="nc"><i>184</i>&nbsp;                RackQuorumCoverageSet ret = new RackQuorumCoverageSet(this.minNumRacksPerWriteQuorum);</b>
+<b class="nc"><i>185</i>&nbsp;                ret.racksOrRegionsInQuorum = Sets.newHashSet(this.racksOrRegionsInQuorum);</b>
+<b class="nc"><i>186</i>&nbsp;                ret.seenBookies = this.seenBookies;</b>
+<b class="nc"><i>187</i>&nbsp;                return ret;</b>
+<i>188</i>&nbsp;            }
+<i>189</i>&nbsp;        }
+<i>190</i>&nbsp;
+<i>191</i>&nbsp;        protected class RackOrRegionDurabilityCoverageSet implements CoverageSet {
+<b class="nc"><i>192</i>&nbsp;            HashMap&lt;String, Integer&gt; allocationToRacksOrRegions = new HashMap&lt;String, Integer&gt;();</b>
+<i>193</i>&nbsp;
+<b class="nc"><i>194</i>&nbsp;            RackOrRegionDurabilityCoverageSet() {</b>
+<b class="nc"><i>195</i>&nbsp;                for (String rackOrRegion: racksOrRegions) {</b>
+<b class="nc"><i>196</i>&nbsp;                    allocationToRacksOrRegions.put(rackOrRegion, 0);</b>
+<b class="nc"><i>197</i>&nbsp;                }</b>
+<b class="nc"><i>198</i>&nbsp;            }</b>
+<i>199</i>&nbsp;
+<i>200</i>&nbsp;            @Override
+<i>201</i>&nbsp;            public RackOrRegionDurabilityCoverageSet duplicate() {
+<b class="nc"><i>202</i>&nbsp;                RackOrRegionDurabilityCoverageSet ret = new RackOrRegionDurabilityCoverageSet();</b>
+<b class="nc"><i>203</i>&nbsp;                ret.allocationToRacksOrRegions = Maps.newHashMap(this.allocationToRacksOrRegions);</b>
+<b class="nc"><i>204</i>&nbsp;                return ret;</b>
+<i>205</i>&nbsp;            }
+<i>206</i>&nbsp;
+<i>207</i>&nbsp;            private boolean checkSumOfSubsetWithinLimit(final Set&lt;String&gt; includedRacksOrRegions,
+<i>208</i>&nbsp;                            final Set&lt;String&gt; remainingRacksOrRegions,
+<i>209</i>&nbsp;                            int subsetSize,
+<i>210</i>&nbsp;                            int maxAllowedSum) {
+<b class="nc"><i>211</i>&nbsp;                if (remainingRacksOrRegions.isEmpty() || (subsetSize &lt;= 0)) {</b>
+<b class="nc"><i>212</i>&nbsp;                    if (maxAllowedSum &lt; 0) {</b>
+<b class="nc"><i>213</i>&nbsp;                        if (LOG.isTraceEnabled()) {</b>
+<b class="nc"><i>214</i>&nbsp;                            LOG.trace(</b>
+<i>215</i>&nbsp;                                    &quot;CHECK FAILED: RacksOrRegions Included {} Remaining {}, subsetSize {}, &quot;
+<i>216</i>&nbsp;                                    + &quot;maxAllowedSum {}&quot;,
+<b class="nc"><i>217</i>&nbsp;                                    includedRacksOrRegions, remainingRacksOrRegions, subsetSize, maxAllowedSum);</b>
+<i>218</i>&nbsp;                        }
+<i>219</i>&nbsp;                    }
+<b class="nc"><i>220</i>&nbsp;                    return (maxAllowedSum &gt;= 0);</b>
+<i>221</i>&nbsp;                }
+<i>222</i>&nbsp;
+<b class="nc"><i>223</i>&nbsp;                for (String rackOrRegion: remainingRacksOrRegions) {</b>
+<b class="nc"><i>224</i>&nbsp;                    Integer currentAllocation = allocationToRacksOrRegions.get(rackOrRegion);</b>
+<b class="nc"><i>225</i>&nbsp;                    if (currentAllocation == null) {</b>
+<b class="nc"><i>226</i>&nbsp;                        allocationToRacksOrRegions.put(rackOrRegion, 0);</b>
+<b class="nc"><i>227</i>&nbsp;                        currentAllocation = 0;</b>
+<i>228</i>&nbsp;                    }
+<i>229</i>&nbsp;
+<b class="nc"><i>230</i>&nbsp;                    if (currentAllocation &gt; maxAllowedSum) {</b>
+<b class="nc"><i>231</i>&nbsp;                        if (LOG.isTraceEnabled()) {</b>
+<b class="nc"><i>232</i>&nbsp;                            LOG.trace(</b>
+<i>233</i>&nbsp;                                    &quot;CHECK FAILED: RacksOrRegions Included {} Candidate {}, subsetSize {}, &quot;
+<i>234</i>&nbsp;                                    + &quot;maxAllowedSum {}&quot;,
+<b class="nc"><i>235</i>&nbsp;                                    includedRacksOrRegions, rackOrRegion, subsetSize, maxAllowedSum);</b>
+<i>236</i>&nbsp;                        }
+<b class="nc"><i>237</i>&nbsp;                        return false;</b>
+<i>238</i>&nbsp;                    } else {
+<b class="nc"><i>239</i>&nbsp;                        Set&lt;String&gt; remainingElements = new HashSet&lt;String&gt;(remainingRacksOrRegions);</b>
+<b class="nc"><i>240</i>&nbsp;                        Set&lt;String&gt; includedElements = new HashSet&lt;String&gt;(includedRacksOrRegions);</b>
+<b class="nc"><i>241</i>&nbsp;                        includedElements.add(rackOrRegion);</b>
+<b class="nc"><i>242</i>&nbsp;                        remainingElements.remove(rackOrRegion);</b>
+<b class="nc"><i>243</i>&nbsp;                        if (!checkSumOfSubsetWithinLimit(includedElements,</b>
+<i>244</i>&nbsp;                            remainingElements,
+<i>245</i>&nbsp;                            subsetSize - 1,
+<b class="nc"><i>246</i>&nbsp;                            maxAllowedSum - currentAllocation)) {</b>
+<b class="nc"><i>247</i>&nbsp;                            return false;</b>
+<i>248</i>&nbsp;                        }
+<i>249</i>&nbsp;                    }
+<b class="nc"><i>250</i>&nbsp;                }</b>
+<i>251</i>&nbsp;
+<b class="nc"><i>252</i>&nbsp;                return true;</b>
+<i>253</i>&nbsp;            }
+<i>254</i>&nbsp;
+<i>255</i>&nbsp;            @Override
+<i>256</i>&nbsp;            public boolean apply(BookieNode candidate) {
+<b class="nc"><i>257</i>&nbsp;                if (minRacksOrRegionsForDurability &lt;= 1) {</b>
+<b class="nc"><i>258</i>&nbsp;                    return true;</b>
+<i>259</i>&nbsp;                }
+<i>260</i>&nbsp;
+<b class="nc"><i>261</i>&nbsp;                String candidateRackOrRegion = candidate.getNetworkLocation(distanceFromLeaves);</b>
+<b class="nc"><i>262</i>&nbsp;                candidateRackOrRegion = candidateRackOrRegion.startsWith(NodeBase.PATH_SEPARATOR_STR)</b>
+<b class="nc"><i>263</i>&nbsp;                    ? candidateRackOrRegion.substring(1) : candidateRackOrRegion;</b>
+<b class="nc"><i>264</i>&nbsp;                final Set&lt;String&gt; remainingRacksOrRegions = new HashSet&lt;String&gt;(racksOrRegions);</b>
+<b class="nc"><i>265</i>&nbsp;                remainingRacksOrRegions.remove(candidateRackOrRegion);</b>
+<b class="nc"><i>266</i>&nbsp;                final Set&lt;String&gt; includedRacksOrRegions = new HashSet&lt;String&gt;();</b>
+<b class="nc"><i>267</i>&nbsp;                includedRacksOrRegions.add(candidateRackOrRegion);</b>
+<i>268</i>&nbsp;
+<i>269</i>&nbsp;                // If minRacksOrRegionsForDurability are required for durability; we must ensure that
+<i>270</i>&nbsp;                // no subset of (minRacksOrRegionsForDurability - 1) regions have ackQuorumSize
+<i>271</i>&nbsp;                // We are only modifying candidateRackOrRegion if we accept this bookie, so lets only
+<i>272</i>&nbsp;                // find sets that contain this candidateRackOrRegion
+<b class="nc"><i>273</i>&nbsp;                Integer currentAllocation = allocationToRacksOrRegions.get(candidateRackOrRegion);</b>
+<b class="nc"><i>274</i>&nbsp;                if (currentAllocation == null) {</b>
+<b class="nc"><i>275</i>&nbsp;                    LOG.info(&quot;Detected a region that was not initialized {}&quot;, candidateRackOrRegion);</b>
+<b class="nc"><i>276</i>&nbsp;                    if (candidateRackOrRegion.equals(NetworkTopology.DEFAULT_REGION)) {</b>
+<b class="nc"><i>277</i>&nbsp;                        LOG.error(&quot;Failed to resolve network location {}&quot;, candidate);</b>
+<b class="nc"><i>278</i>&nbsp;                    } else if (!racksOrRegions.contains(candidateRackOrRegion)) {</b>
+<b class="nc"><i>279</i>&nbsp;                        LOG.error(&quot;Unknown region detected {}&quot;, candidateRackOrRegion);</b>
+<i>280</i>&nbsp;                    }
+<b class="nc"><i>281</i>&nbsp;                    allocationToRacksOrRegions.put(candidateRackOrRegion, 0);</b>
+<b class="nc"><i>282</i>&nbsp;                    currentAllocation = 0;</b>
+<i>283</i>&nbsp;                }
+<i>284</i>&nbsp;
+<b class="nc"><i>285</i>&nbsp;                int inclusiveLimit = (ackQuorumSize - 1) - (currentAllocation + 1);</b>
+<b class="nc"><i>286</i>&nbsp;                return checkSumOfSubsetWithinLimit(includedRacksOrRegions,</b>
+<i>287</i>&nbsp;                        remainingRacksOrRegions, minRacksOrRegionsForDurability - 2, inclusiveLimit);
+<i>288</i>&nbsp;            }
+<i>289</i>&nbsp;
+<i>290</i>&nbsp;            @Override
+<i>291</i>&nbsp;            public void addBookie(BookieNode candidate) {
+<b class="nc"><i>292</i>&nbsp;                String candidateRackOrRegion = candidate.getNetworkLocation(distanceFromLeaves);</b>
+<b class="nc"><i>293</i>&nbsp;                candidateRackOrRegion = candidateRackOrRegion.startsWith(NodeBase.PATH_SEPARATOR_STR)</b>
+<b class="nc"><i>294</i>&nbsp;                    ? candidateRackOrRegion.substring(1) : candidateRackOrRegion;</b>
+<b class="nc"><i>295</i>&nbsp;                int oldCount = 0;</b>
+<b class="nc"><i>296</i>&nbsp;                if (null != allocationToRacksOrRegions.get(candidateRackOrRegion)) {</b>
+<b class="nc"><i>297</i>&nbsp;                    oldCount = allocationToRacksOrRegions.get(candidateRackOrRegion);</b>
+<i>298</i>&nbsp;                }
+<b class="nc"><i>299</i>&nbsp;                allocationToRacksOrRegions.put(candidateRackOrRegion, oldCount + 1);</b>
+<b class="nc"><i>300</i>&nbsp;            }</b>
+<i>301</i>&nbsp;        }
+<i>302</i>&nbsp;
+<i>303</i>&nbsp;        final int distanceFromLeaves;
+<i>304</i>&nbsp;        final int ensembleSize;
+<i>305</i>&nbsp;        final int writeQuorumSize;
+<i>306</i>&nbsp;        final int ackQuorumSize;
+<i>307</i>&nbsp;        final int minRacksOrRegionsForDurability;
+<i>308</i>&nbsp;        final int minNumRacksPerWriteQuorum;
+<i>309</i>&nbsp;        final List&lt;BookieNode&gt; chosenNodes;
+<i>310</i>&nbsp;        final Set&lt;String&gt; racksOrRegions;
+<i>311</i>&nbsp;        private final CoverageSet[] quorums;
+<i>312</i>&nbsp;        final Predicate&lt;BookieNode&gt; parentPredicate;
+<i>313</i>&nbsp;        final Ensemble&lt;BookieNode&gt; parentEnsemble;
+<i>314</i>&nbsp;
+<b class="nc"><i>315</i>&nbsp;        protected RRTopologyAwareCoverageEnsemble(RRTopologyAwareCoverageEnsemble that) {</b>
+<b class="nc"><i>316</i>&nbsp;            this.distanceFromLeaves = that.distanceFromLeaves;</b>
+<b class="nc"><i>317</i>&nbsp;            this.ensembleSize = that.ensembleSize;</b>
+<b class="nc"><i>318</i>&nbsp;            this.writeQuorumSize = that.writeQuorumSize;</b>
+<b class="nc"><i>319</i>&nbsp;            this.ackQuorumSize = that.ackQuorumSize;</b>
+<b class="nc"><i>320</i>&nbsp;            this.chosenNodes = Lists.newArrayList(that.chosenNodes);</b>
+<b class="nc"><i>321</i>&nbsp;            this.quorums = new CoverageSet[that.quorums.length];</b>
+<b class="nc"><i>322</i>&nbsp;            for (int i = 0; i &lt; that.quorums.length; i++) {</b>
+<b class="nc"><i>323</i>&nbsp;                if (null != that.quorums[i]) {</b>
+<b class="nc"><i>324</i>&nbsp;                    this.quorums[i] = that.quorums[i].duplicate();</b>
+<i>325</i>&nbsp;                } else {
+<b class="nc"><i>326</i>&nbsp;                    this.quorums[i] = null;</b>
+<i>327</i>&nbsp;                }
+<i>328</i>&nbsp;            }
+<b class="nc"><i>329</i>&nbsp;            this.parentPredicate = that.parentPredicate;</b>
+<b class="nc"><i>330</i>&nbsp;            this.parentEnsemble = that.parentEnsemble;</b>
+<b class="nc"><i>331</i>&nbsp;            if (null != that.racksOrRegions) {</b>
+<b class="nc"><i>332</i>&nbsp;                this.racksOrRegions = new HashSet&lt;String&gt;(that.racksOrRegions);</b>
+<i>333</i>&nbsp;            } else {
+<b class="nc"><i>334</i>&nbsp;                this.racksOrRegions = null;</b>
+<i>335</i>&nbsp;            }
+<b class="nc"><i>336</i>&nbsp;            this.minRacksOrRegionsForDurability = that.minRacksOrRegionsForDurability;</b>
+<b class="nc"><i>337</i>&nbsp;            this.minNumRacksPerWriteQuorum = that.minNumRacksPerWriteQuorum;</b>
+<b class="nc"><i>338</i>&nbsp;        }</b>
+<i>339</i>&nbsp;
+<i>340</i>&nbsp;        protected RRTopologyAwareCoverageEnsemble(int ensembleSize,
+<i>341</i>&nbsp;                                                  int writeQuorumSize,
+<i>342</i>&nbsp;                                                  int ackQuorumSize,
+<i>343</i>&nbsp;                                                  int distanceFromLeaves,
+<i>344</i>&nbsp;                                                  Set&lt;String&gt; racksOrRegions,
+<i>345</i>&nbsp;                                                  int minRacksOrRegionsForDurability,
+<i>346</i>&nbsp;                                                  int minNumRacksPerWriteQuorum) {
+<b class="nc"><i>347</i>&nbsp;            this(ensembleSize, writeQuorumSize, ackQuorumSize, distanceFromLeaves, null, null, racksOrRegions,</b>
+<i>348</i>&nbsp;                    minRacksOrRegionsForDurability, minNumRacksPerWriteQuorum);
+<b class="nc"><i>349</i>&nbsp;        }</b>
+<i>350</i>&nbsp;
+<i>351</i>&nbsp;        protected RRTopologyAwareCoverageEnsemble(int ensembleSize,
+<i>352</i>&nbsp;                                                  int writeQuorumSize,
+<i>353</i>&nbsp;                                                  int ackQuorumSize,
+<i>354</i>&nbsp;                                                  int distanceFromLeaves,
+<i>355</i>&nbsp;                                                  Ensemble&lt;BookieNode&gt; parentEnsemble,
+<i>356</i>&nbsp;                                                  Predicate&lt;BookieNode&gt; parentPredicate,
+<i>357</i>&nbsp;                                                  int minNumRacksPerWriteQuorum) {
+<b class="fc"><i>358</i>&nbsp;            this(ensembleSize, writeQuorumSize, ackQuorumSize, distanceFromLeaves, parentEnsemble, parentPredicate,</b>
+<i>359</i>&nbsp;                 null, 0, minNumRacksPerWriteQuorum);
+<b class="fc"><i>360</i>&nbsp;        }</b>
+<i>361</i>&nbsp;
+<i>362</i>&nbsp;        protected RRTopologyAwareCoverageEnsemble(int ensembleSize,
+<i>363</i>&nbsp;                                                  int writeQuorumSize,
+<i>364</i>&nbsp;                                                  int ackQuorumSize,
+<i>365</i>&nbsp;                                                  int distanceFromLeaves,
+<i>366</i>&nbsp;                                                  Ensemble&lt;BookieNode&gt; parentEnsemble,
+<i>367</i>&nbsp;                                                  Predicate&lt;BookieNode&gt; parentPredicate,
+<i>368</i>&nbsp;                                                  Set&lt;String&gt; racksOrRegions,
+<i>369</i>&nbsp;                                                  int minRacksOrRegionsForDurability,
+<b class="fc"><i>370</i>&nbsp;                                                  int minNumRacksPerWriteQuorum) {</b>
+<b class="fc"><i>371</i>&nbsp;            this.ensembleSize = ensembleSize;</b>
+<b class="fc"><i>372</i>&nbsp;            this.writeQuorumSize = writeQuorumSize;</b>
+<b class="fc"><i>373</i>&nbsp;            this.ackQuorumSize = ackQuorumSize;</b>
+<b class="fc"><i>374</i>&nbsp;            this.distanceFromLeaves = distanceFromLeaves;</b>
+<b class="fc"><i>375</i>&nbsp;            this.chosenNodes = new ArrayList&lt;BookieNode&gt;(ensembleSize);</b>
+<b class="pc"><i>376</i>&nbsp;            if (minRacksOrRegionsForDurability &gt; 0) {</b>
+<b class="nc"><i>377</i>&nbsp;                this.quorums = new RackOrRegionDurabilityCoverageSet[ensembleSize];</b>
+<i>378</i>&nbsp;            } else {
+<b class="fc"><i>379</i>&nbsp;                this.quorums = new RackQuorumCoverageSet[ensembleSize];</b>
+<i>380</i>&nbsp;            }
+<b class="fc"><i>381</i>&nbsp;            this.parentEnsemble = parentEnsemble;</b>
+<b class="fc"><i>382</i>&nbsp;            this.parentPredicate = parentPredicate;</b>
+<b class="fc"><i>383</i>&nbsp;            this.racksOrRegions = racksOrRegions;</b>
+<b class="fc"><i>384</i>&nbsp;            this.minRacksOrRegionsForDurability = minRacksOrRegionsForDurability;</b>
+<b class="fc"><i>385</i>&nbsp;            this.minNumRacksPerWriteQuorum = minNumRacksPerWriteQuorum;</b>
+<b class="fc"><i>386</i>&nbsp;        }</b>
+<i>387</i>&nbsp;
+<i>388</i>&nbsp;        @Override
+<i>389</i>&nbsp;        public boolean apply(BookieNode candidate, Ensemble&lt;BookieNode&gt; ensemble) {
+<b class="nc"><i>390</i>&nbsp;            if (ensemble != this) {</b>
+<b class="nc"><i>391</i>&nbsp;                return false;</b>
+<i>392</i>&nbsp;            }
+<i>393</i>&nbsp;
+<i>394</i>&nbsp;            // An ensemble cannot contain the same node twice
+<b class="nc"><i>395</i>&nbsp;            if (chosenNodes.contains(candidate)) {</b>
+<b class="nc"><i>396</i>&nbsp;                return false;</b>
+<i>397</i>&nbsp;            }
+<i>398</i>&nbsp;
+<i>399</i>&nbsp;            // candidate position
+<b class="nc"><i>400</i>&nbsp;            if ((ensembleSize == writeQuorumSize) &amp;&amp; (minRacksOrRegionsForDurability &gt; 0)) {</b>
+<b class="nc"><i>401</i>&nbsp;                if (null == quorums[0]) {</b>
+<b class="nc"><i>402</i>&nbsp;                    quorums[0] = new RackOrRegionDurabilityCoverageSet();</b>
+<i>403</i>&nbsp;                }
+<b class="nc"><i>404</i>&nbsp;                if (!quorums[0].apply(candidate)) {</b>
+<b class="nc"><i>405</i>&nbsp;                    return false;</b>
+<i>406</i>&nbsp;                }
+<i>407</i>&nbsp;            } else {
+<b class="nc"><i>408</i>&nbsp;                int candidatePos = chosenNodes.size();</b>
+<b class="nc"><i>409</i>&nbsp;                int startPos = candidatePos - writeQuorumSize + 1;</b>
+<b class="nc"><i>410</i>&nbsp;                for (int i = startPos; i &lt;= candidatePos; i++) {</b>
+<b class="nc"><i>411</i>&nbsp;                    int idx = (i + ensembleSize) % ensembleSize;</b>
+<b class="nc"><i>412</i>&nbsp;                    if (null == quorums[idx]) {</b>
+<b class="nc"><i>413</i>&nbsp;                        if (minRacksOrRegionsForDurability &gt; 0) {</b>
+<b class="nc"><i>414</i>&nbsp;                            quorums[idx] = new RackOrRegionDurabilityCoverageSet();</b>
+<i>415</i>&nbsp;                        } else {
+<b class="nc"><i>416</i>&nbsp;                            quorums[idx] = new RackQuorumCoverageSet(this.minNumRacksPerWriteQuorum);</b>
+<i>417</i>&nbsp;                        }
+<i>418</i>&nbsp;                    }
+<b class="nc"><i>419</i>&nbsp;                    if (!quorums[idx].apply(candidate)) {</b>
+<b class="nc"><i>420</i>&nbsp;                        return false;</b>
+<i>421</i>&nbsp;                    }
+<i>422</i>&nbsp;                }
+<i>423</i>&nbsp;            }
+<i>424</i>&nbsp;
+<b class="nc"><i>425</i>&nbsp;            return ((null == parentPredicate) || parentPredicate.apply(candidate, parentEnsemble));</b>
+<i>426</i>&nbsp;        }
+<i>427</i>&nbsp;
+<i>428</i>&nbsp;        @Override
+<i>429</i>&nbsp;        public boolean addNode(BookieNode node) {
+<i>430</i>&nbsp;            // An ensemble cannot contain the same node twice
+<b class="pc"><i>431</i>&nbsp;            if (chosenNodes.contains(node)) {</b>
+<b class="nc"><i>432</i>&nbsp;                return false;</b>
+<i>433</i>&nbsp;            }
+<i>434</i>&nbsp;
+<b class="pc"><i>435</i>&nbsp;            if ((ensembleSize == writeQuorumSize) &amp;&amp; (minRacksOrRegionsForDurability &gt; 0)) {</b>
+<b class="nc"><i>436</i>&nbsp;                if (null == quorums[0]) {</b>
+<b class="nc"><i>437</i>&nbsp;                    quorums[0] = new RackOrRegionDurabilityCoverageSet();</b>
+<i>438</i>&nbsp;                }
+<b class="nc"><i>439</i>&nbsp;                quorums[0].addBookie(node);</b>
+<i>440</i>&nbsp;            } else {
+<b class="fc"><i>441</i>&nbsp;                int candidatePos = chosenNodes.size();</b>
+<b class="fc"><i>442</i>&nbsp;                int startPos = candidatePos - writeQuorumSize + 1;</b>
+<b class="fc"><i>443</i>&nbsp;                for (int i = startPos; i &lt;= candidatePos; i++) {</b>
+<b class="fc"><i>444</i>&nbsp;                    int idx = (i + ensembleSize) % ensembleSize;</b>
+<b class="fc"><i>445</i>&nbsp;                    if (null == quorums[idx]) {</b>
+<b class="pc"><i>446</i>&nbsp;                        if (minRacksOrRegionsForDurability &gt; 0) {</b>
+<b class="nc"><i>447</i>&nbsp;                            quorums[idx] = new RackOrRegionDurabilityCoverageSet();</b>
+<i>448</i>&nbsp;                        } else {
+<b class="fc"><i>449</i>&nbsp;                            quorums[idx] = new RackQuorumCoverageSet(this.minNumRacksPerWriteQuorum);</b>
+<i>450</i>&nbsp;                        }
+<i>451</i>&nbsp;                    }
+<b class="fc"><i>452</i>&nbsp;                    quorums[idx].addBookie(node);</b>
+<i>453</i>&nbsp;                }
+<i>454</i>&nbsp;            }
+<b class="fc"><i>455</i>&nbsp;            chosenNodes.add(node);</b>
+<i>456</i>&nbsp;
+<b class="pc"><i>457</i>&nbsp;            return ((null == parentEnsemble) || parentEnsemble.addNode(node));</b>
+<i>458</i>&nbsp;        }
+<i>459</i>&nbsp;
+<i>460</i>&nbsp;        @Override
+<i>461</i>&nbsp;        public List&lt;BookieSocketAddress&gt; toList() {
+<b class="nc"><i>462</i>&nbsp;            ArrayList&lt;BookieSocketAddress&gt; addresses = new ArrayList&lt;BookieSocketAddress&gt;(ensembleSize);</b>
+<b class="nc"><i>463</i>&nbsp;            for (BookieNode bn : chosenNodes) {</b>
+<b class="nc"><i>464</i>&nbsp;                addresses.add(bn.getAddr());</b>
+<b class="nc"><i>465</i>&nbsp;            }</b>
+<b class="nc"><i>466</i>&nbsp;            return addresses;</b>
+<i>467</i>&nbsp;        }
+<i>468</i>&nbsp;
+<i>469</i>&nbsp;        /**
+<i>470</i>&nbsp;         * Validates if an ensemble is valid.
+<i>471</i>&nbsp;         *
+<i>472</i>&nbsp;         * @return true if the ensemble is valid; false otherwise
+<i>473</i>&nbsp;         */
+<i>474</i>&nbsp;        @Override
+<i>475</i>&nbsp;        public boolean validate() {
+<b class="nc"><i>476</i>&nbsp;            HashSet&lt;BookieSocketAddress&gt; addresses = new HashSet&lt;BookieSocketAddress&gt;(ensembleSize);</b>
+<b class="nc"><i>477</i>&nbsp;            HashSet&lt;String&gt; racksOrRegions = new HashSet&lt;String&gt;();</b>
+<b class="nc"><i>478</i>&nbsp;            for (BookieNode bn : chosenNodes) {</b>
+<b class="nc"><i>479</i>&nbsp;                if (addresses.contains(bn.getAddr())) {</b>
+<b class="nc"><i>480</i>&nbsp;                    return false;</b>
+<i>481</i>&nbsp;                }
+<b class="nc"><i>482</i>&nbsp;                addresses.add(bn.getAddr());</b>
+<b class="nc"><i>483</i>&nbsp;                racksOrRegions.add(bn.getNetworkLocation(distanceFromLeaves));</b>
+<b class="nc"><i>484</i>&nbsp;            }</b>
+<i>485</i>&nbsp;
+<b class="nc"><i>486</i>&nbsp;            return ((minRacksOrRegionsForDurability == 0)</b>
+<b class="nc"><i>487</i>&nbsp;                    || (racksOrRegions.size() &gt;= minRacksOrRegionsForDurability));</b>
+<i>488</i>&nbsp;        }
+<i>489</i>&nbsp;
+<i>490</i>&nbsp;        @Override
+<i>491</i>&nbsp;        public String toString() {
+<b class="nc"><i>492</i>&nbsp;            return chosenNodes.toString();</b>
+<i>493</i>&nbsp;        }
+<i>494</i>&nbsp;    }
+<i>495</i>&nbsp;
+<i>496</i>&nbsp;    static class DefaultResolver implements DNSToSwitchMapping {
+<i>497</i>&nbsp;
+<i>498</i>&nbsp;        final Supplier&lt;String&gt; defaultRackSupplier;
+<i>499</i>&nbsp;
+<b class="fc"><i>500</i>&nbsp;        public DefaultResolver(Supplier&lt;String&gt; defaultRackSupplier) {</b>
+<b class="fc"><i>501</i>&nbsp;            checkNotNull(defaultRackSupplier, &quot;defaultRackSupplier should not be null&quot;);</b>
+<b class="fc"><i>502</i>&nbsp;            this.defaultRackSupplier = defaultRackSupplier;</b>
+<b class="fc"><i>503</i>&nbsp;        }</b>
+<i>504</i>&nbsp;
+<i>505</i>&nbsp;        @Override
+<i>506</i>&nbsp;        public List&lt;String&gt; resolve(List&lt;String&gt; names) {
+<b class="fc"><i>507</i>&nbsp;            List&lt;String&gt; rNames = new ArrayList&lt;String&gt;(names.size());</b>
+<b class="fc"><i>508</i>&nbsp;            for (@SuppressWarnings(&quot;unused&quot;) String name : names) {</b>
+<b class="fc"><i>509</i>&nbsp;                final String defaultRack = defaultRackSupplier.get();</b>
+<b class="fc"><i>510</i>&nbsp;                checkNotNull(defaultRack, &quot;defaultRack cannot be null&quot;);</b>
+<b class="fc"><i>511</i>&nbsp;                rNames.add(defaultRack);</b>
+<b class="fc"><i>512</i>&nbsp;            }</b>
+<b class="fc"><i>513</i>&nbsp;            return rNames;</b>
+<i>514</i>&nbsp;        }
+<i>515</i>&nbsp;
+<i>516</i>&nbsp;        @Override
+<i>517</i>&nbsp;        public void reloadCachedMappings() {
+<i>518</i>&nbsp;            // nop
+<b class="nc"><i>519</i>&nbsp;        }</b>
+<i>520</i>&nbsp;    }
+<i>521</i>&nbsp;
+<i>522</i>&nbsp;    /**
+<i>523</i>&nbsp;     * Decorator for any existing dsn resolver.
+<i>524</i>&nbsp;     * Backfills returned data with appropriate default rack info.
+<i>525</i>&nbsp;     */
+<i>526</i>&nbsp;    static class DNSResolverDecorator implements DNSToSwitchMapping {
+<i>527</i>&nbsp;
+<i>528</i>&nbsp;        final Supplier&lt;String&gt; defaultRackSupplier;
+<i>529</i>&nbsp;        final DNSToSwitchMapping resolver;
+<i>530</i>&nbsp;        @StatsDoc(
+<i>531</i>&nbsp;                name = FAILED_TO_RESOLVE_NETWORK_LOCATION_COUNTER,
+<i>532</i>&nbsp;                help = &quot;total number of times Resolver failed to resolve rack information of a node&quot;
+<i>533</i>&nbsp;        )
+<i>534</i>&nbsp;        final Counter failedToResolveNetworkLocationCounter;
+<i>535</i>&nbsp;
+<i>536</i>&nbsp;        DNSResolverDecorator(DNSToSwitchMapping resolver, Supplier&lt;String&gt; defaultRackSupplier,
+<b class="fc"><i>537</i>&nbsp;                Counter failedToResolveNetworkLocationCounter) {</b>
+<b class="fc"><i>538</i>&nbsp;            checkNotNull(resolver, &quot;Resolver cannot be null&quot;);</b>
+<b class="fc"><i>539</i>&nbsp;            checkNotNull(defaultRackSupplier, &quot;defaultRackSupplier should not be null&quot;);</b>
+<b class="fc"><i>540</i>&nbsp;            this.defaultRackSupplier = defaultRackSupplier;</b>
+<b class="fc"><i>541</i>&nbsp;            this.resolver = resolver;</b>
+<b class="fc"><i>542</i>&nbsp;            this.failedToResolveNetworkLocationCounter = failedToResolveNetworkLocationCounter;</b>
+<b class="fc"><i>543</i>&nbsp;        }</b>
+<i>544</i>&nbsp;
+<i>545</i>&nbsp;        @Override
+<i>546</i>&nbsp;        public List&lt;String&gt; resolve(List&lt;String&gt; names) {
+<b class="pc"><i>547</i>&nbsp;            if (names == null) {</b>
+<b class="nc"><i>548</i>&nbsp;                return Collections.emptyList();</b>
+<i>549</i>&nbsp;            }
+<b class="fc"><i>550</i>&nbsp;            final String defaultRack = defaultRackSupplier.get();</b>
+<b class="fc"><i>551</i>&nbsp;            checkNotNull(defaultRack, &quot;Default rack cannot be null&quot;);</b>
+<i>552</i>&nbsp;
+<b class="fc"><i>553</i>&nbsp;            List&lt;String&gt; rNames = resolver.resolve(names);</b>
+<b class="pc"><i>554</i>&nbsp;            if (rNames != null &amp;&amp; rNames.size() == names.size()) {</b>
+<b class="fc"><i>555</i>&nbsp;                for (int i = 0; i &lt; rNames.size(); ++i) {</b>
+<b class="pc"><i>556</i>&nbsp;                    if (rNames.get(i) == null) {</b>
+<b class="nc"><i>557</i>&nbsp;                        LOG.warn(&quot;Failed to resolve network location for {}, using default rack for it : {}.&quot;,</b>
+<b class="nc"><i>558</i>&nbsp;                                names.get(i), defaultRack);</b>
+<b class="nc"><i>559</i>&nbsp;                        failedToResolveNetworkLocationCounter.inc();</b>
+<b class="nc"><i>560</i>&nbsp;                        rNames.set(i, defaultRack);</b>
+<i>561</i>&nbsp;                    }
+<i>562</i>&nbsp;                }
+<b class="fc"><i>563</i>&nbsp;                return rNames;</b>
+<i>564</i>&nbsp;            }
+<i>565</i>&nbsp;
+<b class="nc"><i>566</i>&nbsp;            LOG.warn(&quot;Failed to resolve network location for {}, using default rack for them : {}.&quot;, names,</b>
+<i>567</i>&nbsp;                    defaultRack);
+<b class="nc"><i>568</i>&nbsp;            rNames = new ArrayList&lt;&gt;(names.size());</b>
+<i>569</i>&nbsp;
+<b class="nc"><i>570</i>&nbsp;            for (int i = 0; i &lt; names.size(); ++i) {</b>
+<b class="nc"><i>571</i>&nbsp;                failedToResolveNetworkLocationCounter.inc();</b>
+<b class="nc"><i>572</i>&nbsp;                rNames.add(defaultRack);</b>
+<i>573</i>&nbsp;            }
+<b class="nc"><i>574</i>&nbsp;            return rNames;</b>
+<i>575</i>&nbsp;        }
+<i>576</i>&nbsp;
+<i>577</i>&nbsp;        @Override
+<i>578</i>&nbsp;        public boolean useHostName() {
+<b class="fc"><i>579</i>&nbsp;            return resolver.useHostName();</b>
+<i>580</i>&nbsp;        }
+<i>581</i>&nbsp;
+<i>582</i>&nbsp;        @Override
+<i>583</i>&nbsp;        public void reloadCachedMappings() {
+<b class="nc"><i>584</i>&nbsp;            resolver.reloadCachedMappings();</b>
+<b class="nc"><i>585</i>&nbsp;        }</b>
+<i>586</i>&nbsp;    }
+<i>587</i>&nbsp;
+<i>588</i>&nbsp;    static Set&lt;String&gt; getNetworkLocations(Set&lt;Node&gt; bookieNodes) {
+<b class="nc"><i>589</i>&nbsp;        Set&lt;String&gt; networkLocs = new HashSet&lt;&gt;();</b>
+<b class="nc"><i>590</i>&nbsp;        for (Node bookieNode : bookieNodes) {</b>
+<b class="nc"><i>591</i>&nbsp;            networkLocs.add(bookieNode.getNetworkLocation());</b>
+<b class="nc"><i>592</i>&nbsp;        }</b>
+<b class="nc"><i>593</i>&nbsp;        return networkLocs;</b>
+<i>594</i>&nbsp;    }
+<i>595</i>&nbsp;
+<i>596</i>&nbsp;    /**
+<i>597</i>&nbsp;     * Shuffle all the entries of an array that matches a mask.
+<i>598</i>&nbsp;     * It assumes all entries with the same mask are contiguous in the array.
+<i>599</i>&nbsp;     */
+<i>600</i>&nbsp;    static void shuffleWithMask(DistributionSchedule.WriteSet writeSet,
+<i>601</i>&nbsp;                                int mask, int bits) {
+<b class="nc"><i>602</i>&nbsp;        int first = -1;</b>
+<b class="nc"><i>603</i>&nbsp;        int last = -1;</b>
+<b class="nc"><i>604</i>&nbsp;        for (int i = 0; i &lt; writeSet.size(); i++) {</b>
+<b class="nc"><i>605</i>&nbsp;            if ((writeSet.get(i) &amp; bits) == mask) {</b>
+<b class="nc"><i>606</i>&nbsp;                if (first == -1) {</b>
+<b class="nc"><i>607</i>&nbsp;                    first = i;</b>
+<i>608</i>&nbsp;                }
+<b class="nc"><i>609</i>&nbsp;                last = i;</b>
+<i>610</i>&nbsp;            }
+<i>611</i>&nbsp;        }
+<b class="nc"><i>612</i>&nbsp;        if (first != -1) {</b>
+<b class="nc"><i>613</i>&nbsp;            for (int i = last + 1; i &gt; first; i--) {</b>
+<b class="nc"><i>614</i>&nbsp;                int swapWith = ThreadLocalRandom.current().nextInt(i);</b>
+<b class="nc"><i>615</i>&nbsp;                writeSet.set(swapWith, writeSet.set(i, writeSet.get(swapWith)));</b>
+<i>616</i>&nbsp;            }
+<i>617</i>&nbsp;        }
+<b class="nc"><i>618</i>&nbsp;    }</b>
+<i>619</i>&nbsp;
+<i>620</i>&nbsp;    @Override
+<i>621</i>&nbsp;    public DistributionSchedule.WriteSet reorderReadSequence(
+<i>622</i>&nbsp;            List&lt;BookieSocketAddress&gt; ensemble,
+<i>623</i>&nbsp;            BookiesHealthInfo bookiesHealthInfo,
+<i>624</i>&nbsp;            DistributionSchedule.WriteSet writeSet) {
+<b class="nc"><i>625</i>&nbsp;        return writeSet;</b>
+<i>626</i>&nbsp;    }
+<i>627</i>&nbsp;
+<i>628</i>&nbsp;    @Override
+<i>629</i>&nbsp;    public DistributionSchedule.WriteSet reorderReadLACSequence(
+<i>630</i>&nbsp;            List&lt;BookieSocketAddress&gt; ensemble,
+<i>631</i>&nbsp;            BookiesHealthInfo bookiesHealthInfo,
+<i>632</i>&nbsp;            DistributionSchedule.WriteSet writeSet) {
+<b class="nc"><i>633</i>&nbsp;        DistributionSchedule.WriteSet retList = reorderReadSequence(</b>
+<i>634</i>&nbsp;                ensemble, bookiesHealthInfo, writeSet);
+<b class="nc"><i>635</i>&nbsp;        retList.addMissingIndices(ensemble.size());</b>
+<b class="nc"><i>636</i>&nbsp;        return retList;</b>
+<i>637</i>&nbsp;    }
+<i>638</i>&nbsp;
+<i>639</i>&nbsp;    @Override
+<i>640</i>&nbsp;    public Set&lt;BookieSocketAddress&gt; onClusterChanged(Set&lt;BookieSocketAddress&gt; writableBookies,
+<i>641</i>&nbsp;            Set&lt;BookieSocketAddress&gt; readOnlyBookies) {
+<b class="fc"><i>642</i>&nbsp;        rwLock.writeLock().lock();</b>
+<i>643</i>&nbsp;        try {
+<i>644</i>&nbsp;            ImmutableSet&lt;BookieSocketAddress&gt; joinedBookies, leftBookies, deadBookies;
+<b class="fc"><i>645</i>&nbsp;            Set&lt;BookieSocketAddress&gt; oldBookieSet = knownBookies.keySet();</b>
+<i>646</i>&nbsp;            // left bookies : bookies in known bookies, but not in new writable bookie cluster.
+<b class="fc"><i>647</i>&nbsp;            leftBookies = Sets.difference(oldBookieSet, writableBookies).immutableCopy();</b>
+<i>648</i>&nbsp;            // joined bookies : bookies in new writable bookie cluster, but not in known bookies
+<b class="fc"><i>649</i>&nbsp;            joinedBookies = Sets.difference(writableBookies, oldBookieSet).immutableCopy();</b>
+<i>650</i>&nbsp;            // dead bookies.
+<b class="fc"><i>651</i>&nbsp;            deadBookies = Sets.difference(leftBookies, readOnlyBookies).immutableCopy();</b>
+<b class="fc"><i>652</i>&nbsp;            LOG.debug(&quot;Cluster changed : left bookies are {}, joined bookies are {}, while dead bookies are {}.&quot;,</b>
+<i>653</i>&nbsp;                    leftBookies, joinedBookies, deadBookies);
+<b class="fc"><i>654</i>&nbsp;            handleBookiesThatLeft(leftBookies);</b>
+<b class="fc"><i>655</i>&nbsp;            handleBookiesThatJoined(joinedBookies);</b>
+<b class="pc"><i>656</i>&nbsp;            if (this.isWeighted &amp;&amp; (leftBookies.size() &gt; 0 || joinedBookies.size() &gt; 0)) {</b>
+<b class="nc"><i>657</i>&nbsp;                this.weightedSelection.updateMap(this.bookieInfoMap);</b>
+<i>658</i>&nbsp;            }
+<b class="pc"><i>659</i>&nbsp;            if (!readOnlyBookies.isEmpty()) {</b>
+<b class="nc"><i>660</i>&nbsp;                this.readOnlyBookies = ImmutableSet.copyOf(readOnlyBookies);</b>
+<i>661</i>&nbsp;            }
+<i>662</i>&nbsp;
+<b class="fc"><i>663</i>&nbsp;            return deadBookies;</b>
+<i>664</i>&nbsp;        } finally {
+<b class="fc"><i>665</i>&nbsp;            rwLock.writeLock().unlock();</b>
+<b class="nc"><i>666</i>&nbsp;        }</b>
+<i>667</i>&nbsp;    }
+<i>668</i>&nbsp;
+<i>669</i>&nbsp;    /*
+<i>670</i>&nbsp;     * this method should be called in writelock scope of &#39;rwLock&#39;
+<i>671</i>&nbsp;     */
+<i>672</i>&nbsp;    @Override
+<i>673</i>&nbsp;    public void handleBookiesThatLeft(Set&lt;BookieSocketAddress&gt; leftBookies) {
+<b class="pc"><i>674</i>&nbsp;        for (BookieSocketAddress addr : leftBookies) {</b>
+<i>675</i>&nbsp;            try {
+<b class="nc"><i>676</i>&nbsp;                BookieNode node = knownBookies.remove(addr);</b>
+<b class="nc"><i>677</i>&nbsp;                if (null != node) {</b>
+<b class="nc"><i>678</i>&nbsp;                    topology.remove(node);</b>
+<b class="nc"><i>679</i>&nbsp;                    if (this.isWeighted) {</b>
+<b class="nc"><i>680</i>&nbsp;                        this.bookieInfoMap.remove(node);</b>
+<i>681</i>&nbsp;                    }
+<i>682</i>&nbsp;
+<b class="nc"><i>683</i>&nbsp;                    bookiesLeftCounter.registerSuccessfulValue(1L);</b>
+<i>684</i>&nbsp;
+<b class="nc"><i>685</i>&nbsp;                    if (LOG.isDebugEnabled()) {</b>
+<b class="nc"><i>686</i>&nbsp;                        LOG.debug(&quot;Cluster changed : bookie {} left from cluster.&quot;, addr);</b>
+<i>687</i>&nbsp;                    }
+<i>688</i>&nbsp;                }
+<b class="nc"><i>689</i>&nbsp;            } catch (Throwable t) {</b>
+<b class="nc"><i>690</i>&nbsp;                LOG.error(&quot;Unexpected exception while handling leaving bookie {}&quot;, addr, t);</b>
+<b class="nc"><i>691</i>&nbsp;                if (bookiesLeftCounter != null) {</b>
+<b class="nc"><i>692</i>&nbsp;                    bookiesLeftCounter.registerFailedValue(1L);</b>
+<i>693</i>&nbsp;                }
+<i>694</i>&nbsp;                // no need to re-throw; we want to process the rest of the bookies
+<i>695</i>&nbsp;                // exception anyways will be caught/logged/suppressed in the ZK&#39;s event handler
+<b class="nc"><i>696</i>&nbsp;            }</b>
+<b class="nc"><i>697</i>&nbsp;        }</b>
+<b class="fc"><i>698</i>&nbsp;    }</b>
+<i>699</i>&nbsp;
+<i>700</i>&nbsp;    /*
+<i>701</i>&nbsp;     * this method should be called in writelock scope of &#39;rwLock&#39;
+<i>702</i>&nbsp;     */
+<i>703</i>&nbsp;    @Override
+<i>704</i>&nbsp;    public void handleBookiesThatJoined(Set&lt;BookieSocketAddress&gt; joinedBookies) {
+<i>705</i>&nbsp;        // node joined
+<b class="fc"><i>706</i>&nbsp;        for (BookieSocketAddress addr : joinedBookies) {</b>
+<i>707</i>&nbsp;            try {
+<b class="fc"><i>708</i>&nbsp;                BookieNode node = createBookieNode(addr);</b>
+<b class="fc"><i>709</i>&nbsp;                topology.add(node);</b>
+<b class="fc"><i>710</i>&nbsp;                knownBookies.put(addr, node);</b>
+<b class="pc"><i>711</i>&nbsp;                if (this.isWeighted) {</b>
+<b class="nc"><i>712</i>&nbsp;                    this.bookieInfoMap.putIfAbsent(node, new BookieInfo());</b>
+<i>713</i>&nbsp;                }
+<i>714</i>&nbsp;
+<b class="fc"><i>715</i>&nbsp;                bookiesJoinedCounter.registerSuccessfulValue(1L);</b>
+<i>716</i>&nbsp;
+<b class="pc"><i>717</i>&nbsp;                if (LOG.isDebugEnabled()) {</b>
+<b class="nc"><i>718</i>&nbsp;                    LOG.debug(&quot;Cluster changed : bookie {} joined the cluster.&quot;, addr);</b>
+<i>719</i>&nbsp;                }
+<b class="nc"><i>720</i>&nbsp;            } catch (Throwable t) {</b>
+<i>721</i>&nbsp;                // topology.add() throws unchecked exception
+<b class="nc"><i>722</i>&nbsp;                LOG.error(&quot;Unexpected exception while handling joining bookie {}&quot;, addr, t);</b>
+<i>723</i>&nbsp;
+<b class="nc"><i>724</i>&nbsp;                bookiesJoinedCounter.registerFailedValue(1L);</b>
+<i>725</i>&nbsp;                // no need to re-throw; we want to process the rest of the bookies
+<i>726</i>&nbsp;                // exception anyways will be caught/logged/suppressed in the ZK&#39;s event handler
+<b class="fc"><i>727</i>&nbsp;            }</b>
+<b class="fc"><i>728</i>&nbsp;        }</b>
+<b class="fc"><i>729</i>&nbsp;    }</b>
+<i>730</i>&nbsp;
+<i>731</i>&nbsp;    @Override
+<i>732</i>&nbsp;    public void onBookieRackChange(List&lt;BookieSocketAddress&gt; bookieAddressList) {
+<b class="nc"><i>733</i>&nbsp;        rwLock.writeLock().lock();</b>
+<i>734</i>&nbsp;        try {
+<b class="nc"><i>735</i>&nbsp;            for (BookieSocketAddress bookieAddress : bookieAddressList) {</b>
+<b class="nc"><i>736</i>&nbsp;                BookieNode node = knownBookies.get(bookieAddress);</b>
+<b class="nc"><i>737</i>&nbsp;                if (node != null) {</b>
+<i>738</i>&nbsp;                    // refresh the rack info if its a known bookie
+<b class="nc"><i>739</i>&nbsp;                    topology.remove(node);</b>
+<b class="nc"><i>740</i>&nbsp;                    BookieNode newNode = createBookieNode(bookieAddress);</b>
+<b class="nc"><i>741</i>&nbsp;                    topology.add(newNode);</b>
+<b class="nc"><i>742</i>&nbsp;                    knownBookies.put(bookieAddress, newNode);</b>
+<i>743</i>&nbsp;                }
+<b class="nc"><i>744</i>&nbsp;            }</b>
+<i>745</i>&nbsp;        } finally {
+<b class="nc"><i>746</i>&nbsp;            rwLock.writeLock().unlock();</b>
+<b class="nc"><i>747</i>&nbsp;        }</b>
+<b class="nc"><i>748</i>&nbsp;    }</b>
+<i>749</i>&nbsp;
+<i>750</i>&nbsp;    @Override
+<i>751</i>&nbsp;    public void updateBookieInfo(Map&lt;BookieSocketAddress, BookieInfo&gt; bookieInfoMap) {
+<b class="nc"><i>752</i>&nbsp;        if (!isWeighted) {</b>
+<b class="nc"><i>753</i>&nbsp;            LOG.info(&quot;bookieFreeDiskInfo callback called even without weighted placement policy being used.&quot;);</b>
+<b class="nc"><i>754</i>&nbsp;            return;</b>
+<i>755</i>&nbsp;        }
+<b class="nc"><i>756</i>&nbsp;        rwLock.writeLock().lock();</b>
+<i>757</i>&nbsp;        try {
+<b class="nc"><i>758</i>&nbsp;            List&lt;BookieNode&gt; allBookies = new ArrayList&lt;BookieNode&gt;(knownBookies.values());</b>
+<i>759</i>&nbsp;            // create a new map to reflect the new mapping
+<b class="nc"><i>760</i>&nbsp;            Map&lt;BookieNode, WeightedObject&gt; map = new HashMap&lt;BookieNode, WeightedObject&gt;();</b>
+<b class="nc"><i>761</i>&nbsp;            for (BookieNode bookie : allBookies) {</b>
+<b class="nc"><i>762</i>&nbsp;                if (bookieInfoMap.containsKey(bookie.getAddr())) {</b>
+<b class="nc"><i>763</i>&nbsp;                    map.put(bookie, bookieInfoMap.get(bookie.getAddr()));</b>
+<i>764</i>&nbsp;                } else {
+<b class="nc"><i>765</i>&nbsp;                    map.put(bookie, new BookieInfo());</b>
+<i>766</i>&nbsp;                }
+<b class="nc"><i>767</i>&nbsp;            }</b>
+<b class="nc"><i>768</i>&nbsp;            this.bookieInfoMap = map;</b>
+<b class="nc"><i>769</i>&nbsp;            this.weightedSelection.updateMap(this.bookieInfoMap);</b>
+<i>770</i>&nbsp;        } finally {
+<b class="nc"><i>771</i>&nbsp;            rwLock.writeLock().unlock();</b>
+<b class="nc"><i>772</i>&nbsp;        }</b>
+<b class="nc"><i>773</i>&nbsp;    }</b>
+<i>774</i>&nbsp;
+<i>775</i>&nbsp;    protected BookieNode createBookieNode(BookieSocketAddress addr) {
+<b class="fc"><i>776</i>&nbsp;        return new BookieNode(addr, resolveNetworkLocation(addr));</b>
+<i>777</i>&nbsp;    }
+<i>778</i>&nbsp;
+<i>779</i>&nbsp;    protected String resolveNetworkLocation(BookieSocketAddress addr) {
+<b class="fc"><i>780</i>&nbsp;        return NetUtils.resolveNetworkLocation(dnsResolver, addr);</b>
+<i>781</i>&nbsp;    }
+<i>782</i>&nbsp;
+<i>783</i>&nbsp;    protected Set&lt;Node&gt; convertBookiesToNodes(Collection&lt;BookieSocketAddress&gt; excludeBookies) {
+<b class="fc"><i>784</i>&nbsp;        Set&lt;Node&gt; nodes = new HashSet&lt;Node&gt;();</b>
+<b class="pc"><i>785</i>&nbsp;        for (BookieSocketAddress addr : excludeBookies) {</b>
+<b class="nc"><i>786</i>&nbsp;            BookieNode bn = knownBookies.get(addr);</b>
+<b class="nc"><i>787</i>&nbsp;            if (null == bn) {</b>
+<b class="nc"><i>788</i>&nbsp;                bn = createBookieNode(addr);</b>
+<i>789</i>&nbsp;            }
+<b class="nc"><i>790</i>&nbsp;            nodes.add(bn);</b>
+<b class="nc"><i>791</i>&nbsp;        }</b>
+<b class="fc"><i>792</i>&nbsp;        return nodes;</b>
+<i>793</i>&nbsp;    }
+<i>794</i>&nbsp;}
+</div>
+</div>
+
+<div class="footer">
+    
+    <div style="float:right;">generated on 2021-06-28 15:57</div>
+</div>
+</body>
+</html>

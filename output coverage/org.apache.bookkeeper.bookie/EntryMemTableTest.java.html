@@ -1,0 +1,456 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>EntryMemTableTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$myBookieFenceLedgerTest.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.bookie</a> &gt; <span class="el_source">EntryMemTableTest.java</span></div><h1>EntryMemTableTest.java</h1><pre class="source lang-java linenums">/*
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.bookkeeper.bookie;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+
+import io.netty.buffer.ByteBuf;
+
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.PrimitiveIterator.OfLong;
+import java.util.Random;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
+
+import lombok.extern.slf4j.Slf4j;
+
+import org.apache.bookkeeper.bookie.Bookie.NoLedgerException;
+import org.apache.bookkeeper.conf.ServerConfiguration;
+import org.apache.bookkeeper.conf.TestBKConfiguration;
+import org.apache.bookkeeper.stats.NullStatsLogger;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameters;
+
+/**
+ * Test the EntryMemTable class.
+ */
+<span class="nc" id="L60">@Slf4j</span>
+@RunWith(Parameterized.class)
+public class EntryMemTableTest implements CacheCallback, SkipListFlusher, CheckpointSource {
+
+    private Class entryMemTableClass;
+    private EntryMemTable memTable;
+<span class="nc" id="L66">    private final Random random = new Random();</span>
+<span class="nc" id="L67">    private TestCheckPoint curCheckpoint = new TestCheckPoint(0, 0);</span>
+
+    @Parameters
+    public static Collection&lt;Object[]&gt; memTableClass() {
+<span class="nc" id="L71">        return Arrays.asList(new Object[][] { { EntryMemTable.class }, { EntryMemTableWithParallelFlusher.class } });</span>
+    }
+
+<span class="nc" id="L74">    public EntryMemTableTest(Class entryMemTableClass) {</span>
+<span class="nc" id="L75">        this.entryMemTableClass = entryMemTableClass;</span>
+<span class="nc" id="L76">    }</span>
+
+    @Override
+    public Checkpoint newCheckpoint() {
+<span class="nc" id="L80">        return curCheckpoint;</span>
+    }
+
+    @Override
+    public void checkpointComplete(Checkpoint checkpoint, boolean compact)
+            throws IOException {
+<span class="nc" id="L86">    }</span>
+
+    @Before
+    public void setUp() throws Exception {
+<span class="nc bnc" id="L90" title="All 2 branches missed.">        if (entryMemTableClass.equals(EntryMemTableWithParallelFlusher.class)) {</span>
+<span class="nc" id="L91">            ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L92">            this.memTable = new EntryMemTableWithParallelFlusher(conf, this, NullStatsLogger.INSTANCE);</span>
+<span class="nc" id="L93">        } else {</span>
+<span class="nc" id="L94">            this.memTable = new EntryMemTable(TestBKConfiguration.newServerConfiguration(), this,</span>
+                    NullStatsLogger.INSTANCE);
+        }
+<span class="nc" id="L97">    }</span>
+
+    @After
+    public void cleanup() throws Exception{
+<span class="nc" id="L101">        this.memTable.close();</span>
+<span class="nc" id="L102">    }</span>
+
+    @Test
+    public void testLogMark() throws IOException {
+<span class="nc" id="L106">        LogMark mark = new LogMark();</span>
+<span class="nc bnc" id="L107" title="All 2 branches missed.">        assertTrue(mark.compare(new LogMark()) == 0);</span>
+<span class="nc bnc" id="L108" title="All 2 branches missed.">        assertTrue(mark.compare(LogMark.MAX_VALUE) &lt; 0);</span>
+<span class="nc" id="L109">        mark.setLogMark(3, 11);</span>
+<span class="nc" id="L110">        byte[] data = new byte[16];</span>
+<span class="nc" id="L111">        ByteBuffer buf = ByteBuffer.wrap(data);</span>
+<span class="nc" id="L112">        mark.writeLogMark(buf);</span>
+<span class="nc" id="L113">        buf.flip();</span>
+<span class="nc" id="L114">        LogMark mark1 = new LogMark(9, 13);</span>
+<span class="nc bnc" id="L115" title="All 2 branches missed.">        assertTrue(mark1.compare(mark) &gt; 0);</span>
+<span class="nc" id="L116">        mark1.readLogMark(buf);</span>
+<span class="nc bnc" id="L117" title="All 2 branches missed.">        assertTrue(mark1.compare(mark) == 0);</span>
+<span class="nc" id="L118">    }</span>
+
+    /**
+     * Basic put/get.
+     * @throws IOException
+     * */
+    @Test
+    public void testBasicOps() throws IOException {
+<span class="nc" id="L126">        long ledgerId = 1;</span>
+<span class="nc" id="L127">        long entryId = 1;</span>
+<span class="nc" id="L128">        byte[] data = new byte[10];</span>
+<span class="nc" id="L129">        random.nextBytes(data);</span>
+<span class="nc" id="L130">        ByteBuffer buf = ByteBuffer.wrap(data);</span>
+<span class="nc" id="L131">        memTable.addEntry(ledgerId, entryId, buf, this);</span>
+<span class="nc" id="L132">        buf.rewind();</span>
+<span class="nc" id="L133">        EntryKeyValue kv = memTable.getEntry(ledgerId, entryId);</span>
+<span class="nc bnc" id="L134" title="All 2 branches missed.">        assertTrue(kv.getLedgerId() == ledgerId);</span>
+<span class="nc bnc" id="L135" title="All 2 branches missed.">        assertTrue(kv.getEntryId() == entryId);</span>
+<span class="nc" id="L136">        assertTrue(kv.getValueAsByteBuffer().nioBuffer().equals(buf));</span>
+<span class="nc" id="L137">        memTable.flush(this);</span>
+<span class="nc" id="L138">    }</span>
+
+    @Override
+    public void onSizeLimitReached(Checkpoint cp) throws IOException {
+        // No-op
+<span class="nc" id="L143">    }</span>
+
+    public void process(long ledgerId, long entryId, ByteBuf entry)
+            throws IOException {
+        // No-op
+<span class="nc" id="L148">    }</span>
+
+    /**
+     * Test read/write across snapshot.
+     * @throws IOException
+     */
+    @Test
+    public void testScanAcrossSnapshot() throws IOException {
+<span class="nc" id="L156">        byte[] data = new byte[10];</span>
+<span class="nc" id="L157">        List&lt;EntryKeyValue&gt; keyValues = new ArrayList&lt;EntryKeyValue&gt;();</span>
+<span class="nc bnc" id="L158" title="All 2 branches missed.">        for (long entryId = 1; entryId &lt; 100; entryId++) {</span>
+<span class="nc bnc" id="L159" title="All 2 branches missed.">            for (long ledgerId = 1; ledgerId &lt; 3; ledgerId++) {</span>
+<span class="nc" id="L160">                random.nextBytes(data);</span>
+<span class="nc" id="L161">                memTable.addEntry(ledgerId, entryId, ByteBuffer.wrap(data), this);</span>
+<span class="nc" id="L162">                keyValues.add(memTable.getEntry(ledgerId, entryId));</span>
+<span class="nc bnc" id="L163" title="All 2 branches missed.">                if (random.nextInt(16) == 0) {</span>
+<span class="nc" id="L164">                    memTable.snapshot();</span>
+                }
+            }
+        }
+
+<span class="nc bnc" id="L169" title="All 2 branches missed.">        for (EntryKeyValue kv : keyValues) {</span>
+<span class="nc" id="L170">            assertTrue(memTable.getEntry(kv.getLedgerId(), kv.getEntryId()).equals(kv));</span>
+<span class="nc" id="L171">        }</span>
+<span class="nc" id="L172">        memTable.flush(this, Checkpoint.MAX);</span>
+<span class="nc" id="L173">    }</span>
+
+    private class KVFLusher implements SkipListFlusher {
+        final Set&lt;EntryKeyValue&gt; keyValues;
+
+<span class="nc" id="L178">        KVFLusher(final Set&lt;EntryKeyValue&gt; keyValues) {</span>
+<span class="nc" id="L179">            this.keyValues = keyValues;</span>
+<span class="nc" id="L180">        }</span>
+
+        @Override
+        public void process(long ledgerId, long entryId, ByteBuf entry) throws IOException {
+<span class="nc" id="L184">            assertTrue(ledgerId + &quot;:&quot; + entryId + &quot; is duplicate in store!&quot;,</span>
+<span class="nc" id="L185">                    keyValues.add(new EntryKeyValue(ledgerId, entryId, entry.array())));</span>
+<span class="nc" id="L186">        }</span>
+    }
+
+<span class="nc" id="L189">    private class NoLedgerFLusher implements SkipListFlusher {</span>
+        @Override
+        public void process(long ledgerId, long entryId, ByteBuf entry) throws IOException {
+<span class="nc" id="L192">            throw new NoLedgerException(ledgerId);</span>
+        }
+    }
+
+    /**
+     * Test flush w/ logMark parameter.
+     * @throws IOException
+     */
+    @Test
+    public void testFlushLogMark() throws IOException {
+<span class="nc" id="L202">        Set&lt;EntryKeyValue&gt; flushedKVs = Collections.newSetFromMap(new ConcurrentHashMap&lt;EntryKeyValue, Boolean&gt;());</span>
+<span class="nc" id="L203">        KVFLusher flusher = new KVFLusher(flushedKVs);</span>
+
+<span class="nc" id="L205">        curCheckpoint.setCheckPoint(2, 2);</span>
+
+<span class="nc" id="L207">        byte[] data = new byte[10];</span>
+<span class="nc" id="L208">        long ledgerId = 100;</span>
+<span class="nc bnc" id="L209" title="All 2 branches missed.">        for (long entryId = 1; entryId &lt; 100; entryId++) {</span>
+<span class="nc" id="L210">            random.nextBytes(data);</span>
+<span class="nc" id="L211">            memTable.addEntry(ledgerId, entryId, ByteBuffer.wrap(data), this);</span>
+        }
+
+<span class="nc" id="L214">        assertNull(memTable.snapshot(new TestCheckPoint(1, 1)));</span>
+<span class="nc" id="L215">        assertNotNull(memTable.snapshot(new TestCheckPoint(3, 3)));</span>
+
+<span class="nc bnc" id="L217" title="All 2 branches missed.">        assertTrue(0 &lt; memTable.flush(flusher));</span>
+<span class="nc bnc" id="L218" title="All 2 branches missed.">        assertTrue(0 == memTable.flush(flusher));</span>
+
+<span class="nc" id="L220">        curCheckpoint.setCheckPoint(4, 4);</span>
+
+<span class="nc" id="L222">        random.nextBytes(data);</span>
+<span class="nc" id="L223">        memTable.addEntry(ledgerId, 101, ByteBuffer.wrap(data), this);</span>
+<span class="nc bnc" id="L224" title="All 2 branches missed.">        assertTrue(0 == memTable.flush(flusher));</span>
+
+<span class="nc bnc" id="L226" title="All 2 branches missed.">        assertTrue(0 == memTable.flush(flusher, new TestCheckPoint(3, 3)));</span>
+<span class="nc bnc" id="L227" title="All 2 branches missed.">        assertTrue(0 &lt; memTable.flush(flusher, new TestCheckPoint(4, 5)));</span>
+<span class="nc" id="L228">    }</span>
+
+    /**
+     * Test snapshot/flush interaction.
+     * @throws IOException
+     */
+    @Test
+    public void testFlushSnapshot() throws IOException {
+<span class="nc" id="L236">        HashSet&lt;EntryKeyValue&gt; keyValues = new HashSet&lt;EntryKeyValue&gt;();</span>
+<span class="nc" id="L237">        Set&lt;EntryKeyValue&gt; flushedKVs = Collections.newSetFromMap(new ConcurrentHashMap&lt;EntryKeyValue, Boolean&gt;());</span>
+<span class="nc" id="L238">        KVFLusher flusher = new KVFLusher(flushedKVs);</span>
+
+<span class="nc" id="L240">        byte[] data = new byte[10];</span>
+<span class="nc bnc" id="L241" title="All 2 branches missed.">        for (long entryId = 1; entryId &lt; 100; entryId++) {</span>
+<span class="nc bnc" id="L242" title="All 2 branches missed.">            for (long ledgerId = 1; ledgerId &lt; 100; ledgerId++) {</span>
+<span class="nc" id="L243">                random.nextBytes(data);</span>
+<span class="nc" id="L244">                assertTrue(ledgerId + &quot;:&quot; + entryId + &quot; is duplicate in mem-table!&quot;,</span>
+<span class="nc bnc" id="L245" title="All 2 branches missed.">                        memTable.addEntry(ledgerId, entryId, ByteBuffer.wrap(data), this) != 0);</span>
+<span class="nc" id="L246">                assertTrue(ledgerId + &quot;:&quot; + entryId + &quot; is duplicate in hash-set!&quot;,</span>
+<span class="nc" id="L247">                        keyValues.add(memTable.getEntry(ledgerId, entryId)));</span>
+<span class="nc bnc" id="L248" title="All 2 branches missed.">                if (random.nextInt(16) == 0) {</span>
+<span class="nc bnc" id="L249" title="All 2 branches missed.">                    if (null != memTable.snapshot()) {</span>
+<span class="nc bnc" id="L250" title="All 2 branches missed.">                        if (random.nextInt(2) == 0) {</span>
+<span class="nc" id="L251">                            memTable.flush(flusher);</span>
+                        }
+                    }
+                }
+            }
+        }
+
+<span class="nc" id="L258">        memTable.flush(flusher, Checkpoint.MAX);</span>
+<span class="nc bnc" id="L259" title="All 2 branches missed.">        for (EntryKeyValue kv : keyValues) {</span>
+<span class="nc" id="L260">            assertTrue(&quot;kv &quot; + kv.toString() + &quot; was not flushed!&quot;, flushedKVs.contains(kv));</span>
+<span class="nc" id="L261">        }</span>
+<span class="nc" id="L262">    }</span>
+
+    /**
+     * Test NoLedger exception/flush interaction.
+     * @throws IOException
+     */
+    @Test
+    public void testNoLedgerException() throws IOException {
+<span class="nc" id="L270">        NoLedgerFLusher flusher = new NoLedgerFLusher();</span>
+
+<span class="nc" id="L272">        byte[] data = new byte[10];</span>
+<span class="nc bnc" id="L273" title="All 2 branches missed.">        for (long entryId = 1; entryId &lt; 100; entryId++) {</span>
+<span class="nc bnc" id="L274" title="All 2 branches missed.">            for (long ledgerId = 1; ledgerId &lt; 100; ledgerId++) {</span>
+<span class="nc" id="L275">                random.nextBytes(data);</span>
+<span class="nc bnc" id="L276" title="All 2 branches missed.">                if (random.nextInt(16) == 0) {</span>
+<span class="nc bnc" id="L277" title="All 2 branches missed.">                    if (null != memTable.snapshot()) {</span>
+<span class="nc" id="L278">                        memTable.flush(flusher);</span>
+                    }
+                }
+            }
+        }
+
+<span class="nc" id="L284">        memTable.flush(flusher, Checkpoint.MAX);</span>
+<span class="nc" id="L285">    }</span>
+
+    private static class TestCheckPoint implements Checkpoint {
+
+        LogMark mark;
+
+<span class="nc" id="L291">        public TestCheckPoint(long fid, long fpos) {</span>
+<span class="nc" id="L292">            mark = new LogMark(fid, fpos);</span>
+<span class="nc" id="L293">        }</span>
+
+        private void setCheckPoint(long fid, long fpos) {
+<span class="nc" id="L296">            mark.setLogMark(fid, fpos);</span>
+<span class="nc" id="L297">        }</span>
+
+        @Override
+        public int compareTo(Checkpoint o) {
+<span class="nc bnc" id="L301" title="All 2 branches missed.">            if (Checkpoint.MAX == o) {</span>
+<span class="nc" id="L302">                return -1;</span>
+            }
+<span class="nc" id="L304">            return mark.compare(((TestCheckPoint) o).mark);</span>
+        }
+
+    }
+
+    @Test
+    public void testGetListOfEntriesOfLedger() throws IOException {
+<span class="nc" id="L311">        Set&lt;EntryKeyValue&gt; flushedKVs = Collections.newSetFromMap(new ConcurrentHashMap&lt;EntryKeyValue, Boolean&gt;());</span>
+<span class="nc" id="L312">        KVFLusher flusher = new KVFLusher(flushedKVs);</span>
+<span class="nc" id="L313">        int numofEntries = 100;</span>
+<span class="nc" id="L314">        int numOfLedgers = 5;</span>
+<span class="nc" id="L315">        byte[] data = new byte[10];</span>
+<span class="nc bnc" id="L316" title="All 2 branches missed.">        for (long entryId = 1; entryId &lt;= numofEntries; entryId++) {</span>
+<span class="nc bnc" id="L317" title="All 2 branches missed.">            for (long ledgerId = 1; ledgerId &lt;= numOfLedgers; ledgerId++) {</span>
+<span class="nc" id="L318">                random.nextBytes(data);</span>
+<span class="nc" id="L319">                assertTrue(ledgerId + &quot;:&quot; + entryId + &quot; is duplicate in mem-table!&quot;,</span>
+<span class="nc bnc" id="L320" title="All 2 branches missed.">                        memTable.addEntry(ledgerId, entryId, ByteBuffer.wrap(data), this) != 0);</span>
+            }
+        }
+<span class="nc bnc" id="L323" title="All 2 branches missed.">        for (long ledgerId = 1; ledgerId &lt;= numOfLedgers; ledgerId++) {</span>
+<span class="nc" id="L324">            OfLong entriesItr = memTable.getListOfEntriesOfLedger((random.nextInt((int) ledgerId) + 1));</span>
+<span class="nc" id="L325">            ArrayList&lt;Long&gt; listOfEntries = new ArrayList&lt;Long&gt;();</span>
+<span class="nc" id="L326">            Consumer&lt;Long&gt; addMethod = listOfEntries::add;</span>
+<span class="nc" id="L327">            entriesItr.forEachRemaining(addMethod);</span>
+<span class="nc" id="L328">            assertEquals(&quot;Number of Entries&quot;, numofEntries, listOfEntries.size());</span>
+<span class="nc bnc" id="L329" title="All 2 branches missed.">            for (int i = 0; i &lt; numofEntries; i++) {</span>
+<span class="nc" id="L330">                assertEquals(&quot;listOfEntries should be sorted&quot;, Long.valueOf(i + 1), listOfEntries.get(i));</span>
+            }
+        }
+<span class="nc" id="L333">        assertTrue(&quot;Snapshot is expected to be empty since snapshot is not done&quot;, memTable.snapshot.isEmpty());</span>
+<span class="nc bnc" id="L334" title="All 2 branches missed.">        assertTrue(&quot;Take snapshot and returned checkpoint should not be empty&quot;, memTable.snapshot() != null);</span>
+<span class="nc" id="L335">        assertFalse(&quot;After taking snapshot, snapshot should not be empty &quot;, memTable.snapshot.isEmpty());</span>
+<span class="nc bnc" id="L336" title="All 2 branches missed.">        for (long ledgerId = 1; ledgerId &lt;= numOfLedgers; ledgerId++) {</span>
+<span class="nc" id="L337">            OfLong entriesItr = memTable.getListOfEntriesOfLedger((random.nextInt((int) ledgerId) + 1));</span>
+<span class="nc" id="L338">            ArrayList&lt;Long&gt; listOfEntries = new ArrayList&lt;Long&gt;();</span>
+<span class="nc" id="L339">            Consumer&lt;Long&gt; addMethod = listOfEntries::add;</span>
+<span class="nc" id="L340">            entriesItr.forEachRemaining(addMethod);</span>
+<span class="nc" id="L341">            assertEquals(&quot;Number of Entries should be the same even after taking snapshot&quot;, numofEntries,</span>
+<span class="nc" id="L342">                    listOfEntries.size());</span>
+<span class="nc bnc" id="L343" title="All 2 branches missed.">            for (int i = 0; i &lt; numofEntries; i++) {</span>
+<span class="nc" id="L344">                assertEquals(&quot;listOfEntries should be sorted&quot;, Long.valueOf(i + 1), listOfEntries.get(i));</span>
+            }
+        }
+
+<span class="nc" id="L348">        memTable.flush(flusher);</span>
+<span class="nc bnc" id="L349" title="All 2 branches missed.">        for (long ledgerId = 1; ledgerId &lt;= numOfLedgers; ledgerId++) {</span>
+<span class="nc" id="L350">            OfLong entriesItr = memTable.getListOfEntriesOfLedger((random.nextInt((int) ledgerId) + 1));</span>
+<span class="nc" id="L351">            assertFalse(&quot;After flushing there shouldn't be entries in memtable&quot;, entriesItr.hasNext());</span>
+        }
+<span class="nc" id="L353">    }</span>
+
+    @Test
+    public void testGetListOfEntriesOfLedgerFromBothKVMapAndSnapshot() throws IOException {
+<span class="nc" id="L357">        int numofEntries = 100;</span>
+<span class="nc" id="L358">        int newNumOfEntries = 200;</span>
+<span class="nc" id="L359">        int numOfLedgers = 5;</span>
+<span class="nc" id="L360">        byte[] data = new byte[10];</span>
+<span class="nc bnc" id="L361" title="All 2 branches missed.">        for (long entryId = 1; entryId &lt;= numofEntries; entryId++) {</span>
+<span class="nc bnc" id="L362" title="All 2 branches missed.">            for (long ledgerId = 1; ledgerId &lt;= numOfLedgers; ledgerId++) {</span>
+<span class="nc" id="L363">                random.nextBytes(data);</span>
+<span class="nc" id="L364">                assertTrue(ledgerId + &quot;:&quot; + entryId + &quot; is duplicate in mem-table!&quot;,</span>
+<span class="nc bnc" id="L365" title="All 2 branches missed.">                        memTable.addEntry(ledgerId, entryId, ByteBuffer.wrap(data), this) != 0);</span>
+            }
+        }
+
+<span class="nc" id="L369">        assertTrue(&quot;Snapshot is expected to be empty since snapshot is not done&quot;, memTable.snapshot.isEmpty());</span>
+<span class="nc bnc" id="L370" title="All 2 branches missed.">        assertTrue(&quot;Take snapshot and returned checkpoint should not be empty&quot;, memTable.snapshot() != null);</span>
+<span class="nc" id="L371">        assertFalse(&quot;After taking snapshot, snapshot should not be empty &quot;, memTable.snapshot.isEmpty());</span>
+
+<span class="nc bnc" id="L373" title="All 2 branches missed.">        for (long entryId = numofEntries + 1; entryId &lt;= newNumOfEntries; entryId++) {</span>
+<span class="nc bnc" id="L374" title="All 2 branches missed.">            for (long ledgerId = 1; ledgerId &lt;= numOfLedgers; ledgerId++) {</span>
+<span class="nc" id="L375">                random.nextBytes(data);</span>
+<span class="nc" id="L376">                assertTrue(ledgerId + &quot;:&quot; + entryId + &quot; is duplicate in mem-table!&quot;,</span>
+<span class="nc bnc" id="L377" title="All 2 branches missed.">                        memTable.addEntry(ledgerId, entryId, ByteBuffer.wrap(data), this) != 0);</span>
+            }
+        }
+
+<span class="nc bnc" id="L381" title="All 2 branches missed.">        for (long ledgerId = 1; ledgerId &lt;= numOfLedgers; ledgerId++) {</span>
+<span class="nc" id="L382">            OfLong entriesItr = memTable.getListOfEntriesOfLedger((random.nextInt((int) ledgerId) + 1));</span>
+<span class="nc" id="L383">            ArrayList&lt;Long&gt; listOfEntries = new ArrayList&lt;Long&gt;();</span>
+<span class="nc" id="L384">            Consumer&lt;Long&gt; addMethod = listOfEntries::add;</span>
+<span class="nc" id="L385">            entriesItr.forEachRemaining(addMethod);</span>
+<span class="nc" id="L386">            assertEquals(&quot;Number of Entries should be the same&quot;, newNumOfEntries, listOfEntries.size());</span>
+<span class="nc bnc" id="L387" title="All 2 branches missed.">            for (int i = 0; i &lt; newNumOfEntries; i++) {</span>
+<span class="nc" id="L388">                assertEquals(&quot;listOfEntries should be sorted&quot;, Long.valueOf(i + 1), listOfEntries.get(i));</span>
+            }
+        }
+<span class="nc" id="L391">    }</span>
+
+    @Test
+    public void testGetListOfEntriesOfLedgerWhileAddingConcurrently() throws IOException, InterruptedException {
+<span class="nc" id="L395">        final int numofEntries = 100;</span>
+<span class="nc" id="L396">        final int newNumOfEntries = 200;</span>
+<span class="nc" id="L397">        final int concurrentAddOfEntries = 300;</span>
+<span class="nc" id="L398">        long ledgerId = 5;</span>
+<span class="nc" id="L399">        byte[] data = new byte[10];</span>
+<span class="nc bnc" id="L400" title="All 2 branches missed.">        for (long entryId = 1; entryId &lt;= numofEntries; entryId++) {</span>
+<span class="nc" id="L401">            random.nextBytes(data);</span>
+<span class="nc" id="L402">            assertTrue(ledgerId + &quot;:&quot; + entryId + &quot; is duplicate in mem-table!&quot;,</span>
+<span class="nc bnc" id="L403" title="All 2 branches missed.">                    memTable.addEntry(ledgerId, entryId, ByteBuffer.wrap(data), this) != 0);</span>
+        }
+
+<span class="nc" id="L406">        assertTrue(&quot;Snapshot is expected to be empty since snapshot is not done&quot;, memTable.snapshot.isEmpty());</span>
+<span class="nc bnc" id="L407" title="All 2 branches missed.">        assertTrue(&quot;Take snapshot and returned checkpoint should not be empty&quot;, memTable.snapshot() != null);</span>
+<span class="nc" id="L408">        assertFalse(&quot;After taking snapshot, snapshot should not be empty &quot;, memTable.snapshot.isEmpty());</span>
+
+<span class="nc bnc" id="L410" title="All 2 branches missed.">        for (long entryId = numofEntries + 1; entryId &lt;= newNumOfEntries; entryId++) {</span>
+<span class="nc" id="L411">            random.nextBytes(data);</span>
+<span class="nc" id="L412">            assertTrue(ledgerId + &quot;:&quot; + entryId + &quot; is duplicate in mem-table!&quot;,</span>
+<span class="nc bnc" id="L413" title="All 2 branches missed.">                    memTable.addEntry(ledgerId, entryId, ByteBuffer.wrap(data), this) != 0);</span>
+        }
+
+<span class="nc" id="L416">        AtomicBoolean successfullyAdded = new AtomicBoolean(true);</span>
+
+<span class="nc" id="L418">        Thread threadToAdd = new Thread(new Runnable() {</span>
+            @Override
+            public void run() {
+                try {
+<span class="nc bnc" id="L422" title="All 2 branches missed.">                    for (long entryId = newNumOfEntries + 1; entryId &lt;= concurrentAddOfEntries; entryId++) {</span>
+<span class="nc" id="L423">                        random.nextBytes(data);</span>
+<span class="nc bnc" id="L424" title="All 2 branches missed.">                        boolean thisEntryAddedSuccessfully = (memTable.addEntry(ledgerId, entryId,</span>
+<span class="nc" id="L425">                                ByteBuffer.wrap(data), EntryMemTableTest.this) != 0);</span>
+<span class="nc bnc" id="L426" title="All 4 branches missed.">                        successfullyAdded.set(successfullyAdded.get() &amp;&amp; thisEntryAddedSuccessfully);</span>
+<span class="nc" id="L427">                        Thread.sleep(10);</span>
+                    }
+<span class="nc" id="L429">                } catch (IOException e) {</span>
+<span class="nc" id="L430">                    log.error(&quot;Got Unexpected exception while adding entries&quot;);</span>
+<span class="nc" id="L431">                    successfullyAdded.set(false);</span>
+<span class="nc" id="L432">                } catch (InterruptedException e) {</span>
+<span class="nc" id="L433">                    log.error(&quot;Got InterruptedException while waiting&quot;);</span>
+<span class="nc" id="L434">                    successfullyAdded.set(false);</span>
+<span class="nc" id="L435">                }</span>
+<span class="nc" id="L436">            }</span>
+        });
+<span class="nc" id="L438">        threadToAdd.start();</span>
+
+<span class="nc" id="L440">        Thread.sleep(200);</span>
+<span class="nc" id="L441">        OfLong entriesItr = memTable.getListOfEntriesOfLedger(ledgerId);</span>
+<span class="nc" id="L442">        ArrayList&lt;Long&gt; listOfEntries = new ArrayList&lt;Long&gt;();</span>
+<span class="nc bnc" id="L443" title="All 2 branches missed.">        while (entriesItr.hasNext()) {</span>
+<span class="nc" id="L444">            listOfEntries.add(entriesItr.next());</span>
+<span class="nc" id="L445">            Thread.sleep(5);</span>
+        }
+<span class="nc" id="L447">        threadToAdd.join(5000);</span>
+<span class="nc" id="L448">        assertTrue(&quot;Entries should be added successfully in the spawned thread&quot;, successfullyAdded.get());</span>
+
+<span class="nc bnc" id="L450" title="All 2 branches missed.">        for (int i = 0; i &lt; newNumOfEntries; i++) {</span>
+<span class="nc" id="L451">            assertEquals(&quot;listOfEntries should be sorted&quot;, Long.valueOf(i + 1), listOfEntries.get(i));</span>
+        }
+<span class="nc" id="L453">    }</span>
+}
+
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

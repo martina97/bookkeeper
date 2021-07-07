@@ -1,0 +1,92 @@
+
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html id="htmlId">
+<head>
+  <title>Coverage Report :: SpeculativeRequestExecutionPolicy</title>
+  <style type="text/css">
+    @import "../../.css/coverage.css";
+  </style>
+</head>
+
+<body>
+<div class="header"></div>
+
+<div class="content">
+<div class="breadCrumbs">
+    [ <a href="../../index.html">all classes</a> ]
+    [ <a href="../index.html">org.apache.bookkeeper.client</a> ]
+</div>
+
+<h1>Coverage Summary for Class: SpeculativeRequestExecutionPolicy (org.apache.bookkeeper.client)</h1>
+
+<table class="coverageStats">
+<tr>
+  <th class="name">Class</th>
+</tr>
+<tr>
+  <td class="name">SpeculativeRequestExecutionPolicy</td>
+</tr>
+
+</table>
+
+<br/>
+<br/>
+
+
+<div class="sourceCode"><i>1</i>&nbsp;/*
+<i>2</i>&nbsp; *
+<i>3</i>&nbsp; * Licensed to the Apache Software Foundation (ASF) under one
+<i>4</i>&nbsp; * or more contributor license agreements.  See the NOTICE file
+<i>5</i>&nbsp; * distributed with this work for additional information
+<i>6</i>&nbsp; * regarding copyright ownership.  The ASF licenses this file
+<i>7</i>&nbsp; * to you under the Apache License, Version 2.0 (the
+<i>8</i>&nbsp; * &quot;License&quot;); you may not use this file except in compliance
+<i>9</i>&nbsp; * with the License.  You may obtain a copy of the License at
+<i>10</i>&nbsp; *
+<i>11</i>&nbsp; *   http://www.apache.org/licenses/LICENSE-2.0
+<i>12</i>&nbsp; *
+<i>13</i>&nbsp; * Unless required by applicable law or agreed to in writing,
+<i>14</i>&nbsp; * software distributed under the License is distributed on an
+<i>15</i>&nbsp; * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+<i>16</i>&nbsp; * KIND, either express or implied.  See the License for the
+<i>17</i>&nbsp; * specific language governing permissions and limitations
+<i>18</i>&nbsp; * under the License.
+<i>19</i>&nbsp; *
+<i>20</i>&nbsp; */
+<i>21</i>&nbsp;package org.apache.bookkeeper.client;
+<i>22</i>&nbsp;
+<i>23</i>&nbsp;import java.util.concurrent.ScheduledExecutorService;
+<i>24</i>&nbsp;import java.util.concurrent.ScheduledFuture;
+<i>25</i>&nbsp;
+<i>26</i>&nbsp;/**
+<i>27</i>&nbsp; * Define a policy for speculative request execution.
+<i>28</i>&nbsp; *
+<i>29</i>&nbsp; * &lt;p&gt;The implementation can define its execution policy. For example, when to issue speculative requests
+<i>30</i>&nbsp; * and how many speculative requests to issue.
+<i>31</i>&nbsp; *
+<i>32</i>&nbsp; * @since 4.5
+<i>33</i>&nbsp; */
+<i>34</i>&nbsp;public interface SpeculativeRequestExecutionPolicy {
+<i>35</i>&nbsp;
+<i>36</i>&nbsp;    /**
+<i>37</i>&nbsp;     * Initialize the speculative request execution policy and initiate requests.
+<i>38</i>&nbsp;     *
+<i>39</i>&nbsp;     * @param scheduler The scheduler service to issue the speculative request
+<i>40</i>&nbsp;     * @param requestExectuor The executor is used to issue the actual speculative requests
+<i>41</i>&nbsp;     * @return ScheduledFuture, in case caller needs to cancel it.
+<i>42</i>&nbsp;     */
+<i>43</i>&nbsp;    ScheduledFuture&lt;?&gt; initiateSpeculativeRequest(ScheduledExecutorService scheduler,
+<i>44</i>&nbsp;            SpeculativeRequestExecutor requestExectuor);
+<i>45</i>&nbsp;}
+</div>
+</div>
+
+<div class="footer">
+    
+    <div style="float:right;">generated on 2021-06-28 15:57</div>
+</div>
+</body>
+</html>

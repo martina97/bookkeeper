@@ -1,0 +1,662 @@
+
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html id="htmlId">
+<head>
+  <title>Coverage Report :: KeyValueStorageRocksDB</title>
+  <style type="text/css">
+    @import "../../.css/coverage.css";
+  </style>
+</head>
+
+<body>
+<div class="header"></div>
+
+<div class="content">
+<div class="breadCrumbs">
+    [ <a href="../../index.html">all classes</a> ]
+    [ <a href="../index.html">org.apache.bookkeeper.bookie.storage.ldb</a> ]
+</div>
+
+<h1>Coverage Summary for Class: KeyValueStorageRocksDB (org.apache.bookkeeper.bookie.storage.ldb)</h1>
+
+<table class="coverageStats">
+
+<tr>
+  <th class="name">Class</th>
+<th class="coverageStat 
+">
+  Method, %
+</th>
+<th class="coverageStat 
+">
+  Line, %
+</th>
+</tr>
+<tr>
+  <td class="name">KeyValueStorageRocksDB</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 16)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 140)
+  </span>
+</td>
+</tr>
+  <tr>
+    <td class="name">KeyValueStorageRocksDB$1</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 4)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 8)
+  </span>
+</td>
+  </tr>
+  <tr>
+    <td class="name">KeyValueStorageRocksDB$2</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 4)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 8)
+  </span>
+</td>
+  </tr>
+  <tr>
+    <td class="name">KeyValueStorageRocksDB$3</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 4)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 9)
+  </span>
+</td>
+  </tr>
+  <tr>
+    <td class="name">KeyValueStorageRocksDB$EntryWrapper</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 5)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 11)
+  </span>
+</td>
+  </tr>
+  <tr>
+    <td class="name">KeyValueStorageRocksDB$RocksDBBatch</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 7)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 26)
+  </span>
+</td>
+  </tr>
+<tr>
+  <td class="name"><strong>total</strong></td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 40)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 202)
+  </span>
+</td>
+</tr>
+</table>
+
+<br/>
+<br/>
+
+
+<div class="sourceCode"><i>1</i>&nbsp;/**
+<i>2</i>&nbsp; *
+<i>3</i>&nbsp; * Licensed to the Apache Software Foundation (ASF) under one
+<i>4</i>&nbsp; * or more contributor license agreements.  See the NOTICE file
+<i>5</i>&nbsp; * distributed with this work for additional information
+<i>6</i>&nbsp; * regarding copyright ownership.  The ASF licenses this file
+<i>7</i>&nbsp; * to you under the Apache License, Version 2.0 (the
+<i>8</i>&nbsp; * &quot;License&quot;); you may not use this file except in compliance
+<i>9</i>&nbsp; * with the License.  You may obtain a copy of the License at
+<i>10</i>&nbsp; *
+<i>11</i>&nbsp; *   http://www.apache.org/licenses/LICENSE-2.0
+<i>12</i>&nbsp; *
+<i>13</i>&nbsp; * Unless required by applicable law or agreed to in writing,
+<i>14</i>&nbsp; * software distributed under the License is distributed on an
+<i>15</i>&nbsp; * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+<i>16</i>&nbsp; * KIND, either express or implied.  See the License for the
+<i>17</i>&nbsp; * specific language governing permissions and limitations
+<i>18</i>&nbsp; * under the License.
+<i>19</i>&nbsp; *
+<i>20</i>&nbsp; */
+<i>21</i>&nbsp;package org.apache.bookkeeper.bookie.storage.ldb;
+<i>22</i>&nbsp;
+<i>23</i>&nbsp;import static com.google.common.base.Preconditions.checkState;
+<i>24</i>&nbsp;
+<i>25</i>&nbsp;import com.google.common.primitives.UnsignedBytes;
+<i>26</i>&nbsp;
+<i>27</i>&nbsp;//CHECKSTYLE.OFF: IllegalImport
+<i>28</i>&nbsp;import io.netty.util.internal.PlatformDependent;
+<i>29</i>&nbsp;//CHECKSTYLE.ON: IllegalImport
+<i>30</i>&nbsp;
+<i>31</i>&nbsp;import java.io.IOException;
+<i>32</i>&nbsp;import java.util.Comparator;
+<i>33</i>&nbsp;import java.util.Map.Entry;
+<i>34</i>&nbsp;import java.util.concurrent.TimeUnit;
+<i>35</i>&nbsp;
+<i>36</i>&nbsp;import org.apache.bookkeeper.bookie.storage.ldb.KeyValueStorageFactory.DbConfigType;
+<i>37</i>&nbsp;import org.apache.bookkeeper.conf.ServerConfiguration;
+<i>38</i>&nbsp;import org.rocksdb.BlockBasedTableConfig;
+<i>39</i>&nbsp;import org.rocksdb.BloomFilter;
+<i>40</i>&nbsp;import org.rocksdb.ChecksumType;
+<i>41</i>&nbsp;import org.rocksdb.CompressionType;
+<i>42</i>&nbsp;import org.rocksdb.InfoLogLevel;
+<i>43</i>&nbsp;import org.rocksdb.Options;
+<i>44</i>&nbsp;import org.rocksdb.ReadOptions;
+<i>45</i>&nbsp;import org.rocksdb.RocksDB;
+<i>46</i>&nbsp;import org.rocksdb.RocksDBException;
+<i>47</i>&nbsp;import org.rocksdb.RocksIterator;
+<i>48</i>&nbsp;import org.rocksdb.WriteBatch;
+<i>49</i>&nbsp;import org.rocksdb.WriteOptions;
+<i>50</i>&nbsp;import org.slf4j.Logger;
+<i>51</i>&nbsp;import org.slf4j.LoggerFactory;
+<i>52</i>&nbsp;
+<i>53</i>&nbsp;/**
+<i>54</i>&nbsp; * RocksDB based implementation of the KeyValueStorage.
+<i>55</i>&nbsp; */
+<i>56</i>&nbsp;public class KeyValueStorageRocksDB implements KeyValueStorage {
+<i>57</i>&nbsp;
+<b class="nc"><i>58</i>&nbsp;    static KeyValueStorageFactory factory = (path, dbConfigType, conf) -&gt; new KeyValueStorageRocksDB(path, dbConfigType,</b>
+<i>59</i>&nbsp;            conf);
+<i>60</i>&nbsp;
+<i>61</i>&nbsp;    private final RocksDB db;
+<i>62</i>&nbsp;
+<i>63</i>&nbsp;    private final WriteOptions optionSync;
+<i>64</i>&nbsp;    private final WriteOptions optionDontSync;
+<i>65</i>&nbsp;
+<i>66</i>&nbsp;    private final ReadOptions optionCache;
+<i>67</i>&nbsp;    private final ReadOptions optionDontCache;
+<i>68</i>&nbsp;
+<i>69</i>&nbsp;    private final WriteBatch emptyBatch;
+<i>70</i>&nbsp;
+<i>71</i>&nbsp;    private static final String ROCKSDB_LOG_LEVEL = &quot;dbStorage_rocksDB_logLevel&quot;;
+<i>72</i>&nbsp;    private static final String ROCKSDB_LZ4_COMPRESSION_ENABLED = &quot;dbStorage_rocksDB_lz4CompressionEnabled&quot;;
+<i>73</i>&nbsp;    private static final String ROCKSDB_WRITE_BUFFER_SIZE_MB = &quot;dbStorage_rocksDB_writeBufferSizeMB&quot;;
+<i>74</i>&nbsp;    private static final String ROCKSDB_SST_SIZE_MB = &quot;dbStorage_rocksDB_sstSizeInMB&quot;;
+<i>75</i>&nbsp;    private static final String ROCKSDB_BLOCK_SIZE = &quot;dbStorage_rocksDB_blockSize&quot;;
+<i>76</i>&nbsp;    private static final String ROCKSDB_BLOOM_FILTERS_BITS_PER_KEY = &quot;dbStorage_rocksDB_bloomFilterBitsPerKey&quot;;
+<i>77</i>&nbsp;    private static final String ROCKSDB_BLOCK_CACHE_SIZE = &quot;dbStorage_rocksDB_blockCacheSize&quot;;
+<i>78</i>&nbsp;    private static final String ROCKSDB_NUM_LEVELS = &quot;dbStorage_rocksDB_numLevels&quot;;
+<i>79</i>&nbsp;    private static final String ROCKSDB_NUM_FILES_IN_LEVEL0 = &quot;dbStorage_rocksDB_numFilesInLevel0&quot;;
+<i>80</i>&nbsp;    private static final String ROCKSDB_MAX_SIZE_IN_LEVEL1_MB = &quot;dbStorage_rocksDB_maxSizeInLevel1MB&quot;;
+<i>81</i>&nbsp;
+<i>82</i>&nbsp;    public KeyValueStorageRocksDB(String path, DbConfigType dbConfigType, ServerConfiguration conf) throws IOException {
+<b class="nc"><i>83</i>&nbsp;        this(path, dbConfigType, conf, false);</b>
+<b class="nc"><i>84</i>&nbsp;    }</b>
+<i>85</i>&nbsp;
+<i>86</i>&nbsp;    public KeyValueStorageRocksDB(String path, DbConfigType dbConfigType, ServerConfiguration conf, boolean readOnly)
+<b class="nc"><i>87</i>&nbsp;            throws IOException {</b>
+<i>88</i>&nbsp;        try {
+<b class="nc"><i>89</i>&nbsp;            RocksDB.loadLibrary();</b>
+<b class="nc"><i>90</i>&nbsp;        } catch (Throwable t) {</b>
+<b class="nc"><i>91</i>&nbsp;            throw new IOException(&quot;Failed to load RocksDB JNI library&quot;, t);</b>
+<b class="nc"><i>92</i>&nbsp;        }</b>
+<i>93</i>&nbsp;
+<b class="nc"><i>94</i>&nbsp;        this.optionSync = new WriteOptions();</b>
+<b class="nc"><i>95</i>&nbsp;        this.optionDontSync = new WriteOptions();</b>
+<b class="nc"><i>96</i>&nbsp;        this.optionCache = new ReadOptions();</b>
+<b class="nc"><i>97</i>&nbsp;        this.optionDontCache = new ReadOptions();</b>
+<b class="nc"><i>98</i>&nbsp;        this.emptyBatch = new WriteBatch();</b>
+<i>99</i>&nbsp;
+<b class="nc"><i>100</i>&nbsp;        try (Options options = new Options()) {</b>
+<b class="nc"><i>101</i>&nbsp;            options.setCreateIfMissing(true);</b>
+<i>102</i>&nbsp;
+<b class="nc"><i>103</i>&nbsp;            if (dbConfigType == DbConfigType.Huge) {</b>
+<i>104</i>&nbsp;                // Set default RocksDB block-cache size to 10% of direct mem, unless override
+<b class="nc"><i>105</i>&nbsp;                long defaultRocksDBBlockCacheSizeBytes = PlatformDependent.maxDirectMemory() / 10;</b>
+<b class="nc"><i>106</i>&nbsp;                long blockCacheSize = DbLedgerStorage.getLongVariableOrDefault(conf, ROCKSDB_BLOCK_CACHE_SIZE,</b>
+<i>107</i>&nbsp;                        defaultRocksDBBlockCacheSizeBytes);
+<i>108</i>&nbsp;
+<b class="nc"><i>109</i>&nbsp;                long writeBufferSizeMB = conf.getInt(ROCKSDB_WRITE_BUFFER_SIZE_MB, 64);</b>
+<b class="nc"><i>110</i>&nbsp;                long sstSizeMB = conf.getInt(ROCKSDB_SST_SIZE_MB, 64);</b>
+<b class="nc"><i>111</i>&nbsp;                int numLevels = conf.getInt(ROCKSDB_NUM_LEVELS, -1);</b>
+<b class="nc"><i>112</i>&nbsp;                int numFilesInLevel0 = conf.getInt(ROCKSDB_NUM_FILES_IN_LEVEL0, 4);</b>
+<b class="nc"><i>113</i>&nbsp;                long maxSizeInLevel1MB = conf.getLong(ROCKSDB_MAX_SIZE_IN_LEVEL1_MB, 256);</b>
+<b class="nc"><i>114</i>&nbsp;                int blockSize = conf.getInt(ROCKSDB_BLOCK_SIZE, 64 * 1024);</b>
+<b class="nc"><i>115</i>&nbsp;                int bloomFilterBitsPerKey = conf.getInt(ROCKSDB_BLOOM_FILTERS_BITS_PER_KEY, 10);</b>
+<b class="nc"><i>116</i>&nbsp;                boolean lz4CompressionEnabled = conf.getBoolean(ROCKSDB_LZ4_COMPRESSION_ENABLED, true);</b>
+<i>117</i>&nbsp;
+<b class="nc"><i>118</i>&nbsp;                if (lz4CompressionEnabled) {</b>
+<b class="nc"><i>119</i>&nbsp;                    options.setCompressionType(CompressionType.LZ4_COMPRESSION);</b>
+<i>120</i>&nbsp;                }
+<b class="nc"><i>121</i>&nbsp;                options.setWriteBufferSize(writeBufferSizeMB * 1024 * 1024);</b>
+<b class="nc"><i>122</i>&nbsp;                options.setMaxWriteBufferNumber(4);</b>
+<b class="nc"><i>123</i>&nbsp;                if (numLevels &gt; 0) {</b>
+<b class="nc"><i>124</i>&nbsp;                    options.setNumLevels(numLevels);</b>
+<i>125</i>&nbsp;                }
+<b class="nc"><i>126</i>&nbsp;                options.setLevelZeroFileNumCompactionTrigger(numFilesInLevel0);</b>
+<b class="nc"><i>127</i>&nbsp;                options.setMaxBytesForLevelBase(maxSizeInLevel1MB * 1024 * 1024);</b>
+<b class="nc"><i>128</i>&nbsp;                options.setMaxBackgroundCompactions(16);</b>
+<b class="nc"><i>129</i>&nbsp;                options.setMaxBackgroundFlushes(16);</b>
+<b class="nc"><i>130</i>&nbsp;                options.setIncreaseParallelism(32);</b>
+<b class="nc"><i>131</i>&nbsp;                options.setMaxTotalWalSize(512 * 1024 * 1024);</b>
+<b class="nc"><i>132</i>&nbsp;                options.setMaxOpenFiles(-1);</b>
+<b class="nc"><i>133</i>&nbsp;                options.setTargetFileSizeBase(sstSizeMB * 1024 * 1024);</b>
+<b class="nc"><i>134</i>&nbsp;                options.setDeleteObsoleteFilesPeriodMicros(TimeUnit.HOURS.toMicros(1));</b>
+<i>135</i>&nbsp;
+<b class="nc"><i>136</i>&nbsp;                BlockBasedTableConfig tableOptions = new BlockBasedTableConfig();</b>
+<b class="nc"><i>137</i>&nbsp;                tableOptions.setBlockSize(blockSize);</b>
+<b class="nc"><i>138</i>&nbsp;                tableOptions.setBlockCacheSize(blockCacheSize);</b>
+<b class="nc"><i>139</i>&nbsp;                tableOptions.setFormatVersion(2);</b>
+<b class="nc"><i>140</i>&nbsp;                tableOptions.setChecksumType(ChecksumType.kxxHash);</b>
+<b class="nc"><i>141</i>&nbsp;                if (bloomFilterBitsPerKey &gt; 0) {</b>
+<b class="nc"><i>142</i>&nbsp;                    tableOptions.setFilter(new BloomFilter(bloomFilterBitsPerKey, false));</b>
+<i>143</i>&nbsp;                }
+<i>144</i>&nbsp;
+<i>145</i>&nbsp;                // Options best suited for HDDs
+<b class="nc"><i>146</i>&nbsp;                tableOptions.setCacheIndexAndFilterBlocks(true);</b>
+<b class="nc"><i>147</i>&nbsp;                options.setLevelCompactionDynamicLevelBytes(true);</b>
+<i>148</i>&nbsp;
+<b class="nc"><i>149</i>&nbsp;                options.setTableFormatConfig(tableOptions);</b>
+<i>150</i>&nbsp;            }
+<i>151</i>&nbsp;
+<i>152</i>&nbsp;            // Configure log level
+<b class="nc"><i>153</i>&nbsp;            String logLevel = conf.getString(ROCKSDB_LOG_LEVEL, &quot;info&quot;);</b>
+<b class="nc"><i>154</i>&nbsp;            switch (logLevel) {</b>
+<i>155</i>&nbsp;            case &quot;debug&quot;:
+<b class="nc"><i>156</i>&nbsp;                options.setInfoLogLevel(InfoLogLevel.DEBUG_LEVEL);</b>
+<b class="nc"><i>157</i>&nbsp;                break;</b>
+<i>158</i>&nbsp;            case &quot;info&quot;:
+<b class="nc"><i>159</i>&nbsp;                options.setInfoLogLevel(InfoLogLevel.INFO_LEVEL);</b>
+<b class="nc"><i>160</i>&nbsp;                break;</b>
+<i>161</i>&nbsp;            case &quot;warn&quot;:
+<b class="nc"><i>162</i>&nbsp;                options.setInfoLogLevel(InfoLogLevel.WARN_LEVEL);</b>
+<b class="nc"><i>163</i>&nbsp;                break;</b>
+<i>164</i>&nbsp;            case &quot;error&quot;:
+<b class="nc"><i>165</i>&nbsp;                options.setInfoLogLevel(InfoLogLevel.ERROR_LEVEL);</b>
+<b class="nc"><i>166</i>&nbsp;                break;</b>
+<i>167</i>&nbsp;            default:
+<b class="nc"><i>168</i>&nbsp;                log.warn(&quot;Unrecognized RockDB log level: {}&quot;, logLevel);</b>
+<i>169</i>&nbsp;            }
+<i>170</i>&nbsp;
+<i>171</i>&nbsp;            // Keep log files for 1month
+<b class="nc"><i>172</i>&nbsp;            options.setKeepLogFileNum(30);</b>
+<b class="nc"><i>173</i>&nbsp;            options.setLogFileTimeToRoll(TimeUnit.DAYS.toSeconds(1));</b>
+<i>174</i>&nbsp;
+<i>175</i>&nbsp;            try {
+<b class="nc"><i>176</i>&nbsp;                if (readOnly) {</b>
+<b class="nc"><i>177</i>&nbsp;                    db = RocksDB.openReadOnly(options, path);</b>
+<i>178</i>&nbsp;                } else {
+<b class="nc"><i>179</i>&nbsp;                    db = RocksDB.open(options, path);</b>
+<i>180</i>&nbsp;                }
+<b class="nc"><i>181</i>&nbsp;            } catch (RocksDBException e) {</b>
+<b class="nc"><i>182</i>&nbsp;                throw new IOException(&quot;Error open RocksDB database&quot;, e);</b>
+<b class="nc"><i>183</i>&nbsp;            }</b>
+<i>184</i>&nbsp;        }
+<i>185</i>&nbsp;
+<b class="nc"><i>186</i>&nbsp;        optionSync.setSync(true);</b>
+<b class="nc"><i>187</i>&nbsp;        optionDontSync.setSync(false);</b>
+<i>188</i>&nbsp;
+<b class="nc"><i>189</i>&nbsp;        optionCache.setFillCache(true);</b>
+<b class="nc"><i>190</i>&nbsp;        optionDontCache.setFillCache(false);</b>
+<b class="nc"><i>191</i>&nbsp;    }</b>
+<i>192</i>&nbsp;
+<i>193</i>&nbsp;    @Override
+<i>194</i>&nbsp;    public void close() throws IOException {
+<b class="nc"><i>195</i>&nbsp;        db.close();</b>
+<b class="nc"><i>196</i>&nbsp;        optionSync.close();</b>
+<b class="nc"><i>197</i>&nbsp;        optionDontSync.close();</b>
+<b class="nc"><i>198</i>&nbsp;        optionCache.close();</b>
+<b class="nc"><i>199</i>&nbsp;        optionDontCache.close();</b>
+<b class="nc"><i>200</i>&nbsp;        emptyBatch.close();</b>
+<b class="nc"><i>201</i>&nbsp;    }</b>
+<i>202</i>&nbsp;
+<i>203</i>&nbsp;    @Override
+<i>204</i>&nbsp;    public void put(byte[] key, byte[] value) throws IOException {
+<i>205</i>&nbsp;        try {
+<b class="nc"><i>206</i>&nbsp;            db.put(optionDontSync, key, value);</b>
+<b class="nc"><i>207</i>&nbsp;        } catch (RocksDBException e) {</b>
+<b class="nc"><i>208</i>&nbsp;            throw new IOException(&quot;Error in RocksDB put&quot;, e);</b>
+<b class="nc"><i>209</i>&nbsp;        }</b>
+<b class="nc"><i>210</i>&nbsp;    }</b>
+<i>211</i>&nbsp;
+<i>212</i>&nbsp;    @Override
+<i>213</i>&nbsp;    public byte[] get(byte[] key) throws IOException {
+<i>214</i>&nbsp;        try {
+<b class="nc"><i>215</i>&nbsp;            return db.get(key);</b>
+<b class="nc"><i>216</i>&nbsp;        } catch (RocksDBException e) {</b>
+<b class="nc"><i>217</i>&nbsp;            throw new IOException(&quot;Error in RocksDB get&quot;, e);</b>
+<i>218</i>&nbsp;        }
+<i>219</i>&nbsp;    }
+<i>220</i>&nbsp;
+<i>221</i>&nbsp;    @Override
+<i>222</i>&nbsp;    public int get(byte[] key, byte[] value) throws IOException {
+<i>223</i>&nbsp;        try {
+<b class="nc"><i>224</i>&nbsp;            int res = db.get(key, value);</b>
+<b class="nc"><i>225</i>&nbsp;            if (res == RocksDB.NOT_FOUND) {</b>
+<b class="nc"><i>226</i>&nbsp;                return -1;</b>
+<b class="nc"><i>227</i>&nbsp;            } else if (res &gt; value.length) {</b>
+<b class="nc"><i>228</i>&nbsp;                throw new IOException(&quot;Value array is too small to fit the result&quot;);</b>
+<i>229</i>&nbsp;            } else {
+<b class="nc"><i>230</i>&nbsp;                return res;</b>
+<i>231</i>&nbsp;            }
+<b class="nc"><i>232</i>&nbsp;        } catch (RocksDBException e) {</b>
+<b class="nc"><i>233</i>&nbsp;            throw new IOException(&quot;Error in RocksDB get&quot;, e);</b>
+<i>234</i>&nbsp;        }
+<i>235</i>&nbsp;    }
+<i>236</i>&nbsp;
+<i>237</i>&nbsp;    @Override
+<i>238</i>&nbsp;    public Entry&lt;byte[], byte[]&gt; getFloor(byte[] key) throws IOException {
+<b class="nc"><i>239</i>&nbsp;        try (RocksIterator iterator = db.newIterator(optionCache)) {</b>
+<i>240</i>&nbsp;            // Position the iterator on the record whose key is &gt;= to the supplied key
+<b class="nc"><i>241</i>&nbsp;            iterator.seek(key);</b>
+<i>242</i>&nbsp;
+<b class="nc"><i>243</i>&nbsp;            if (!iterator.isValid()) {</b>
+<i>244</i>&nbsp;                // There are no entries &gt;= key
+<b class="nc"><i>245</i>&nbsp;                iterator.seekToLast();</b>
+<b class="nc"><i>246</i>&nbsp;                if (iterator.isValid()) {</b>
+<b class="nc"><i>247</i>&nbsp;                    return new EntryWrapper(iterator.key(), iterator.value());</b>
+<i>248</i>&nbsp;                } else {
+<i>249</i>&nbsp;                    // Db is empty
+<b class="nc"><i>250</i>&nbsp;                    return null;</b>
+<i>251</i>&nbsp;                }
+<i>252</i>&nbsp;            }
+<i>253</i>&nbsp;
+<b class="nc"><i>254</i>&nbsp;            iterator.prev();</b>
+<i>255</i>&nbsp;
+<b class="nc"><i>256</i>&nbsp;            if (!iterator.isValid()) {</b>
+<i>257</i>&nbsp;                // Iterator is on the 1st entry of the db and this entry key is &gt;= to the target
+<i>258</i>&nbsp;                // key
+<b class="nc"><i>259</i>&nbsp;                return null;</b>
+<i>260</i>&nbsp;            } else {
+<b class="nc"><i>261</i>&nbsp;                return new EntryWrapper(iterator.key(), iterator.value());</b>
+<i>262</i>&nbsp;            }
+<i>263</i>&nbsp;        }
+<i>264</i>&nbsp;    }
+<i>265</i>&nbsp;
+<i>266</i>&nbsp;    @Override
+<i>267</i>&nbsp;    public Entry&lt;byte[], byte[]&gt; getCeil(byte[] key) throws IOException {
+<b class="nc"><i>268</i>&nbsp;        try (RocksIterator iterator = db.newIterator(optionCache)) {</b>
+<i>269</i>&nbsp;            // Position the iterator on the record whose key is &gt;= to the supplied key
+<b class="nc"><i>270</i>&nbsp;            iterator.seek(key);</b>
+<i>271</i>&nbsp;
+<b class="nc"><i>272</i>&nbsp;            if (iterator.isValid()) {</b>
+<b class="nc"><i>273</i>&nbsp;                return new EntryWrapper(iterator.key(), iterator.value());</b>
+<i>274</i>&nbsp;            } else {
+<b class="nc"><i>275</i>&nbsp;                return null;</b>
+<i>276</i>&nbsp;            }
+<i>277</i>&nbsp;        }
+<i>278</i>&nbsp;    }
+<i>279</i>&nbsp;
+<i>280</i>&nbsp;    @Override
+<i>281</i>&nbsp;    public void delete(byte[] key) throws IOException {
+<i>282</i>&nbsp;        try {
+<b class="nc"><i>283</i>&nbsp;            db.delete(optionDontSync, key);</b>
+<b class="nc"><i>284</i>&nbsp;        } catch (RocksDBException e) {</b>
+<b class="nc"><i>285</i>&nbsp;            throw new IOException(&quot;Error in RocksDB delete&quot;, e);</b>
+<b class="nc"><i>286</i>&nbsp;        }</b>
+<b class="nc"><i>287</i>&nbsp;    }</b>
+<i>288</i>&nbsp;
+<i>289</i>&nbsp;    @Override
+<i>290</i>&nbsp;    public void sync() throws IOException {
+<i>291</i>&nbsp;        try {
+<b class="nc"><i>292</i>&nbsp;            db.write(optionSync, emptyBatch);</b>
+<b class="nc"><i>293</i>&nbsp;        } catch (RocksDBException e) {</b>
+<b class="nc"><i>294</i>&nbsp;            throw new IOException(e);</b>
+<b class="nc"><i>295</i>&nbsp;        }</b>
+<b class="nc"><i>296</i>&nbsp;    }</b>
+<i>297</i>&nbsp;
+<i>298</i>&nbsp;    @Override
+<i>299</i>&nbsp;    public CloseableIterator&lt;byte[]&gt; keys() {
+<b class="nc"><i>300</i>&nbsp;        final RocksIterator iterator = db.newIterator(optionCache);</b>
+<b class="nc"><i>301</i>&nbsp;        iterator.seekToFirst();</b>
+<i>302</i>&nbsp;
+<b class="nc"><i>303</i>&nbsp;        return new CloseableIterator&lt;byte[]&gt;() {</b>
+<i>304</i>&nbsp;            @Override
+<i>305</i>&nbsp;            public boolean hasNext() {
+<b class="nc"><i>306</i>&nbsp;                return iterator.isValid();</b>
+<i>307</i>&nbsp;            }
+<i>308</i>&nbsp;
+<i>309</i>&nbsp;            @Override
+<i>310</i>&nbsp;            public byte[] next() {
+<b class="nc"><i>311</i>&nbsp;                checkState(iterator.isValid());</b>
+<b class="nc"><i>312</i>&nbsp;                byte[] key = iterator.key();</b>
+<b class="nc"><i>313</i>&nbsp;                iterator.next();</b>
+<b class="nc"><i>314</i>&nbsp;                return key;</b>
+<i>315</i>&nbsp;            }
+<i>316</i>&nbsp;
+<i>317</i>&nbsp;            @Override
+<i>318</i>&nbsp;            public void close() {
+<b class="nc"><i>319</i>&nbsp;                iterator.close();</b>
+<b class="nc"><i>320</i>&nbsp;            }</b>
+<i>321</i>&nbsp;        };
+<i>322</i>&nbsp;    }
+<i>323</i>&nbsp;
+<i>324</i>&nbsp;    @Override
+<i>325</i>&nbsp;    public CloseableIterator&lt;byte[]&gt; keys(byte[] firstKey, byte[] lastKey) {
+<b class="nc"><i>326</i>&nbsp;        final RocksIterator iterator = db.newIterator(optionCache);</b>
+<b class="nc"><i>327</i>&nbsp;        iterator.seek(firstKey);</b>
+<i>328</i>&nbsp;
+<b class="nc"><i>329</i>&nbsp;        return new CloseableIterator&lt;byte[]&gt;() {</b>
+<i>330</i>&nbsp;            @Override
+<i>331</i>&nbsp;            public boolean hasNext() {
+<b class="nc"><i>332</i>&nbsp;                return iterator.isValid() &amp;&amp; ByteComparator.compare(iterator.key(), lastKey) &lt; 0;</b>
+<i>333</i>&nbsp;            }
+<i>334</i>&nbsp;
+<i>335</i>&nbsp;            @Override
+<i>336</i>&nbsp;            public byte[] next() {
+<b class="nc"><i>337</i>&nbsp;                checkState(iterator.isValid());</b>
+<b class="nc"><i>338</i>&nbsp;                byte[] key = iterator.key();</b>
+<b class="nc"><i>339</i>&nbsp;                iterator.next();</b>
+<b class="nc"><i>340</i>&nbsp;                return key;</b>
+<i>341</i>&nbsp;            }
+<i>342</i>&nbsp;
+<i>343</i>&nbsp;            @Override
+<i>344</i>&nbsp;            public void close() {
+<b class="nc"><i>345</i>&nbsp;                iterator.close();</b>
+<b class="nc"><i>346</i>&nbsp;            }</b>
+<i>347</i>&nbsp;        };
+<i>348</i>&nbsp;    }
+<i>349</i>&nbsp;
+<i>350</i>&nbsp;    @Override
+<i>351</i>&nbsp;    public CloseableIterator&lt;Entry&lt;byte[], byte[]&gt;&gt; iterator() {
+<b class="nc"><i>352</i>&nbsp;        final RocksIterator iterator = db.newIterator(optionDontCache);</b>
+<b class="nc"><i>353</i>&nbsp;        iterator.seekToFirst();</b>
+<b class="nc"><i>354</i>&nbsp;        final EntryWrapper entryWrapper = new EntryWrapper();</b>
+<i>355</i>&nbsp;
+<b class="nc"><i>356</i>&nbsp;        return new CloseableIterator&lt;Entry&lt;byte[], byte[]&gt;&gt;() {</b>
+<i>357</i>&nbsp;            @Override
+<i>358</i>&nbsp;            public boolean hasNext() {
+<b class="nc"><i>359</i>&nbsp;                return iterator.isValid();</b>
+<i>360</i>&nbsp;            }
+<i>361</i>&nbsp;
+<i>362</i>&nbsp;            @Override
+<i>363</i>&nbsp;            public Entry&lt;byte[], byte[]&gt; next() {
+<b class="nc"><i>364</i>&nbsp;                checkState(iterator.isValid());</b>
+<b class="nc"><i>365</i>&nbsp;                entryWrapper.key = iterator.key();</b>
+<b class="nc"><i>366</i>&nbsp;                entryWrapper.value = iterator.value();</b>
+<b class="nc"><i>367</i>&nbsp;                iterator.next();</b>
+<b class="nc"><i>368</i>&nbsp;                return entryWrapper;</b>
+<i>369</i>&nbsp;            }
+<i>370</i>&nbsp;
+<i>371</i>&nbsp;            @Override
+<i>372</i>&nbsp;            public void close() {
+<b class="nc"><i>373</i>&nbsp;                iterator.close();</b>
+<b class="nc"><i>374</i>&nbsp;            }</b>
+<i>375</i>&nbsp;        };
+<i>376</i>&nbsp;    }
+<i>377</i>&nbsp;
+<i>378</i>&nbsp;    @Override
+<i>379</i>&nbsp;    public long count() throws IOException {
+<i>380</i>&nbsp;        try {
+<b class="nc"><i>381</i>&nbsp;            return db.getLongProperty(&quot;rocksdb.estimate-num-keys&quot;);</b>
+<b class="nc"><i>382</i>&nbsp;        } catch (RocksDBException e) {</b>
+<b class="nc"><i>383</i>&nbsp;            throw new IOException(&quot;Error in getting records count&quot;, e);</b>
+<i>384</i>&nbsp;        }
+<i>385</i>&nbsp;    }
+<i>386</i>&nbsp;
+<i>387</i>&nbsp;    @Override
+<i>388</i>&nbsp;    public Batch newBatch() {
+<b class="nc"><i>389</i>&nbsp;        return new RocksDBBatch();</b>
+<i>390</i>&nbsp;    }
+<i>391</i>&nbsp;
+<b class="nc"><i>392</i>&nbsp;    private class RocksDBBatch implements Batch {</b>
+<b class="nc"><i>393</i>&nbsp;        private final WriteBatch writeBatch = new WriteBatch();</b>
+<i>394</i>&nbsp;
+<i>395</i>&nbsp;        @Override
+<i>396</i>&nbsp;        public void close() {
+<b class="nc"><i>397</i>&nbsp;            writeBatch.close();</b>
+<b class="nc"><i>398</i>&nbsp;        }</b>
+<i>399</i>&nbsp;
+<i>400</i>&nbsp;        @Override
+<i>401</i>&nbsp;        public void put(byte[] key, byte[] value) throws IOException {
+<i>402</i>&nbsp;            try {
+<b class="nc"><i>403</i>&nbsp;                writeBatch.put(key, value);</b>
+<b class="nc"><i>404</i>&nbsp;            } catch (RocksDBException e) {</b>
+<b class="nc"><i>405</i>&nbsp;                throw new IOException(&quot;Failed to flush RocksDB batch&quot;, e);</b>
+<b class="nc"><i>406</i>&nbsp;            }</b>
+<b class="nc"><i>407</i>&nbsp;        }</b>
+<i>408</i>&nbsp;
+<i>409</i>&nbsp;        @Override
+<i>410</i>&nbsp;        public void remove(byte[] key) throws IOException {
+<i>411</i>&nbsp;            try {
+<b class="nc"><i>412</i>&nbsp;                writeBatch.delete(key);</b>
+<b class="nc"><i>413</i>&nbsp;            } catch (RocksDBException e) {</b>
+<b class="nc"><i>414</i>&nbsp;                throw new IOException(&quot;Failed to flush RocksDB batch&quot;, e);</b>
+<b class="nc"><i>415</i>&nbsp;            }</b>
+<b class="nc"><i>416</i>&nbsp;        }</b>
+<i>417</i>&nbsp;
+<i>418</i>&nbsp;        @Override
+<i>419</i>&nbsp;        public void clear() {
+<b class="nc"><i>420</i>&nbsp;            writeBatch.clear();</b>
+<b class="nc"><i>421</i>&nbsp;        }</b>
+<i>422</i>&nbsp;
+<i>423</i>&nbsp;        @Override
+<i>424</i>&nbsp;        public void deleteRange(byte[] beginKey, byte[] endKey) throws IOException {
+<i>425</i>&nbsp;            try {
+<b class="nc"><i>426</i>&nbsp;                writeBatch.deleteRange(beginKey, endKey);</b>
+<b class="nc"><i>427</i>&nbsp;            } catch (RocksDBException e) {</b>
+<b class="nc"><i>428</i>&nbsp;                throw new IOException(&quot;Failed to flush RocksDB batch&quot;, e);</b>
+<b class="nc"><i>429</i>&nbsp;            }</b>
+<b class="nc"><i>430</i>&nbsp;        }</b>
+<i>431</i>&nbsp;
+<i>432</i>&nbsp;        @Override
+<i>433</i>&nbsp;        public void flush() throws IOException {
+<i>434</i>&nbsp;            try {
+<b class="nc"><i>435</i>&nbsp;                db.write(optionSync, writeBatch);</b>
+<b class="nc"><i>436</i>&nbsp;            } catch (RocksDBException e) {</b>
+<b class="nc"><i>437</i>&nbsp;                throw new IOException(&quot;Failed to flush RocksDB batch&quot;, e);</b>
+<b class="nc"><i>438</i>&nbsp;            }</b>
+<b class="nc"><i>439</i>&nbsp;        }</b>
+<i>440</i>&nbsp;    }
+<i>441</i>&nbsp;
+<i>442</i>&nbsp;    private static final class EntryWrapper implements Entry&lt;byte[], byte[]&gt; {
+<i>443</i>&nbsp;        // This is not final since the iterator will reuse the same EntryWrapper
+<i>444</i>&nbsp;        // instance at each step
+<i>445</i>&nbsp;        private byte[] key;
+<i>446</i>&nbsp;        private byte[] value;
+<i>447</i>&nbsp;
+<b class="nc"><i>448</i>&nbsp;        public EntryWrapper() {</b>
+<b class="nc"><i>449</i>&nbsp;            this.key = null;</b>
+<b class="nc"><i>450</i>&nbsp;            this.value = null;</b>
+<b class="nc"><i>451</i>&nbsp;        }</b>
+<i>452</i>&nbsp;
+<b class="nc"><i>453</i>&nbsp;        public EntryWrapper(byte[] key, byte[] value) {</b>
+<b class="nc"><i>454</i>&nbsp;            this.key = key;</b>
+<b class="nc"><i>455</i>&nbsp;            this.value = value;</b>
+<b class="nc"><i>456</i>&nbsp;        }</b>
+<i>457</i>&nbsp;
+<i>458</i>&nbsp;        @Override
+<i>459</i>&nbsp;        public byte[] setValue(byte[] value) {
+<b class="nc"><i>460</i>&nbsp;            throw new UnsupportedOperationException();</b>
+<i>461</i>&nbsp;        }
+<i>462</i>&nbsp;
+<i>463</i>&nbsp;        @Override
+<i>464</i>&nbsp;        public byte[] getValue() {
+<b class="nc"><i>465</i>&nbsp;            return value;</b>
+<i>466</i>&nbsp;        }
+<i>467</i>&nbsp;
+<i>468</i>&nbsp;        @Override
+<i>469</i>&nbsp;        public byte[] getKey() {
+<b class="nc"><i>470</i>&nbsp;            return key;</b>
+<i>471</i>&nbsp;        }
+<i>472</i>&nbsp;    }
+<i>473</i>&nbsp;
+<b class="nc"><i>474</i>&nbsp;    private static final Comparator&lt;byte[]&gt; ByteComparator = UnsignedBytes.lexicographicalComparator();</b>
+<i>475</i>&nbsp;
+<b class="nc"><i>476</i>&nbsp;    private static final Logger log = LoggerFactory.getLogger(KeyValueStorageRocksDB.class);</b>
+<i>477</i>&nbsp;}
+</div>
+</div>
+
+<div class="footer">
+    
+    <div style="float:right;">generated on 2021-06-29 13:53</div>
+</div>
+</body>
+</html>

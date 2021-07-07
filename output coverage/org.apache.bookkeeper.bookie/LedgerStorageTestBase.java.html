@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>LedgerStorageTestBase.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$myBookieFenceLedgerTest.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.bookie</a> &gt; <span class="el_source">LedgerStorageTestBase.java</span></div><h1>LedgerStorageTestBase.java</h1><pre class="source lang-java linenums">/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+package org.apache.bookkeeper.bookie;
+
+import java.io.File;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.bookkeeper.conf.ServerConfiguration;
+import org.apache.bookkeeper.conf.TestBKConfiguration;
+import org.apache.bookkeeper.util.DiskChecker;
+import org.apache.commons.io.FileUtils;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Rule;
+import org.junit.rules.TestName;
+
+/**
+ * Test the checkpoint logic in bookies.
+ */
+<span class="nc" id="L36">@Slf4j</span>
+public abstract class LedgerStorageTestBase {
+
+<span class="nc" id="L39">    @Rule</span>
+    public TestName testName = new TestName();
+
+    protected ServerConfiguration conf;
+    protected File journalDir, ledgerDir;
+    protected LedgerDirsManager ledgerDirsManager;
+
+    private File createTempDir(String suffix) throws Exception {
+<span class="nc" id="L47">        File dir = File.createTempFile(testName.getMethodName(), suffix);</span>
+<span class="nc" id="L48">        dir.delete();</span>
+<span class="nc" id="L49">        dir.mkdirs();</span>
+<span class="nc" id="L50">        return dir;</span>
+    }
+
+<span class="nc" id="L53">    protected LedgerStorageTestBase() {</span>
+<span class="nc" id="L54">        conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L55">    }</span>
+
+    @Before
+    public void setUp() throws Exception {
+<span class="nc" id="L59">        journalDir = createTempDir(&quot;journal&quot;);</span>
+<span class="nc" id="L60">        ledgerDir = createTempDir(&quot;ledger&quot;);</span>
+
+        // create current directories
+<span class="nc" id="L63">        Bookie.getCurrentDirectory(journalDir).mkdir();</span>
+<span class="nc" id="L64">        Bookie.getCurrentDirectory(ledgerDir).mkdir();</span>
+
+        // build the configuration
+<span class="nc" id="L67">        conf.setMetadataServiceUri(null);</span>
+<span class="nc" id="L68">        conf.setJournalDirName(journalDir.getPath());</span>
+<span class="nc" id="L69">        conf.setLedgerDirNames(new String[] { ledgerDir.getPath() });</span>
+
+        // build the ledger monitor
+<span class="nc" id="L72">        DiskChecker checker = new DiskChecker(</span>
+<span class="nc" id="L73">            conf.getDiskUsageThreshold(),</span>
+<span class="nc" id="L74">            conf.getDiskUsageWarnThreshold());</span>
+<span class="nc" id="L75">        ledgerDirsManager = new LedgerDirsManager(</span>
+            conf,
+<span class="nc" id="L77">            conf.getLedgerDirs(),</span>
+            checker);
+<span class="nc" id="L79">    }</span>
+
+    @After
+    public void tearDown() throws Exception {
+<span class="nc" id="L83">        FileUtils.deleteDirectory(journalDir);</span>
+<span class="nc" id="L84">        FileUtils.deleteDirectory(ledgerDir);</span>
+<span class="nc" id="L85">    }</span>
+
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

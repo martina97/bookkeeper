@@ -1,0 +1,1454 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TestRegionAwareEnsemblePlacementPolicy.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">TestRegionAwareEnsemblePlacementPolicy.java</span></div><h1>TestRegionAwareEnsemblePlacementPolicy.java</h1><pre class="source lang-java linenums">/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.bookkeeper.client;
+
+import static org.apache.bookkeeper.client.RegionAwareEnsemblePlacementPolicy
+        .REPP_DISALLOW_BOOKIE_PLACEMENT_IN_REGION_FEATURE_NAME;
+import static org.apache.bookkeeper.client.RegionAwareEnsemblePlacementPolicy.REPP_DNS_RESOLVER_CLASS;
+import static org.apache.bookkeeper.client.RegionAwareEnsemblePlacementPolicy
+        .REPP_ENABLE_DURABILITY_ENFORCEMENT_IN_REPLACE;
+import static org.apache.bookkeeper.client.RegionAwareEnsemblePlacementPolicy.REPP_ENABLE_VALIDATION;
+import static org.apache.bookkeeper.client.RegionAwareEnsemblePlacementPolicy.REPP_MINIMUM_REGIONS_FOR_DURABILITY;
+import static org.apache.bookkeeper.client.RegionAwareEnsemblePlacementPolicy.REPP_REGIONS_TO_WRITE;
+import static org.apache.bookkeeper.client.RoundRobinDistributionSchedule.writeSetFromValues;
+import static org.apache.bookkeeper.feature.SettableFeatureProvider.DISABLE_ALL;
+
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import io.netty.util.HashedWheelTimer;
+import java.net.InetAddress;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import junit.framework.TestCase;
+import org.apache.bookkeeper.client.BKException.BKNotEnoughBookiesException;
+import org.apache.bookkeeper.conf.ClientConfiguration;
+import org.apache.bookkeeper.feature.FeatureProvider;
+import org.apache.bookkeeper.feature.SettableFeature;
+import org.apache.bookkeeper.feature.SettableFeatureProvider;
+import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.net.DNSToSwitchMapping;
+import org.apache.bookkeeper.net.NetworkTopology;
+import org.apache.bookkeeper.stats.NullStatsLogger;
+import org.apache.bookkeeper.util.BookKeeperConstants;
+import org.apache.bookkeeper.util.StaticDNSResolver;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Test a region-aware ensemble placement policy.
+ */
+<span class="nc bnc" id="L61" title="All 2 branches missed.">public class TestRegionAwareEnsemblePlacementPolicy extends TestCase {</span>
+
+<span class="nc" id="L63">    static final Logger LOG = LoggerFactory.getLogger(TestRegionAwareEnsemblePlacementPolicy.class);</span>
+
+    RegionAwareEnsemblePlacementPolicy repp;
+<span class="nc" id="L66">    final ClientConfiguration conf = new ClientConfiguration();</span>
+<span class="nc" id="L67">    final ArrayList&lt;BookieSocketAddress&gt; ensemble = new ArrayList&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L68">    DistributionSchedule.WriteSet writeSet = DistributionSchedule.NULL_WRITE_SET;</span>
+    BookieSocketAddress addr1, addr2, addr3, addr4;
+    HashedWheelTimer timer;
+
+    static void updateMyRack(String rack) throws Exception {
+<span class="nc" id="L73">        StaticDNSResolver.addNodeToRack(InetAddress.getLocalHost().getHostAddress(), rack);</span>
+<span class="nc" id="L74">        StaticDNSResolver.addNodeToRack(InetAddress.getLocalHost().getHostName(), rack);</span>
+<span class="nc" id="L75">        BookieSocketAddress bookieAddress = new BookieSocketAddress(</span>
+<span class="nc" id="L76">            InetAddress.getLocalHost().getHostAddress(), 0);</span>
+<span class="nc" id="L77">        StaticDNSResolver.addNodeToRack(bookieAddress.getSocketAddress().getHostName(), rack);</span>
+<span class="nc" id="L78">        StaticDNSResolver.addNodeToRack(bookieAddress.getSocketAddress().getAddress().getHostAddress(), rack);</span>
+<span class="nc" id="L79">        StaticDNSResolver.addNodeToRack(&quot;127.0.0.1&quot;, rack);</span>
+<span class="nc" id="L80">        StaticDNSResolver.addNodeToRack(&quot;localhost&quot;, rack);</span>
+<span class="nc" id="L81">    }</span>
+
+    @Override
+    protected void setUp() throws Exception {
+<span class="nc" id="L85">        super.setUp();</span>
+<span class="nc" id="L86">        StaticDNSResolver.reset();</span>
+<span class="nc" id="L87">        updateMyRack(NetworkTopology.DEFAULT_REGION_AND_RACK);</span>
+<span class="nc" id="L88">        LOG.info(&quot;Set up static DNS Resolver.&quot;);</span>
+<span class="nc" id="L89">        conf.setProperty(REPP_DNS_RESOLVER_CLASS, StaticDNSResolver.class.getName());</span>
+
+<span class="nc" id="L91">        addr1 = new BookieSocketAddress(&quot;127.0.0.2&quot;, 3181);</span>
+<span class="nc" id="L92">        addr2 = new BookieSocketAddress(&quot;127.0.0.3&quot;, 3181);</span>
+<span class="nc" id="L93">        addr3 = new BookieSocketAddress(&quot;127.0.0.4&quot;, 3181);</span>
+<span class="nc" id="L94">        addr4 = new BookieSocketAddress(&quot;127.0.0.5&quot;, 3181);</span>
+        // update dns mapping
+<span class="nc" id="L96">        StaticDNSResolver.addNodeToRack(addr1.getHostName(), &quot;/r1/rack1&quot;);</span>
+<span class="nc" id="L97">        StaticDNSResolver.addNodeToRack(addr2.getHostName(), NetworkTopology.DEFAULT_REGION_AND_RACK);</span>
+<span class="nc" id="L98">        StaticDNSResolver.addNodeToRack(addr3.getHostName(), NetworkTopology.DEFAULT_REGION_AND_RACK);</span>
+<span class="nc" id="L99">        StaticDNSResolver.addNodeToRack(addr4.getHostName(), &quot;/r1/rack2&quot;);</span>
+<span class="nc" id="L100">        ensemble.add(addr1);</span>
+<span class="nc" id="L101">        ensemble.add(addr2);</span>
+<span class="nc" id="L102">        ensemble.add(addr3);</span>
+<span class="nc" id="L103">        ensemble.add(addr4);</span>
+
+<span class="nc" id="L105">        writeSet = writeSetFromValues(0, 1, 2, 3);</span>
+
+<span class="nc" id="L107">        timer = new HashedWheelTimer(</span>
+<span class="nc" id="L108">                new ThreadFactoryBuilder().setNameFormat(&quot;TestTimer-%d&quot;).build(),</span>
+<span class="nc" id="L109">                conf.getTimeoutTimerTickDurationMs(), TimeUnit.MILLISECONDS,</span>
+<span class="nc" id="L110">                conf.getTimeoutTimerNumTicks());</span>
+
+<span class="nc" id="L112">        repp = new RegionAwareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L113">        repp.initialize(conf, Optional.&lt;DNSToSwitchMapping&gt;empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+<span class="nc" id="L114">    }</span>
+
+    @Override
+    protected void tearDown() throws Exception {
+<span class="nc" id="L118">        repp.uninitalize();</span>
+<span class="nc" id="L119">        super.tearDown();</span>
+<span class="nc" id="L120">    }</span>
+
+    static BookiesHealthInfo getBookiesHealthInfo() {
+<span class="nc" id="L123">        return getBookiesHealthInfo(new HashMap&lt;&gt;(), new HashMap&lt;&gt;());</span>
+    }
+
+    static BookiesHealthInfo getBookiesHealthInfo(Map&lt;BookieSocketAddress, Long&gt; bookieFailureHistory,
+                                                  Map&lt;BookieSocketAddress, Long&gt; bookiePendingRequests) {
+<span class="nc" id="L128">        return new BookiesHealthInfo() {</span>
+            @Override
+            public long getBookieFailureHistory(BookieSocketAddress bookieSocketAddress) {
+<span class="nc" id="L131">                return bookieFailureHistory.getOrDefault(bookieSocketAddress, -1L);</span>
+            }
+
+            @Override
+            public long getBookiePendingRequests(BookieSocketAddress bookieSocketAddress) {
+<span class="nc" id="L136">                return bookiePendingRequests.getOrDefault(bookieSocketAddress, 0L);</span>
+            }
+        };
+    }
+
+
+    @Test
+    public void testNotReorderReadIfInDefaultRack() throws Exception {
+<span class="nc" id="L144">        repp.uninitalize();</span>
+<span class="nc" id="L145">        updateMyRack(NetworkTopology.DEFAULT_REGION_AND_RACK);</span>
+
+<span class="nc" id="L147">        repp = new RegionAwareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L148">        repp.initialize(conf, Optional.&lt;DNSToSwitchMapping&gt;empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+
+<span class="nc" id="L150">        DistributionSchedule.WriteSet origWriteSet = writeSet.copy();</span>
+<span class="nc" id="L151">        DistributionSchedule.WriteSet reorderSet = repp.reorderReadSequence(</span>
+<span class="nc" id="L152">                ensemble, getBookiesHealthInfo(), writeSet);</span>
+<span class="nc" id="L153">        assertEquals(origWriteSet, reorderSet);</span>
+<span class="nc" id="L154">    }</span>
+
+    @Test
+    public void testNodeInSameRegion() throws Exception {
+<span class="nc" id="L158">        repp.uninitalize();</span>
+<span class="nc" id="L159">        updateMyRack(&quot;/r1/rack3&quot;);</span>
+
+<span class="nc" id="L161">        repp = new RegionAwareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L162">        repp.initialize(conf, Optional.&lt;DNSToSwitchMapping&gt;empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+
+        // make sure we've detected the right region
+<span class="nc" id="L165">        assertEquals(&quot;r1&quot;, repp.myRegion);</span>
+
+<span class="nc" id="L167">        Set&lt;BookieSocketAddress&gt; addrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L168">        addrs.add(addr1);</span>
+<span class="nc" id="L169">        addrs.add(addr2);</span>
+<span class="nc" id="L170">        addrs.add(addr3);</span>
+<span class="nc" id="L171">        addrs.add(addr4);</span>
+<span class="nc" id="L172">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+
+<span class="nc" id="L174">        DistributionSchedule.WriteSet reorderSet = repp.reorderReadSequence(</span>
+<span class="nc" id="L175">                ensemble, getBookiesHealthInfo(), writeSet.copy());</span>
+<span class="nc" id="L176">        DistributionSchedule.WriteSet expectedSet = writeSetFromValues(0, 3, 1, 2);</span>
+<span class="nc" id="L177">        LOG.info(&quot;write set : {}&quot;, writeSet);</span>
+<span class="nc" id="L178">        LOG.info(&quot;reorder set : {}&quot;, reorderSet);</span>
+<span class="nc" id="L179">        LOG.info(&quot;expected set : {}&quot;, expectedSet);</span>
+<span class="nc" id="L180">        LOG.info(&quot;reorder equals {}&quot;, reorderSet.equals(writeSet));</span>
+<span class="nc" id="L181">        assertFalse(reorderSet.equals(writeSet));</span>
+<span class="nc" id="L182">        assertEquals(expectedSet, reorderSet);</span>
+<span class="nc" id="L183">    }</span>
+
+    @Test
+    public void testNodeNotInSameRegions() throws Exception {
+<span class="nc" id="L187">        repp.uninitalize();</span>
+<span class="nc" id="L188">        updateMyRack(&quot;/r2/rack1&quot;);</span>
+
+<span class="nc" id="L190">        repp = new RegionAwareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L191">        repp.initialize(conf, Optional.&lt;DNSToSwitchMapping&gt;empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+
+<span class="nc" id="L193">        DistributionSchedule.WriteSet origWriteSet = writeSet.copy();</span>
+<span class="nc" id="L194">        DistributionSchedule.WriteSet reorderSet = repp.reorderReadSequence(</span>
+<span class="nc" id="L195">                ensemble, getBookiesHealthInfo(), writeSet);</span>
+<span class="nc" id="L196">        LOG.info(&quot;reorder set : {}&quot;, reorderSet);</span>
+<span class="nc" id="L197">        assertEquals(origWriteSet, reorderSet);</span>
+<span class="nc" id="L198">    }</span>
+
+    @Test
+    public void testNodeDown() throws Exception {
+<span class="nc" id="L202">        repp.uninitalize();</span>
+<span class="nc" id="L203">        updateMyRack(&quot;/r1/rack1&quot;);</span>
+
+<span class="nc" id="L205">        repp = new RegionAwareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L206">        repp.initialize(conf, Optional.&lt;DNSToSwitchMapping&gt;empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+
+        // Update cluster
+<span class="nc" id="L209">        Set&lt;BookieSocketAddress&gt; addrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L210">        addrs.add(addr1);</span>
+<span class="nc" id="L211">        addrs.add(addr2);</span>
+<span class="nc" id="L212">        addrs.add(addr3);</span>
+<span class="nc" id="L213">        addrs.add(addr4);</span>
+<span class="nc" id="L214">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+<span class="nc" id="L215">        addrs.remove(addr1);</span>
+<span class="nc" id="L216">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+
+<span class="nc" id="L218">        DistributionSchedule.WriteSet origWriteSet = writeSet.copy();</span>
+<span class="nc" id="L219">        DistributionSchedule.WriteSet reorderSet = repp.reorderReadSequence(</span>
+<span class="nc" id="L220">                ensemble, getBookiesHealthInfo(), writeSet);</span>
+<span class="nc" id="L221">        DistributionSchedule.WriteSet expectedSet = writeSetFromValues(3, 1, 2, 0);</span>
+<span class="nc" id="L222">        LOG.info(&quot;reorder set : {}&quot;, reorderSet);</span>
+<span class="nc" id="L223">        assertFalse(reorderSet.equals(origWriteSet));</span>
+<span class="nc" id="L224">        assertEquals(expectedSet, reorderSet);</span>
+<span class="nc" id="L225">    }</span>
+
+    @Test
+    public void testNodeReadOnly() throws Exception {
+<span class="nc" id="L229">        repp.uninitalize();</span>
+<span class="nc" id="L230">        updateMyRack(&quot;/r1/rack1&quot;);</span>
+
+<span class="nc" id="L232">        repp = new RegionAwareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L233">        repp.initialize(conf, Optional.&lt;DNSToSwitchMapping&gt;empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+
+        // Update cluster
+<span class="nc" id="L236">        Set&lt;BookieSocketAddress&gt; addrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L237">        addrs.add(addr1);</span>
+<span class="nc" id="L238">        addrs.add(addr2);</span>
+<span class="nc" id="L239">        addrs.add(addr3);</span>
+<span class="nc" id="L240">        addrs.add(addr4);</span>
+<span class="nc" id="L241">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+<span class="nc" id="L242">        addrs.remove(addr1);</span>
+<span class="nc" id="L243">        Set&lt;BookieSocketAddress&gt; ro = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L244">        ro.add(addr1);</span>
+<span class="nc" id="L245">        repp.onClusterChanged(addrs, ro);</span>
+
+<span class="nc" id="L247">        DistributionSchedule.WriteSet origWriteSet = writeSet.copy();</span>
+<span class="nc" id="L248">        DistributionSchedule.WriteSet reorderSet = repp.reorderReadSequence(</span>
+<span class="nc" id="L249">                ensemble, getBookiesHealthInfo(), writeSet);</span>
+<span class="nc" id="L250">        DistributionSchedule.WriteSet expectedSet = writeSetFromValues(3, 1, 2, 0);</span>
+<span class="nc" id="L251">        LOG.info(&quot;reorder set : {}&quot;, reorderSet);</span>
+<span class="nc" id="L252">        assertFalse(reorderSet.equals(origWriteSet));</span>
+<span class="nc" id="L253">        assertEquals(expectedSet, reorderSet);</span>
+<span class="nc" id="L254">    }</span>
+
+    @Test
+    public void testNodeSlow() throws Exception {
+<span class="nc" id="L258">        repp.uninitalize();</span>
+<span class="nc" id="L259">        updateMyRack(&quot;/r1/rack1&quot;);</span>
+
+<span class="nc" id="L261">        repp = new RegionAwareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L262">        repp.initialize(conf, Optional.&lt;DNSToSwitchMapping&gt;empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+
+        // Update cluster
+<span class="nc" id="L265">        Set&lt;BookieSocketAddress&gt; addrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L266">        addrs.add(addr1);</span>
+<span class="nc" id="L267">        addrs.add(addr2);</span>
+<span class="nc" id="L268">        addrs.add(addr3);</span>
+<span class="nc" id="L269">        addrs.add(addr4);</span>
+<span class="nc" id="L270">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+<span class="nc" id="L271">        repp.registerSlowBookie(addr1, 0L);</span>
+<span class="nc" id="L272">        Map&lt;BookieSocketAddress, Long&gt; bookiePendingMap = new HashMap&lt;&gt;();</span>
+<span class="nc" id="L273">        bookiePendingMap.put(addr1, 1L);</span>
+<span class="nc" id="L274">        repp.onClusterChanged(addrs, new HashSet&lt;&gt;());</span>
+
+<span class="nc" id="L276">        DistributionSchedule.WriteSet origWriteSet = writeSet.copy();</span>
+<span class="nc" id="L277">        DistributionSchedule.WriteSet reorderSet = repp.reorderReadSequence(</span>
+<span class="nc" id="L278">            ensemble, getBookiesHealthInfo(new HashMap&lt;&gt;(), bookiePendingMap), writeSet);</span>
+<span class="nc" id="L279">        DistributionSchedule.WriteSet expectedSet = writeSetFromValues(3, 1, 2, 0);</span>
+<span class="nc" id="L280">        LOG.info(&quot;reorder set : {}&quot;, reorderSet);</span>
+<span class="nc" id="L281">        assertFalse(reorderSet.equals(origWriteSet));</span>
+<span class="nc" id="L282">        assertEquals(expectedSet, reorderSet);</span>
+<span class="nc" id="L283">    }</span>
+
+    @Test
+    public void testTwoNodesSlow() throws Exception {
+<span class="nc" id="L287">        repp.uninitalize();</span>
+<span class="nc" id="L288">        updateMyRack(&quot;/r1/rack1&quot;);</span>
+
+<span class="nc" id="L290">        repp = new RegionAwareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L291">        repp.initialize(conf, Optional.&lt;DNSToSwitchMapping&gt;empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+
+        // Update cluster
+<span class="nc" id="L294">        Set&lt;BookieSocketAddress&gt; addrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L295">        addrs.add(addr1);</span>
+<span class="nc" id="L296">        addrs.add(addr2);</span>
+<span class="nc" id="L297">        addrs.add(addr3);</span>
+<span class="nc" id="L298">        addrs.add(addr4);</span>
+<span class="nc" id="L299">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+<span class="nc" id="L300">        repp.registerSlowBookie(addr1, 0L);</span>
+<span class="nc" id="L301">        repp.registerSlowBookie(addr2, 0L);</span>
+<span class="nc" id="L302">        Map&lt;BookieSocketAddress, Long&gt; bookiePendingMap = new HashMap&lt;&gt;();</span>
+<span class="nc" id="L303">        bookiePendingMap.put(addr1, 1L);</span>
+<span class="nc" id="L304">        bookiePendingMap.put(addr2, 2L);</span>
+<span class="nc" id="L305">        repp.onClusterChanged(addrs, new HashSet&lt;&gt;());</span>
+
+<span class="nc" id="L307">        DistributionSchedule.WriteSet origWriteSet = writeSet.copy();</span>
+<span class="nc" id="L308">        DistributionSchedule.WriteSet reorderSet = repp.reorderReadSequence(</span>
+<span class="nc" id="L309">            ensemble, getBookiesHealthInfo(new HashMap&lt;&gt;(), bookiePendingMap), writeSet);</span>
+<span class="nc" id="L310">        DistributionSchedule.WriteSet expectedSet = writeSetFromValues(3, 2, 0, 1);</span>
+<span class="nc" id="L311">        LOG.info(&quot;reorder set : {}&quot;, reorderSet);</span>
+<span class="nc" id="L312">        assertFalse(reorderSet.equals(origWriteSet));</span>
+<span class="nc" id="L313">        assertEquals(expectedSet, reorderSet);</span>
+<span class="nc" id="L314">    }</span>
+
+    @Test
+    public void testTwoNodesDown() throws Exception {
+<span class="nc" id="L318">        repp.uninitalize();</span>
+<span class="nc" id="L319">        updateMyRack(&quot;/r1/rack1&quot;);</span>
+
+<span class="nc" id="L321">        repp = new RegionAwareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L322">        repp.initialize(conf, Optional.&lt;DNSToSwitchMapping&gt;empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+
+        // Update cluster
+<span class="nc" id="L325">        Set&lt;BookieSocketAddress&gt; addrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L326">        addrs.add(addr1);</span>
+<span class="nc" id="L327">        addrs.add(addr2);</span>
+<span class="nc" id="L328">        addrs.add(addr3);</span>
+<span class="nc" id="L329">        addrs.add(addr4);</span>
+<span class="nc" id="L330">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+<span class="nc" id="L331">        addrs.remove(addr1);</span>
+<span class="nc" id="L332">        addrs.remove(addr2);</span>
+<span class="nc" id="L333">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+
+<span class="nc" id="L335">        DistributionSchedule.WriteSet origWriteSet = writeSet.copy();</span>
+<span class="nc" id="L336">        DistributionSchedule.WriteSet reorderSet = repp.reorderReadSequence(</span>
+<span class="nc" id="L337">                ensemble, getBookiesHealthInfo(), writeSet);</span>
+<span class="nc" id="L338">        DistributionSchedule.WriteSet expectedSet = writeSetFromValues(3, 2, 0, 1);</span>
+<span class="nc" id="L339">        LOG.info(&quot;reorder set : {}&quot;, reorderSet);</span>
+<span class="nc" id="L340">        assertFalse(reorderSet.equals(origWriteSet));</span>
+<span class="nc" id="L341">        assertEquals(expectedSet, reorderSet);</span>
+<span class="nc" id="L342">    }</span>
+
+    @Test
+    public void testNodeDownAndNodeSlow() throws Exception {
+<span class="nc" id="L346">        repp.uninitalize();</span>
+<span class="nc" id="L347">        updateMyRack(&quot;/r1/rack1&quot;);</span>
+
+<span class="nc" id="L349">        repp = new RegionAwareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L350">        repp.initialize(conf, Optional.&lt;DNSToSwitchMapping&gt;empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+
+        // Update cluster
+<span class="nc" id="L353">        Set&lt;BookieSocketAddress&gt; addrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L354">        addrs.add(addr1);</span>
+<span class="nc" id="L355">        addrs.add(addr2);</span>
+<span class="nc" id="L356">        addrs.add(addr3);</span>
+<span class="nc" id="L357">        addrs.add(addr4);</span>
+<span class="nc" id="L358">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+<span class="nc" id="L359">        repp.registerSlowBookie(addr1, 0L);</span>
+<span class="nc" id="L360">        Map&lt;BookieSocketAddress, Long&gt; bookiePendingMap = new HashMap&lt;&gt;();</span>
+<span class="nc" id="L361">        bookiePendingMap.put(addr1, 1L);</span>
+<span class="nc" id="L362">        addrs.remove(addr2);</span>
+<span class="nc" id="L363">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+
+<span class="nc" id="L365">        DistributionSchedule.WriteSet origWriteSet = writeSet.copy();</span>
+<span class="nc" id="L366">        DistributionSchedule.WriteSet reorderSet = repp.reorderReadSequence(</span>
+<span class="nc" id="L367">            ensemble, getBookiesHealthInfo(new HashMap&lt;&gt;(), bookiePendingMap), writeSet);</span>
+<span class="nc" id="L368">        DistributionSchedule.WriteSet expectedSet = writeSetFromValues(3, 2, 0, 1);</span>
+<span class="nc" id="L369">        LOG.info(&quot;reorder set : {}&quot;, reorderSet);</span>
+<span class="nc" id="L370">        assertFalse(reorderSet.equals(origWriteSet));</span>
+<span class="nc" id="L371">        assertEquals(expectedSet, reorderSet);</span>
+<span class="nc" id="L372">    }</span>
+
+    @Test
+    public void testNodeDownAndReadOnlyAndNodeSlow() throws Exception {
+<span class="nc" id="L376">        repp.uninitalize();</span>
+<span class="nc" id="L377">        updateMyRack(&quot;/r1/rack1&quot;);</span>
+
+<span class="nc" id="L379">        repp = new RegionAwareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L380">        repp.initialize(conf, Optional.&lt;DNSToSwitchMapping&gt;empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+
+        // Update cluster
+<span class="nc" id="L383">        Set&lt;BookieSocketAddress&gt; addrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L384">        addrs.add(addr1);</span>
+<span class="nc" id="L385">        addrs.add(addr2);</span>
+<span class="nc" id="L386">        addrs.add(addr3);</span>
+<span class="nc" id="L387">        addrs.add(addr4);</span>
+<span class="nc" id="L388">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+<span class="nc" id="L389">        addrs.remove(addr1);</span>
+<span class="nc" id="L390">        addrs.remove(addr2);</span>
+<span class="nc" id="L391">        Set&lt;BookieSocketAddress&gt; ro = new HashSet&lt;&gt;();</span>
+<span class="nc" id="L392">        ro.add(addr2);</span>
+<span class="nc" id="L393">        repp.registerSlowBookie(addr3, 0L);</span>
+<span class="nc" id="L394">        Map&lt;BookieSocketAddress, Long&gt; bookiePendingMap = new HashMap&lt;&gt;();</span>
+<span class="nc" id="L395">        bookiePendingMap.put(addr3, 1L);</span>
+<span class="nc" id="L396">        repp.onClusterChanged(addrs, ro);</span>
+
+<span class="nc" id="L398">        DistributionSchedule.WriteSet origWriteSet = writeSet.copy();</span>
+<span class="nc" id="L399">        DistributionSchedule.WriteSet reorderSet = repp.reorderReadSequence(</span>
+<span class="nc" id="L400">            ensemble, getBookiesHealthInfo(new HashMap&lt;&gt;(), bookiePendingMap), writeSet);</span>
+<span class="nc" id="L401">        DistributionSchedule.WriteSet expectedSet = writeSetFromValues(3, 1, 2, 0);</span>
+<span class="nc" id="L402">        LOG.info(&quot;reorder set : {}&quot;, reorderSet);</span>
+<span class="nc" id="L403">        assertFalse(reorderSet.equals(origWriteSet));</span>
+<span class="nc" id="L404">        assertEquals(expectedSet, reorderSet);</span>
+<span class="nc" id="L405">    }</span>
+
+    @Test
+    public void testReplaceBookieWithEnoughBookiesInSameRegion() throws Exception {
+<span class="nc" id="L409">        BookieSocketAddress addr1 = new BookieSocketAddress(&quot;127.0.0.2&quot;, 3181);</span>
+<span class="nc" id="L410">        BookieSocketAddress addr2 = new BookieSocketAddress(&quot;127.0.0.3&quot;, 3181);</span>
+<span class="nc" id="L411">        BookieSocketAddress addr3 = new BookieSocketAddress(&quot;127.0.0.4&quot;, 3181);</span>
+<span class="nc" id="L412">        BookieSocketAddress addr4 = new BookieSocketAddress(&quot;127.0.0.5&quot;, 3181);</span>
+        // update dns mapping
+<span class="nc" id="L414">        StaticDNSResolver.addNodeToRack(addr1.getHostName(), NetworkTopology.DEFAULT_REGION_AND_RACK);</span>
+<span class="nc" id="L415">        StaticDNSResolver.addNodeToRack(addr2.getHostName(), &quot;/region1/r1&quot;);</span>
+<span class="nc" id="L416">        StaticDNSResolver.addNodeToRack(addr3.getHostName(), &quot;/region1/r2&quot;);</span>
+<span class="nc" id="L417">        StaticDNSResolver.addNodeToRack(addr4.getHostName(), &quot;/default-region/r3&quot;);</span>
+        // Update cluster
+<span class="nc" id="L419">        Set&lt;BookieSocketAddress&gt; addrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L420">        addrs.add(addr1);</span>
+<span class="nc" id="L421">        addrs.add(addr2);</span>
+<span class="nc" id="L422">        addrs.add(addr3);</span>
+<span class="nc" id="L423">        addrs.add(addr4);</span>
+<span class="nc" id="L424">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+        // replace node under r2
+<span class="nc" id="L426">        BookieSocketAddress replacedBookie = repp.replaceBookie(1, 1, 1, null,</span>
+<span class="nc" id="L427">                new ArrayList&lt;BookieSocketAddress&gt;(), addr2, new HashSet&lt;BookieSocketAddress&gt;()).getResult();</span>
+<span class="nc" id="L428">        assertEquals(addr3, replacedBookie);</span>
+<span class="nc" id="L429">    }</span>
+
+    @Test
+    public void testReplaceBookieWithEnoughBookiesInDifferentRegion() throws Exception {
+<span class="nc" id="L433">        BookieSocketAddress addr1 = new BookieSocketAddress(&quot;127.0.0.2&quot;, 3181);</span>
+<span class="nc" id="L434">        BookieSocketAddress addr2 = new BookieSocketAddress(&quot;127.0.0.3&quot;, 3181);</span>
+<span class="nc" id="L435">        BookieSocketAddress addr3 = new BookieSocketAddress(&quot;127.0.0.4&quot;, 3181);</span>
+<span class="nc" id="L436">        BookieSocketAddress addr4 = new BookieSocketAddress(&quot;127.0.0.5&quot;, 3181);</span>
+        // update dns mapping
+<span class="nc" id="L438">        StaticDNSResolver.addNodeToRack(addr1.getHostName(), NetworkTopology.DEFAULT_REGION_AND_RACK);</span>
+<span class="nc" id="L439">        StaticDNSResolver.addNodeToRack(addr2.getHostName(), &quot;/region1/r2&quot;);</span>
+<span class="nc" id="L440">        StaticDNSResolver.addNodeToRack(addr3.getHostName(), &quot;/region2/r3&quot;);</span>
+<span class="nc" id="L441">        StaticDNSResolver.addNodeToRack(addr4.getHostName(), &quot;/region3/r4&quot;);</span>
+        // Update cluster
+<span class="nc" id="L443">        Set&lt;BookieSocketAddress&gt; addrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L444">        addrs.add(addr1);</span>
+<span class="nc" id="L445">        addrs.add(addr2);</span>
+<span class="nc" id="L446">        addrs.add(addr3);</span>
+<span class="nc" id="L447">        addrs.add(addr4);</span>
+<span class="nc" id="L448">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+        // replace node under r2
+<span class="nc" id="L450">        Set&lt;BookieSocketAddress&gt; excludedAddrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L451">        excludedAddrs.add(addr1);</span>
+<span class="nc" id="L452">        BookieSocketAddress replacedBookie = repp.replaceBookie(1, 1, 1, null,</span>
+<span class="nc" id="L453">                new ArrayList&lt;BookieSocketAddress&gt;(), addr2, excludedAddrs).getResult();</span>
+
+<span class="nc" id="L455">        assertFalse(addr1.equals(replacedBookie));</span>
+<span class="nc bnc" id="L456" title="All 4 branches missed.">        assertTrue(addr3.equals(replacedBookie) || addr4.equals(replacedBookie));</span>
+<span class="nc" id="L457">    }</span>
+
+    @Test
+    public void testNewEnsembleBookieWithNotEnoughBookies() throws Exception {
+<span class="nc" id="L461">        BookieSocketAddress addr1 = new BookieSocketAddress(&quot;127.0.0.2&quot;, 3181);</span>
+<span class="nc" id="L462">        BookieSocketAddress addr2 = new BookieSocketAddress(&quot;127.0.0.3&quot;, 3181);</span>
+<span class="nc" id="L463">        BookieSocketAddress addr3 = new BookieSocketAddress(&quot;127.0.0.4&quot;, 3181);</span>
+<span class="nc" id="L464">        BookieSocketAddress addr4 = new BookieSocketAddress(&quot;127.0.0.5&quot;, 3181);</span>
+        // update dns mapping
+<span class="nc" id="L466">        StaticDNSResolver.addNodeToRack(addr1.getHostName(), NetworkTopology.DEFAULT_REGION_AND_RACK);</span>
+<span class="nc" id="L467">        StaticDNSResolver.addNodeToRack(addr2.getHostName(), &quot;/region2/r2&quot;);</span>
+<span class="nc" id="L468">        StaticDNSResolver.addNodeToRack(addr3.getHostName(), &quot;/region3/r3&quot;);</span>
+<span class="nc" id="L469">        StaticDNSResolver.addNodeToRack(addr4.getHostName(), &quot;/region4/r4&quot;);</span>
+        // Update cluster
+<span class="nc" id="L471">        Set&lt;BookieSocketAddress&gt; addrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L472">        addrs.add(addr1);</span>
+<span class="nc" id="L473">        addrs.add(addr2);</span>
+<span class="nc" id="L474">        addrs.add(addr3);</span>
+<span class="nc" id="L475">        addrs.add(addr4);</span>
+<span class="nc" id="L476">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+        try {
+<span class="nc" id="L478">            List&lt;BookieSocketAddress&gt; list = repp.newEnsemble(5, 5, 3, null,</span>
+<span class="nc" id="L479">                    new HashSet&lt;BookieSocketAddress&gt;()).getResult();</span>
+<span class="nc" id="L480">            LOG.info(&quot;Ensemble : {}&quot;, list);</span>
+<span class="nc" id="L481">            fail(&quot;Should throw BKNotEnoughBookiesException when there is not enough bookies&quot;);</span>
+<span class="nc" id="L482">        } catch (BKNotEnoughBookiesException bnebe) {</span>
+            // should throw not enou
+<span class="nc" id="L484">        }</span>
+<span class="nc" id="L485">    }</span>
+
+    @Test
+    public void testReplaceBookieWithNotEnoughBookies() throws Exception {
+<span class="nc" id="L489">        BookieSocketAddress addr1 = new BookieSocketAddress(&quot;127.0.0.2&quot;, 3181);</span>
+<span class="nc" id="L490">        BookieSocketAddress addr2 = new BookieSocketAddress(&quot;127.0.0.3&quot;, 3181);</span>
+<span class="nc" id="L491">        BookieSocketAddress addr3 = new BookieSocketAddress(&quot;127.0.0.4&quot;, 3181);</span>
+<span class="nc" id="L492">        BookieSocketAddress addr4 = new BookieSocketAddress(&quot;127.0.0.5&quot;, 3181);</span>
+        // update dns mapping
+<span class="nc" id="L494">        StaticDNSResolver.addNodeToRack(addr1.getHostName(), NetworkTopology.DEFAULT_REGION_AND_RACK);</span>
+<span class="nc" id="L495">        StaticDNSResolver.addNodeToRack(addr2.getHostName(), &quot;/region2/r2&quot;);</span>
+<span class="nc" id="L496">        StaticDNSResolver.addNodeToRack(addr3.getHostName(), &quot;/region3/r3&quot;);</span>
+<span class="nc" id="L497">        StaticDNSResolver.addNodeToRack(addr4.getHostName(), &quot;/region4/r4&quot;);</span>
+        // Update cluster
+<span class="nc" id="L499">        Set&lt;BookieSocketAddress&gt; addrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L500">        addrs.add(addr1);</span>
+<span class="nc" id="L501">        addrs.add(addr2);</span>
+<span class="nc" id="L502">        addrs.add(addr3);</span>
+<span class="nc" id="L503">        addrs.add(addr4);</span>
+<span class="nc" id="L504">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+        // replace node under r2
+<span class="nc" id="L506">        Set&lt;BookieSocketAddress&gt; excludedAddrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L507">        excludedAddrs.add(addr1);</span>
+<span class="nc" id="L508">        excludedAddrs.add(addr3);</span>
+<span class="nc" id="L509">        excludedAddrs.add(addr4);</span>
+        try {
+<span class="nc" id="L511">            repp.replaceBookie(1, 1, 1, null, new ArrayList&lt;BookieSocketAddress&gt;(), addr2, excludedAddrs);</span>
+<span class="nc" id="L512">            fail(&quot;Should throw BKNotEnoughBookiesException when there is not enough bookies&quot;);</span>
+<span class="nc" id="L513">        } catch (BKNotEnoughBookiesException bnebe) {</span>
+            // should throw not enou
+<span class="nc" id="L515">        }</span>
+<span class="nc" id="L516">    }</span>
+
+    @Test
+    public void testNewEnsembleWithSingleRegion() throws Exception {
+<span class="nc" id="L520">        repp.uninitalize();</span>
+<span class="nc" id="L521">        repp = new RegionAwareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L522">        repp.initialize(conf, Optional.&lt;DNSToSwitchMapping&gt;empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+<span class="nc" id="L523">        BookieSocketAddress addr1 = new BookieSocketAddress(&quot;127.0.0.2&quot;, 3181);</span>
+<span class="nc" id="L524">        BookieSocketAddress addr2 = new BookieSocketAddress(&quot;127.0.0.3&quot;, 3181);</span>
+<span class="nc" id="L525">        BookieSocketAddress addr3 = new BookieSocketAddress(&quot;127.0.0.4&quot;, 3181);</span>
+<span class="nc" id="L526">        BookieSocketAddress addr4 = new BookieSocketAddress(&quot;127.0.0.5&quot;, 3181);</span>
+        // update dns mapping
+<span class="nc" id="L528">        StaticDNSResolver.addNodeToRack(addr1.getHostName(), &quot;/region1/r2&quot;);</span>
+<span class="nc" id="L529">        StaticDNSResolver.addNodeToRack(addr2.getHostName(), &quot;/region1/r2&quot;);</span>
+<span class="nc" id="L530">        StaticDNSResolver.addNodeToRack(addr3.getHostName(), &quot;/region1/r2&quot;);</span>
+<span class="nc" id="L531">        StaticDNSResolver.addNodeToRack(addr4.getHostName(), &quot;/region1/r2&quot;);</span>
+        // Update cluster
+<span class="nc" id="L533">        Set&lt;BookieSocketAddress&gt; addrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L534">        addrs.add(addr1);</span>
+<span class="nc" id="L535">        addrs.add(addr2);</span>
+<span class="nc" id="L536">        addrs.add(addr3);</span>
+<span class="nc" id="L537">        addrs.add(addr4);</span>
+<span class="nc" id="L538">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+        try {
+<span class="nc" id="L540">            List&lt;BookieSocketAddress&gt; ensemble = repp.newEnsemble(3, 2, 2, null,</span>
+<span class="nc" id="L541">                    new HashSet&lt;BookieSocketAddress&gt;()).getResult();</span>
+<span class="nc" id="L542">            assertEquals(0, getNumCoveredRegionsInWriteQuorum(ensemble, 2));</span>
+<span class="nc" id="L543">            List&lt;BookieSocketAddress&gt; ensemble2 = repp.newEnsemble(4, 2, 2, null,</span>
+<span class="nc" id="L544">                    new HashSet&lt;BookieSocketAddress&gt;()).getResult();</span>
+<span class="nc" id="L545">            assertEquals(0, getNumCoveredRegionsInWriteQuorum(ensemble2, 2));</span>
+<span class="nc" id="L546">        } catch (BKNotEnoughBookiesException bnebe) {</span>
+<span class="nc" id="L547">            fail(&quot;Should not get not enough bookies exception even there is only one rack.&quot;);</span>
+<span class="nc" id="L548">        }</span>
+<span class="nc" id="L549">    }</span>
+
+    @Test
+    public void testNewEnsembleWithMultipleRegions() throws Exception {
+<span class="nc" id="L553">        repp.uninitalize();</span>
+<span class="nc" id="L554">        repp = new RegionAwareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L555">        repp.initialize(conf, Optional.&lt;DNSToSwitchMapping&gt;empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+<span class="nc" id="L556">        BookieSocketAddress addr1 = new BookieSocketAddress(&quot;127.0.0.2&quot;, 3181);</span>
+<span class="nc" id="L557">        BookieSocketAddress addr2 = new BookieSocketAddress(&quot;127.0.0.3&quot;, 3181);</span>
+<span class="nc" id="L558">        BookieSocketAddress addr3 = new BookieSocketAddress(&quot;127.0.0.4&quot;, 3181);</span>
+<span class="nc" id="L559">        BookieSocketAddress addr4 = new BookieSocketAddress(&quot;127.0.0.5&quot;, 3181);</span>
+        // update dns mapping
+<span class="nc" id="L561">        StaticDNSResolver.addNodeToRack(addr1.getHostName(), NetworkTopology.DEFAULT_REGION_AND_RACK);</span>
+<span class="nc" id="L562">        StaticDNSResolver.addNodeToRack(addr2.getHostName(), &quot;/region1/r2&quot;);</span>
+<span class="nc" id="L563">        StaticDNSResolver.addNodeToRack(addr3.getHostName(), &quot;/region1/r2&quot;);</span>
+<span class="nc" id="L564">        StaticDNSResolver.addNodeToRack(addr4.getHostName(), &quot;/region1/r2&quot;);</span>
+        // Update cluster
+<span class="nc" id="L566">        Set&lt;BookieSocketAddress&gt; addrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L567">        addrs.add(addr1);</span>
+<span class="nc" id="L568">        addrs.add(addr2);</span>
+<span class="nc" id="L569">        addrs.add(addr3);</span>
+<span class="nc" id="L570">        addrs.add(addr4);</span>
+<span class="nc" id="L571">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+        try {
+<span class="nc" id="L573">            List&lt;BookieSocketAddress&gt; ensemble = repp.newEnsemble(3, 2, 2, null,</span>
+<span class="nc" id="L574">                    new HashSet&lt;BookieSocketAddress&gt;()).getResult();</span>
+<span class="nc" id="L575">            int numCovered = getNumCoveredRegionsInWriteQuorum(ensemble, 2);</span>
+<span class="nc bnc" id="L576" title="All 2 branches missed.">            assertTrue(numCovered &gt;= 1);</span>
+<span class="nc bnc" id="L577" title="All 2 branches missed.">            assertTrue(numCovered &lt; 3);</span>
+<span class="nc" id="L578">        } catch (BKNotEnoughBookiesException bnebe) {</span>
+<span class="nc" id="L579">            fail(&quot;Should not get not enough bookies exception even there is only one rack.&quot;);</span>
+<span class="nc" id="L580">        }</span>
+        try {
+<span class="nc" id="L582">            List&lt;BookieSocketAddress&gt; ensemble2 = repp.newEnsemble(4, 2, 2, null,</span>
+<span class="nc" id="L583">                    new HashSet&lt;BookieSocketAddress&gt;()).getResult();</span>
+<span class="nc" id="L584">            int numCovered = getNumCoveredRegionsInWriteQuorum(ensemble2, 2);</span>
+<span class="nc bnc" id="L585" title="All 4 branches missed.">            assertTrue(numCovered &gt;= 1 &amp;&amp; numCovered &lt; 3);</span>
+<span class="nc" id="L586">        } catch (BKNotEnoughBookiesException bnebe) {</span>
+<span class="nc" id="L587">            fail(&quot;Should not get not enough bookies exception even there is only one rack.&quot;);</span>
+<span class="nc" id="L588">        }</span>
+<span class="nc" id="L589">    }</span>
+
+    @Test
+    public void testNewEnsembleWithEnoughRegions() throws Exception {
+<span class="nc" id="L593">        BookieSocketAddress addr1 = new BookieSocketAddress(&quot;127.0.0.2&quot;, 3181);</span>
+<span class="nc" id="L594">        BookieSocketAddress addr2 = new BookieSocketAddress(&quot;127.0.0.3&quot;, 3181);</span>
+<span class="nc" id="L595">        BookieSocketAddress addr3 = new BookieSocketAddress(&quot;127.0.0.4&quot;, 3181);</span>
+<span class="nc" id="L596">        BookieSocketAddress addr4 = new BookieSocketAddress(&quot;127.0.0.5&quot;, 3181);</span>
+<span class="nc" id="L597">        BookieSocketAddress addr5 = new BookieSocketAddress(&quot;127.0.0.6&quot;, 3181);</span>
+<span class="nc" id="L598">        BookieSocketAddress addr6 = new BookieSocketAddress(&quot;127.0.0.7&quot;, 3181);</span>
+<span class="nc" id="L599">        BookieSocketAddress addr7 = new BookieSocketAddress(&quot;127.0.0.8&quot;, 3181);</span>
+<span class="nc" id="L600">        BookieSocketAddress addr8 = new BookieSocketAddress(&quot;127.0.0.9&quot;, 3181);</span>
+        // update dns mapping
+<span class="nc" id="L602">        StaticDNSResolver.addNodeToRack(addr1.getHostName(), &quot;/default-region/default-rack1&quot;);</span>
+<span class="nc" id="L603">        StaticDNSResolver.addNodeToRack(addr2.getHostName(), &quot;/region1/r2&quot;);</span>
+<span class="nc" id="L604">        StaticDNSResolver.addNodeToRack(addr3.getHostName(), &quot;/region2/r3&quot;);</span>
+<span class="nc" id="L605">        StaticDNSResolver.addNodeToRack(addr4.getHostName(), &quot;/region3/r4&quot;);</span>
+<span class="nc" id="L606">        StaticDNSResolver.addNodeToRack(addr5.getHostName(), &quot;/default-region/default-rack2&quot;);</span>
+<span class="nc" id="L607">        StaticDNSResolver.addNodeToRack(addr6.getHostName(), &quot;/region1/r12&quot;);</span>
+<span class="nc" id="L608">        StaticDNSResolver.addNodeToRack(addr7.getHostName(), &quot;/region2/r13&quot;);</span>
+<span class="nc" id="L609">        StaticDNSResolver.addNodeToRack(addr8.getHostName(), &quot;/region3/r14&quot;);</span>
+        // Update cluster
+<span class="nc" id="L611">        Set&lt;BookieSocketAddress&gt; addrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L612">        addrs.add(addr1);</span>
+<span class="nc" id="L613">        addrs.add(addr2);</span>
+<span class="nc" id="L614">        addrs.add(addr3);</span>
+<span class="nc" id="L615">        addrs.add(addr4);</span>
+<span class="nc" id="L616">        addrs.add(addr5);</span>
+<span class="nc" id="L617">        addrs.add(addr6);</span>
+<span class="nc" id="L618">        addrs.add(addr7);</span>
+<span class="nc" id="L619">        addrs.add(addr8);</span>
+<span class="nc" id="L620">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+        try {
+<span class="nc" id="L622">            List&lt;BookieSocketAddress&gt; ensemble1 = repp.newEnsemble(3, 2, 2, null,</span>
+<span class="nc" id="L623">                    new HashSet&lt;BookieSocketAddress&gt;()).getResult();</span>
+<span class="nc" id="L624">            assertEquals(3, getNumCoveredRegionsInWriteQuorum(ensemble1, 2));</span>
+<span class="nc" id="L625">            List&lt;BookieSocketAddress&gt; ensemble2 = repp.newEnsemble(4, 2, 2, null,</span>
+<span class="nc" id="L626">                    new HashSet&lt;BookieSocketAddress&gt;()).getResult();</span>
+<span class="nc" id="L627">            assertEquals(4, getNumCoveredRegionsInWriteQuorum(ensemble2, 2));</span>
+<span class="nc" id="L628">        } catch (BKNotEnoughBookiesException bnebe) {</span>
+<span class="nc" id="L629">            fail(&quot;Should not get not enough bookies exception even there is only one rack.&quot;);</span>
+<span class="nc" id="L630">        }</span>
+<span class="nc" id="L631">    }</span>
+
+    @Test
+    public void testNewEnsembleWithThreeRegions() throws Exception {
+<span class="nc" id="L635">        repp.uninitalize();</span>
+<span class="nc" id="L636">        repp = new RegionAwareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L637">        repp.initialize(conf, Optional.&lt;DNSToSwitchMapping&gt;empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+<span class="nc" id="L638">        BookieSocketAddress addr1 = new BookieSocketAddress(&quot;127.0.0.2&quot;, 3181);</span>
+<span class="nc" id="L639">        BookieSocketAddress addr2 = new BookieSocketAddress(&quot;127.0.0.3&quot;, 3181);</span>
+<span class="nc" id="L640">        BookieSocketAddress addr3 = new BookieSocketAddress(&quot;127.0.0.4&quot;, 3181);</span>
+<span class="nc" id="L641">        BookieSocketAddress addr4 = new BookieSocketAddress(&quot;127.0.0.5&quot;, 3181);</span>
+<span class="nc" id="L642">        BookieSocketAddress addr5 = new BookieSocketAddress(&quot;127.0.0.6&quot;, 3181);</span>
+<span class="nc" id="L643">        BookieSocketAddress addr6 = new BookieSocketAddress(&quot;127.0.0.7&quot;, 3181);</span>
+<span class="nc" id="L644">        BookieSocketAddress addr7 = new BookieSocketAddress(&quot;127.0.0.8&quot;, 3181);</span>
+<span class="nc" id="L645">        BookieSocketAddress addr8 = new BookieSocketAddress(&quot;127.0.0.9&quot;, 3181);</span>
+<span class="nc" id="L646">        BookieSocketAddress addr9 = new BookieSocketAddress(&quot;127.0.0.10&quot;, 3181);</span>
+<span class="nc" id="L647">        BookieSocketAddress addr10 = new BookieSocketAddress(&quot;127.0.0.11&quot;, 3181);</span>
+        // update dns mapping
+<span class="nc" id="L649">        StaticDNSResolver.addNodeToRack(addr1.getHostName(), &quot;/region2/r1&quot;);</span>
+<span class="nc" id="L650">        StaticDNSResolver.addNodeToRack(addr2.getHostName(), &quot;/region1/r2&quot;);</span>
+<span class="nc" id="L651">        StaticDNSResolver.addNodeToRack(addr3.getHostName(), &quot;/region2/r3&quot;);</span>
+<span class="nc" id="L652">        StaticDNSResolver.addNodeToRack(addr4.getHostName(), &quot;/region3/r4&quot;);</span>
+<span class="nc" id="L653">        StaticDNSResolver.addNodeToRack(addr5.getHostName(), &quot;/region1/r11&quot;);</span>
+<span class="nc" id="L654">        StaticDNSResolver.addNodeToRack(addr6.getHostName(), &quot;/region1/r12&quot;);</span>
+<span class="nc" id="L655">        StaticDNSResolver.addNodeToRack(addr7.getHostName(), &quot;/region2/r13&quot;);</span>
+<span class="nc" id="L656">        StaticDNSResolver.addNodeToRack(addr8.getHostName(), &quot;/region3/r14&quot;);</span>
+<span class="nc" id="L657">        StaticDNSResolver.addNodeToRack(addr9.getHostName(), &quot;/region2/r23&quot;);</span>
+<span class="nc" id="L658">        StaticDNSResolver.addNodeToRack(addr10.getHostName(), &quot;/region1/r24&quot;);</span>
+        // Update cluster
+<span class="nc" id="L660">        Set&lt;BookieSocketAddress&gt; addrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L661">        addrs.add(addr1);</span>
+<span class="nc" id="L662">        addrs.add(addr2);</span>
+<span class="nc" id="L663">        addrs.add(addr3);</span>
+<span class="nc" id="L664">        addrs.add(addr4);</span>
+<span class="nc" id="L665">        addrs.add(addr5);</span>
+<span class="nc" id="L666">        addrs.add(addr6);</span>
+<span class="nc" id="L667">        addrs.add(addr7);</span>
+<span class="nc" id="L668">        addrs.add(addr8);</span>
+<span class="nc" id="L669">        addrs.add(addr9);</span>
+<span class="nc" id="L670">        addrs.add(addr10);</span>
+<span class="nc" id="L671">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+        try {
+<span class="nc" id="L673">            List&lt;BookieSocketAddress&gt; ensemble = repp.newEnsemble(6, 6, 4, null,</span>
+<span class="nc" id="L674">                    new HashSet&lt;BookieSocketAddress&gt;()).getResult();</span>
+<span class="nc bnc" id="L675" title="All 4 branches missed.">            assert(ensemble.contains(addr4));</span>
+<span class="nc bnc" id="L676" title="All 4 branches missed.">            assert(ensemble.contains(addr8));</span>
+<span class="nc bnc" id="L677" title="All 4 branches missed.">            assert(ensemble.size() == 6);</span>
+<span class="nc" id="L678">            assertEquals(3, getNumRegionsInEnsemble(ensemble));</span>
+<span class="nc" id="L679">            ensemble = repp.newEnsemble(7, 7, 4, null, new HashSet&lt;BookieSocketAddress&gt;()).getResult();</span>
+<span class="nc bnc" id="L680" title="All 4 branches missed.">            assert(ensemble.contains(addr4));</span>
+<span class="nc bnc" id="L681" title="All 4 branches missed.">            assert(ensemble.contains(addr8));</span>
+<span class="nc bnc" id="L682" title="All 4 branches missed.">            assert(ensemble.size() == 7);</span>
+<span class="nc" id="L683">            assertEquals(3, getNumRegionsInEnsemble(ensemble));</span>
+<span class="nc" id="L684">            ensemble = repp.newEnsemble(8, 8, 5, null, new HashSet&lt;BookieSocketAddress&gt;()).getResult();</span>
+<span class="nc bnc" id="L685" title="All 4 branches missed.">            assert(ensemble.contains(addr4));</span>
+<span class="nc bnc" id="L686" title="All 4 branches missed.">            assert(ensemble.contains(addr8));</span>
+<span class="nc bnc" id="L687" title="All 4 branches missed.">            assert(ensemble.size() == 8);</span>
+<span class="nc" id="L688">            assertEquals(3, getNumRegionsInEnsemble(ensemble));</span>
+<span class="nc" id="L689">            ensemble = repp.newEnsemble(9, 9, 5, null, new HashSet&lt;BookieSocketAddress&gt;()).getResult();</span>
+<span class="nc bnc" id="L690" title="All 4 branches missed.">            assert(ensemble.contains(addr4));</span>
+<span class="nc bnc" id="L691" title="All 4 branches missed.">            assert(ensemble.contains(addr8));</span>
+<span class="nc bnc" id="L692" title="All 4 branches missed.">            assert(ensemble.size() == 9);</span>
+<span class="nc" id="L693">            assertEquals(3, getNumRegionsInEnsemble(ensemble));</span>
+<span class="nc" id="L694">        } catch (BKNotEnoughBookiesException bnebe) {</span>
+<span class="nc" id="L695">            fail(&quot;Should not get not enough bookies exception even there is only one rack.&quot;);</span>
+<span class="nc" id="L696">        }</span>
+<span class="nc" id="L697">    }</span>
+
+    @Test
+    public void testNewEnsembleWithThreeRegionsWithDisable() throws Exception {
+<span class="nc" id="L701">        FeatureProvider featureProvider = new SettableFeatureProvider(&quot;&quot;, 0);</span>
+<span class="nc" id="L702">        repp.uninitalize();</span>
+<span class="nc" id="L703">        repp = new RegionAwareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L704">        conf.setProperty(REPP_DISALLOW_BOOKIE_PLACEMENT_IN_REGION_FEATURE_NAME, &quot;disallowBookies&quot;);</span>
+<span class="nc" id="L705">        repp.initialize(conf, Optional.&lt;DNSToSwitchMapping&gt;empty(), timer, featureProvider, NullStatsLogger.INSTANCE);</span>
+<span class="nc" id="L706">        BookieSocketAddress addr1 = new BookieSocketAddress(&quot;127.0.0.2&quot;, 3181);</span>
+<span class="nc" id="L707">        BookieSocketAddress addr2 = new BookieSocketAddress(&quot;127.0.0.3&quot;, 3181);</span>
+<span class="nc" id="L708">        BookieSocketAddress addr3 = new BookieSocketAddress(&quot;127.0.0.4&quot;, 3181);</span>
+<span class="nc" id="L709">        BookieSocketAddress addr4 = new BookieSocketAddress(&quot;127.0.0.5&quot;, 3181);</span>
+<span class="nc" id="L710">        BookieSocketAddress addr5 = new BookieSocketAddress(&quot;127.0.0.6&quot;, 3181);</span>
+<span class="nc" id="L711">        BookieSocketAddress addr6 = new BookieSocketAddress(&quot;127.0.0.7&quot;, 3181);</span>
+<span class="nc" id="L712">        BookieSocketAddress addr7 = new BookieSocketAddress(&quot;127.0.0.8&quot;, 3181);</span>
+<span class="nc" id="L713">        BookieSocketAddress addr8 = new BookieSocketAddress(&quot;127.0.0.9&quot;, 3181);</span>
+<span class="nc" id="L714">        BookieSocketAddress addr9 = new BookieSocketAddress(&quot;127.0.0.10&quot;, 3181);</span>
+<span class="nc" id="L715">        BookieSocketAddress addr10 = new BookieSocketAddress(&quot;127.0.0.11&quot;, 3181);</span>
+        // update dns mapping
+<span class="nc" id="L717">        StaticDNSResolver.addNodeToRack(addr1.getHostName(), &quot;/region2/r1&quot;);</span>
+<span class="nc" id="L718">        StaticDNSResolver.addNodeToRack(addr2.getHostName(), &quot;/region1/r2&quot;);</span>
+<span class="nc" id="L719">        StaticDNSResolver.addNodeToRack(addr3.getHostName(), &quot;/region2/r3&quot;);</span>
+<span class="nc" id="L720">        StaticDNSResolver.addNodeToRack(addr4.getHostName(), &quot;/region3/r4&quot;);</span>
+<span class="nc" id="L721">        StaticDNSResolver.addNodeToRack(addr5.getHostName(), &quot;/region1/r11&quot;);</span>
+<span class="nc" id="L722">        StaticDNSResolver.addNodeToRack(addr6.getHostName(), &quot;/region1/r12&quot;);</span>
+<span class="nc" id="L723">        StaticDNSResolver.addNodeToRack(addr7.getHostName(), &quot;/region2/r13&quot;);</span>
+<span class="nc" id="L724">        StaticDNSResolver.addNodeToRack(addr8.getHostName(), &quot;/region3/r14&quot;);</span>
+<span class="nc" id="L725">        StaticDNSResolver.addNodeToRack(addr9.getHostName(), &quot;/region2/r23&quot;);</span>
+<span class="nc" id="L726">        StaticDNSResolver.addNodeToRack(addr10.getHostName(), &quot;/region1/r24&quot;);</span>
+        // Update cluster
+<span class="nc" id="L728">        Set&lt;BookieSocketAddress&gt; addrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L729">        addrs.add(addr1);</span>
+<span class="nc" id="L730">        addrs.add(addr2);</span>
+<span class="nc" id="L731">        addrs.add(addr3);</span>
+<span class="nc" id="L732">        addrs.add(addr4);</span>
+<span class="nc" id="L733">        addrs.add(addr5);</span>
+<span class="nc" id="L734">        addrs.add(addr6);</span>
+<span class="nc" id="L735">        addrs.add(addr7);</span>
+<span class="nc" id="L736">        addrs.add(addr8);</span>
+<span class="nc" id="L737">        addrs.add(addr9);</span>
+<span class="nc" id="L738">        addrs.add(addr10);</span>
+<span class="nc" id="L739">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+        try {
+<span class="nc" id="L741">            ((SettableFeature) featureProvider.scope(&quot;region1&quot;).getFeature(&quot;disallowBookies&quot;)).set(true);</span>
+<span class="nc" id="L742">            List&lt;BookieSocketAddress&gt; ensemble = repp.newEnsemble(6, 6, 4, null,</span>
+<span class="nc" id="L743">                                                                  new HashSet&lt;BookieSocketAddress&gt;()).getResult();</span>
+<span class="nc" id="L744">            assertEquals(2, getNumRegionsInEnsemble(ensemble));</span>
+<span class="nc bnc" id="L745" title="All 4 branches missed.">            assert(ensemble.contains(addr1));</span>
+<span class="nc bnc" id="L746" title="All 4 branches missed.">            assert(ensemble.contains(addr3));</span>
+<span class="nc bnc" id="L747" title="All 4 branches missed.">            assert(ensemble.contains(addr4));</span>
+<span class="nc bnc" id="L748" title="All 4 branches missed.">            assert(ensemble.contains(addr7));</span>
+<span class="nc bnc" id="L749" title="All 4 branches missed.">            assert(ensemble.contains(addr8));</span>
+<span class="nc bnc" id="L750" title="All 4 branches missed.">            assert(ensemble.contains(addr9));</span>
+<span class="nc bnc" id="L751" title="All 4 branches missed.">            assert(ensemble.size() == 6);</span>
+<span class="nc" id="L752">        } catch (BKNotEnoughBookiesException bnebe) {</span>
+<span class="nc" id="L753">            fail(&quot;Should not get not enough bookies exception even there is only one rack.&quot;);</span>
+<span class="nc" id="L754">        }</span>
+        try {
+<span class="nc" id="L756">            ((SettableFeature) featureProvider.scope(&quot;region2&quot;).getFeature(&quot;disallowBookies&quot;)).set(true);</span>
+<span class="nc" id="L757">            repp.newEnsemble(6, 6, 4, null, new HashSet&lt;BookieSocketAddress&gt;());</span>
+<span class="nc" id="L758">            fail(&quot;Should get not enough bookies exception even there is only one region with insufficient bookies.&quot;);</span>
+<span class="nc" id="L759">        } catch (BKNotEnoughBookiesException bnebe) {</span>
+            // Expected
+<span class="nc" id="L761">        }</span>
+        try {
+<span class="nc" id="L763">            ((SettableFeature) featureProvider.scope(&quot;region2&quot;).getFeature(&quot;disallowBookies&quot;)).set(false);</span>
+<span class="nc" id="L764">            List&lt;BookieSocketAddress&gt; ensemble = repp.newEnsemble(6, 6, 4, null,</span>
+<span class="nc" id="L765">                                                                  new HashSet&lt;BookieSocketAddress&gt;()).getResult();</span>
+<span class="nc bnc" id="L766" title="All 4 branches missed.">            assert(ensemble.contains(addr1));</span>
+<span class="nc bnc" id="L767" title="All 4 branches missed.">            assert(ensemble.contains(addr3));</span>
+<span class="nc bnc" id="L768" title="All 4 branches missed.">            assert(ensemble.contains(addr4));</span>
+<span class="nc bnc" id="L769" title="All 4 branches missed.">            assert(ensemble.contains(addr7));</span>
+<span class="nc bnc" id="L770" title="All 4 branches missed.">            assert(ensemble.contains(addr8));</span>
+<span class="nc bnc" id="L771" title="All 4 branches missed.">            assert(ensemble.contains(addr9));</span>
+<span class="nc bnc" id="L772" title="All 4 branches missed.">            assert(ensemble.size() == 6);</span>
+<span class="nc" id="L773">            assertEquals(2, getNumRegionsInEnsemble(ensemble));</span>
+<span class="nc" id="L774">        } catch (BKNotEnoughBookiesException bnebe) {</span>
+<span class="nc" id="L775">            fail(&quot;Should not get not enough bookies exception even there is only one rack.&quot;);</span>
+<span class="nc" id="L776">        }</span>
+<span class="nc" id="L777">    }</span>
+
+
+    @Test
+    public void testNewEnsembleWithFiveRegions() throws Exception {
+<span class="nc" id="L782">        repp.uninitalize();</span>
+<span class="nc" id="L783">        repp = new RegionAwareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L784">        conf.setProperty(REPP_REGIONS_TO_WRITE, &quot;region1;region2;region3;region4;region5&quot;);</span>
+<span class="nc" id="L785">        conf.setProperty(REPP_MINIMUM_REGIONS_FOR_DURABILITY, 5);</span>
+<span class="nc" id="L786">        repp.initialize(conf, Optional.&lt;DNSToSwitchMapping&gt;empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+<span class="nc" id="L787">        BookieSocketAddress addr1 = new BookieSocketAddress(&quot;127.1.0.2&quot;, 3181);</span>
+<span class="nc" id="L788">        BookieSocketAddress addr2 = new BookieSocketAddress(&quot;127.1.0.3&quot;, 3181);</span>
+<span class="nc" id="L789">        BookieSocketAddress addr3 = new BookieSocketAddress(&quot;127.1.0.4&quot;, 3181);</span>
+<span class="nc" id="L790">        BookieSocketAddress addr4 = new BookieSocketAddress(&quot;127.1.0.5&quot;, 3181);</span>
+<span class="nc" id="L791">        BookieSocketAddress addr5 = new BookieSocketAddress(&quot;127.1.0.6&quot;, 3181);</span>
+<span class="nc" id="L792">        BookieSocketAddress addr6 = new BookieSocketAddress(&quot;127.1.0.7&quot;, 3181);</span>
+<span class="nc" id="L793">        BookieSocketAddress addr7 = new BookieSocketAddress(&quot;127.1.0.8&quot;, 3181);</span>
+<span class="nc" id="L794">        BookieSocketAddress addr8 = new BookieSocketAddress(&quot;127.1.0.9&quot;, 3181);</span>
+<span class="nc" id="L795">        BookieSocketAddress addr9 = new BookieSocketAddress(&quot;127.1.0.10&quot;, 3181);</span>
+<span class="nc" id="L796">        BookieSocketAddress addr10 = new BookieSocketAddress(&quot;127.1.0.11&quot;, 3181);</span>
+<span class="nc" id="L797">        BookieSocketAddress addr11 = new BookieSocketAddress(&quot;127.1.0.12&quot;, 3181);</span>
+<span class="nc" id="L798">        BookieSocketAddress addr12 = new BookieSocketAddress(&quot;127.1.0.13&quot;, 3181);</span>
+<span class="nc" id="L799">        BookieSocketAddress addr13 = new BookieSocketAddress(&quot;127.1.0.14&quot;, 3181);</span>
+<span class="nc" id="L800">        BookieSocketAddress addr14 = new BookieSocketAddress(&quot;127.1.0.15&quot;, 3181);</span>
+<span class="nc" id="L801">        BookieSocketAddress addr15 = new BookieSocketAddress(&quot;127.1.0.16&quot;, 3181);</span>
+        // update dns mapping
+<span class="nc" id="L803">        StaticDNSResolver.addNodeToRack(addr1.getHostName(), &quot;/region1/r1&quot;);</span>
+<span class="nc" id="L804">        StaticDNSResolver.addNodeToRack(addr2.getHostName(), &quot;/region1/r2&quot;);</span>
+<span class="nc" id="L805">        StaticDNSResolver.addNodeToRack(addr3.getHostName(), &quot;/region1/r3&quot;);</span>
+<span class="nc" id="L806">        StaticDNSResolver.addNodeToRack(addr4.getHostName(), &quot;/region2/r4&quot;);</span>
+<span class="nc" id="L807">        StaticDNSResolver.addNodeToRack(addr5.getHostName(), &quot;/region2/r11&quot;);</span>
+<span class="nc" id="L808">        StaticDNSResolver.addNodeToRack(addr6.getHostName(), &quot;/region2/r12&quot;);</span>
+<span class="nc" id="L809">        StaticDNSResolver.addNodeToRack(addr7.getHostName(), &quot;/region3/r13&quot;);</span>
+<span class="nc" id="L810">        StaticDNSResolver.addNodeToRack(addr8.getHostName(), &quot;/region3/r14&quot;);</span>
+<span class="nc" id="L811">        StaticDNSResolver.addNodeToRack(addr9.getHostName(), &quot;/region3/r23&quot;);</span>
+<span class="nc" id="L812">        StaticDNSResolver.addNodeToRack(addr10.getHostName(), &quot;/region4/r24&quot;);</span>
+<span class="nc" id="L813">        StaticDNSResolver.addNodeToRack(addr11.getHostName(), &quot;/region4/r31&quot;);</span>
+<span class="nc" id="L814">        StaticDNSResolver.addNodeToRack(addr12.getHostName(), &quot;/region4/r32&quot;);</span>
+<span class="nc" id="L815">        StaticDNSResolver.addNodeToRack(addr13.getHostName(), &quot;/region5/r33&quot;);</span>
+<span class="nc" id="L816">        StaticDNSResolver.addNodeToRack(addr14.getHostName(), &quot;/region5/r34&quot;);</span>
+<span class="nc" id="L817">        StaticDNSResolver.addNodeToRack(addr15.getHostName(), &quot;/region5/r35&quot;);</span>
+        // Update cluster
+<span class="nc" id="L819">        Set&lt;BookieSocketAddress&gt; addrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L820">        addrs.add(addr1);</span>
+<span class="nc" id="L821">        addrs.add(addr2);</span>
+<span class="nc" id="L822">        addrs.add(addr3);</span>
+<span class="nc" id="L823">        addrs.add(addr4);</span>
+<span class="nc" id="L824">        addrs.add(addr5);</span>
+<span class="nc" id="L825">        addrs.add(addr6);</span>
+<span class="nc" id="L826">        addrs.add(addr7);</span>
+<span class="nc" id="L827">        addrs.add(addr8);</span>
+<span class="nc" id="L828">        addrs.add(addr9);</span>
+<span class="nc" id="L829">        addrs.add(addr10);</span>
+<span class="nc" id="L830">        addrs.add(addr11);</span>
+<span class="nc" id="L831">        addrs.add(addr12);</span>
+<span class="nc" id="L832">        addrs.add(addr13);</span>
+<span class="nc" id="L833">        addrs.add(addr14);</span>
+<span class="nc" id="L834">        addrs.add(addr15);</span>
+<span class="nc" id="L835">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+
+        try {
+<span class="nc" id="L838">            List&lt;BookieSocketAddress&gt; ensemble = repp.newEnsemble(10, 10, 10, null,</span>
+<span class="nc" id="L839">                                                                  new HashSet&lt;BookieSocketAddress&gt;()).getResult();</span>
+<span class="nc bnc" id="L840" title="All 4 branches missed.">            assert(ensemble.size() == 10);</span>
+<span class="nc" id="L841">            assertEquals(5, getNumRegionsInEnsemble(ensemble));</span>
+<span class="nc" id="L842">        } catch (BKNotEnoughBookiesException bnebe) {</span>
+<span class="nc" id="L843">            LOG.error(&quot;BKNotEnoughBookiesException&quot;, bnebe);</span>
+<span class="nc" id="L844">            fail(&quot;Should not get not enough bookies exception even there is only one rack.&quot;);</span>
+<span class="nc" id="L845">        }</span>
+
+        try {
+<span class="nc" id="L848">            Set&lt;BookieSocketAddress&gt; excludedAddrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L849">            excludedAddrs.add(addr10);</span>
+<span class="nc" id="L850">            List&lt;BookieSocketAddress&gt; ensemble = repp.newEnsemble(10, 10, 10, null,</span>
+<span class="nc" id="L851">                                                                  excludedAddrs).getResult();</span>
+<span class="nc bnc" id="L852" title="All 6 branches missed.">            assert(ensemble.contains(addr11) &amp;&amp; ensemble.contains(addr12));</span>
+<span class="nc bnc" id="L853" title="All 4 branches missed.">            assert(ensemble.size() == 10);</span>
+<span class="nc" id="L854">            assertEquals(5, getNumRegionsInEnsemble(ensemble));</span>
+<span class="nc" id="L855">        } catch (BKNotEnoughBookiesException bnebe) {</span>
+<span class="nc" id="L856">            fail(&quot;Should not get not enough bookies exception even there is only one rack.&quot;);</span>
+<span class="nc" id="L857">        }</span>
+<span class="nc" id="L858">    }</span>
+
+    @Test
+    public void testEnsembleWithThreeRegionsReplace() throws Exception {
+<span class="nc" id="L862">        testEnsembleWithThreeRegionsReplaceInternal(3, false, false);</span>
+<span class="nc" id="L863">    }</span>
+
+    @Test
+    public void testEnsembleWithThreeRegionsReplaceDisableOneRegion() throws Exception {
+<span class="nc" id="L867">        testEnsembleWithThreeRegionsReplaceInternal(2, false, true);</span>
+<span class="nc" id="L868">    }</span>
+
+    @Test
+    public void testEnsembleWithThreeRegionsReplaceMinDurabilityOne() throws Exception {
+<span class="nc" id="L872">        testEnsembleWithThreeRegionsReplaceInternal(1, false, false);</span>
+<span class="nc" id="L873">    }</span>
+
+    @Test
+    public void testEnsembleWithThreeRegionsReplaceDisableDurability() throws Exception {
+<span class="nc" id="L877">        testEnsembleWithThreeRegionsReplaceInternal(1, true, false);</span>
+<span class="nc" id="L878">    }</span>
+
+    public void testEnsembleWithThreeRegionsReplaceInternal(int minDurability, boolean disableDurability,
+            boolean disableOneRegion) throws Exception {
+<span class="nc" id="L882">        repp.uninitalize();</span>
+<span class="nc" id="L883">        repp = new RegionAwareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L884">        conf.setProperty(REPP_REGIONS_TO_WRITE, &quot;region1;region2;region3&quot;);</span>
+<span class="nc" id="L885">        conf.setProperty(REPP_MINIMUM_REGIONS_FOR_DURABILITY, minDurability);</span>
+<span class="nc" id="L886">        FeatureProvider featureProvider = new SettableFeatureProvider(&quot;&quot;, 0);</span>
+<span class="nc bnc" id="L887" title="All 2 branches missed.">        if (minDurability &lt;= 1) {</span>
+<span class="nc" id="L888">            conf.setProperty(REPP_ENABLE_DURABILITY_ENFORCEMENT_IN_REPLACE, false);</span>
+        } else {
+<span class="nc" id="L890">            conf.setProperty(REPP_ENABLE_DURABILITY_ENFORCEMENT_IN_REPLACE, true);</span>
+        }
+<span class="nc" id="L892">        conf.setProperty(REPP_DISALLOW_BOOKIE_PLACEMENT_IN_REGION_FEATURE_NAME, &quot;disallowBookies&quot;);</span>
+
+<span class="nc" id="L894">        repp.initialize(conf, Optional.&lt;DNSToSwitchMapping&gt;empty(), timer, featureProvider, NullStatsLogger.INSTANCE);</span>
+<span class="nc" id="L895">        BookieSocketAddress addr1 = new BookieSocketAddress(&quot;127.1.0.2&quot;, 3181);</span>
+<span class="nc" id="L896">        BookieSocketAddress addr2 = new BookieSocketAddress(&quot;127.1.0.3&quot;, 3181);</span>
+<span class="nc" id="L897">        BookieSocketAddress addr3 = new BookieSocketAddress(&quot;127.1.0.4&quot;, 3181);</span>
+<span class="nc" id="L898">        BookieSocketAddress addr4 = new BookieSocketAddress(&quot;127.1.0.5&quot;, 3181);</span>
+<span class="nc" id="L899">        BookieSocketAddress addr5 = new BookieSocketAddress(&quot;127.1.0.6&quot;, 3181);</span>
+<span class="nc" id="L900">        BookieSocketAddress addr6 = new BookieSocketAddress(&quot;127.1.0.7&quot;, 3181);</span>
+<span class="nc" id="L901">        BookieSocketAddress addr7 = new BookieSocketAddress(&quot;127.1.0.8&quot;, 3181);</span>
+<span class="nc" id="L902">        BookieSocketAddress addr8 = new BookieSocketAddress(&quot;127.1.0.9&quot;, 3181);</span>
+<span class="nc" id="L903">        BookieSocketAddress addr9 = new BookieSocketAddress(&quot;127.1.0.10&quot;, 3181);</span>
+        // update dns mapping
+<span class="nc" id="L905">        StaticDNSResolver.addNodeToRack(addr1.getHostName(), &quot;/region1/r1&quot;);</span>
+<span class="nc" id="L906">        StaticDNSResolver.addNodeToRack(addr2.getHostName(), &quot;/region1/r2&quot;);</span>
+<span class="nc" id="L907">        StaticDNSResolver.addNodeToRack(addr3.getHostName(), &quot;/region1/r3&quot;);</span>
+<span class="nc" id="L908">        StaticDNSResolver.addNodeToRack(addr4.getHostName(), &quot;/region2/r4&quot;);</span>
+<span class="nc" id="L909">        StaticDNSResolver.addNodeToRack(addr5.getHostName(), &quot;/region2/r11&quot;);</span>
+<span class="nc" id="L910">        StaticDNSResolver.addNodeToRack(addr6.getHostName(), &quot;/region2/r12&quot;);</span>
+<span class="nc" id="L911">        StaticDNSResolver.addNodeToRack(addr7.getHostName(), &quot;/region3/r13&quot;);</span>
+<span class="nc" id="L912">        StaticDNSResolver.addNodeToRack(addr8.getHostName(), &quot;/region3/r14&quot;);</span>
+<span class="nc" id="L913">        StaticDNSResolver.addNodeToRack(addr9.getHostName(), &quot;/region3/r23&quot;);</span>
+
+        // Update cluster
+<span class="nc" id="L916">        Set&lt;BookieSocketAddress&gt; addrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L917">        addrs.add(addr1);</span>
+<span class="nc" id="L918">        addrs.add(addr2);</span>
+<span class="nc" id="L919">        addrs.add(addr3);</span>
+<span class="nc" id="L920">        addrs.add(addr4);</span>
+<span class="nc" id="L921">        addrs.add(addr5);</span>
+<span class="nc" id="L922">        addrs.add(addr6);</span>
+<span class="nc" id="L923">        addrs.add(addr7);</span>
+<span class="nc" id="L924">        addrs.add(addr8);</span>
+<span class="nc" id="L925">        addrs.add(addr9);</span>
+<span class="nc" id="L926">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+
+<span class="nc" id="L928">        SettableFeature disableDurabilityFeature =</span>
+<span class="nc" id="L929">                (SettableFeature) featureProvider.getFeature(</span>
+                        BookKeeperConstants.FEATURE_REPP_DISABLE_DURABILITY_ENFORCEMENT);
+
+<span class="nc bnc" id="L932" title="All 2 branches missed.">        if (disableDurability) {</span>
+<span class="nc" id="L933">            disableDurabilityFeature.set(true);</span>
+        }
+
+<span class="nc" id="L936">        int ackQuorum = 4;</span>
+<span class="nc bnc" id="L937" title="All 2 branches missed.">        if (minDurability &gt; 2) {</span>
+<span class="nc" id="L938">            ackQuorum = 5;</span>
+        }
+
+        List&lt;BookieSocketAddress&gt; ensemble;
+        try {
+<span class="nc" id="L943">            ensemble = repp.newEnsemble(6, 6, ackQuorum, null, new HashSet&lt;BookieSocketAddress&gt;()).getResult();</span>
+<span class="nc bnc" id="L944" title="All 4 branches missed.">            assert(ensemble.size() == 6);</span>
+<span class="nc" id="L945">            assertEquals(3, getNumRegionsInEnsemble(ensemble));</span>
+<span class="nc" id="L946">        } catch (BKNotEnoughBookiesException bnebe) {</span>
+<span class="nc" id="L947">            LOG.error(&quot;BKNotEnoughBookiesException&quot;, bnebe);</span>
+<span class="nc" id="L948">            fail(&quot;Should not get not enough bookies exception even there is only one rack.&quot;);</span>
+<span class="nc" id="L949">            throw bnebe;</span>
+<span class="nc" id="L950">        }</span>
+
+<span class="nc bnc" id="L952" title="All 2 branches missed.">        if (disableOneRegion) {</span>
+<span class="nc" id="L953">            ((SettableFeature) featureProvider.scope(&quot;region2&quot;).getFeature(&quot;disallowBookies&quot;)).set(true);</span>
+<span class="nc" id="L954">            Set&lt;BookieSocketAddress&gt; region2Bookies = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L955">            region2Bookies.add(addr4);</span>
+<span class="nc" id="L956">            region2Bookies.add(addr5);</span>
+<span class="nc" id="L957">            region2Bookies.add(addr6);</span>
+<span class="nc" id="L958">            Set&lt;BookieSocketAddress&gt; region1And3Bookies = new HashSet&lt;BookieSocketAddress&gt;(addrs);</span>
+<span class="nc" id="L959">            region1And3Bookies.removeAll(region2Bookies);</span>
+
+<span class="nc" id="L961">            Set&lt;BookieSocketAddress&gt; excludedAddrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc bnc" id="L962" title="All 2 branches missed.">            for (BookieSocketAddress addr: region2Bookies) {</span>
+<span class="nc bnc" id="L963" title="All 2 branches missed.">                if (ensemble.contains(addr)) {</span>
+<span class="nc" id="L964">                    BookieSocketAddress replacedBookie = repp.replaceBookie(6, 6, ackQuorum, null,</span>
+<span class="nc" id="L965">                                                                            ensemble, addr, excludedAddrs).getResult();</span>
+<span class="nc" id="L966">                    ensemble.remove(addr);</span>
+<span class="nc" id="L967">                    ensemble.add(replacedBookie);</span>
+                }
+<span class="nc" id="L969">            }</span>
+<span class="nc" id="L970">            assertEquals(2, getNumRegionsInEnsemble(ensemble));</span>
+<span class="nc" id="L971">            assertTrue(ensemble.containsAll(region1And3Bookies));</span>
+<span class="nc" id="L972">        } else {</span>
+            BookieSocketAddress bookieToReplace;
+            BookieSocketAddress replacedBookieExpected;
+<span class="nc bnc" id="L975" title="All 2 branches missed.">            if (ensemble.contains(addr4)) {</span>
+<span class="nc" id="L976">                bookieToReplace = addr4;</span>
+<span class="nc bnc" id="L977" title="All 2 branches missed.">                if (ensemble.contains(addr5)) {</span>
+<span class="nc" id="L978">                    replacedBookieExpected = addr6;</span>
+                } else {
+<span class="nc" id="L980">                    replacedBookieExpected = addr5;</span>
+                }
+            } else {
+<span class="nc" id="L983">                replacedBookieExpected = addr4;</span>
+<span class="nc" id="L984">                bookieToReplace = addr5;</span>
+            }
+<span class="nc" id="L986">            Set&lt;BookieSocketAddress&gt; excludedAddrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+
+            try {
+<span class="nc" id="L989">                BookieSocketAddress replacedBookie = repp.replaceBookie(6, 6, ackQuorum, null,</span>
+<span class="nc" id="L990">                        ensemble, bookieToReplace, excludedAddrs).getResult();</span>
+<span class="nc bnc" id="L991" title="All 4 branches missed.">                assert (replacedBookie.equals(replacedBookieExpected));</span>
+<span class="nc" id="L992">                assertEquals(3, getNumRegionsInEnsemble(ensemble));</span>
+<span class="nc" id="L993">            } catch (BKNotEnoughBookiesException bnebe) {</span>
+<span class="nc" id="L994">                fail(&quot;Should not get not enough bookies exception even there is only one rack.&quot;);</span>
+<span class="nc" id="L995">            }</span>
+
+<span class="nc" id="L997">            excludedAddrs.add(replacedBookieExpected);</span>
+            try {
+<span class="nc" id="L999">                repp.replaceBookie(6, 6, ackQuorum, null, ensemble, bookieToReplace, excludedAddrs);</span>
+<span class="nc bnc" id="L1000" title="All 4 branches missed.">                if (minDurability &gt; 1 &amp;&amp; !disableDurabilityFeature.isAvailable()) {</span>
+<span class="nc" id="L1001">                    fail(&quot;Should throw BKNotEnoughBookiesException when there is not enough bookies&quot;);</span>
+                }
+<span class="nc" id="L1003">            } catch (BKNotEnoughBookiesException bnebe) {</span>
+<span class="nc bnc" id="L1004" title="All 4 branches missed.">                if (minDurability &lt;= 1 || disableDurabilityFeature.isAvailable()) {</span>
+<span class="nc" id="L1005">                    fail(&quot;Should not throw BKNotEnoughBookiesException when there is not enough bookies&quot;);</span>
+                }
+<span class="nc" id="L1007">            }</span>
+        }
+<span class="nc" id="L1009">    }</span>
+
+    @Test
+    public void testEnsembleMinDurabilityOne() throws Exception {
+<span class="nc" id="L1013">        testEnsembleDurabilityDisabledInternal(1, false);</span>
+<span class="nc" id="L1014">    }</span>
+
+    @Test
+    public void testEnsembleDisableDurability() throws Exception {
+<span class="nc" id="L1018">        testEnsembleDurabilityDisabledInternal(2, true);</span>
+<span class="nc" id="L1019">    }</span>
+
+    public void testEnsembleDurabilityDisabledInternal(int minDurability, boolean disableDurability) throws Exception {
+<span class="nc" id="L1022">        repp.uninitalize();</span>
+<span class="nc" id="L1023">        repp = new RegionAwareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L1024">        conf.setProperty(REPP_REGIONS_TO_WRITE, &quot;region1;region2;region3&quot;);</span>
+<span class="nc" id="L1025">        conf.setProperty(REPP_MINIMUM_REGIONS_FOR_DURABILITY, minDurability);</span>
+<span class="nc" id="L1026">        FeatureProvider featureProvider = new SettableFeatureProvider(&quot;&quot;, 0);</span>
+<span class="nc bnc" id="L1027" title="All 2 branches missed.">        if (minDurability &lt;= 1) {</span>
+<span class="nc" id="L1028">            conf.setProperty(REPP_ENABLE_DURABILITY_ENFORCEMENT_IN_REPLACE, false);</span>
+        } else {
+<span class="nc" id="L1030">            conf.setProperty(REPP_ENABLE_DURABILITY_ENFORCEMENT_IN_REPLACE, true);</span>
+        }
+
+<span class="nc" id="L1033">        repp.initialize(conf, Optional.&lt;DNSToSwitchMapping&gt;empty(), timer, featureProvider, NullStatsLogger.INSTANCE);</span>
+<span class="nc" id="L1034">        BookieSocketAddress addr1 = new BookieSocketAddress(&quot;127.1.0.2&quot;, 3181);</span>
+<span class="nc" id="L1035">        BookieSocketAddress addr2 = new BookieSocketAddress(&quot;127.1.0.3&quot;, 3181);</span>
+<span class="nc" id="L1036">        BookieSocketAddress addr3 = new BookieSocketAddress(&quot;127.1.0.4&quot;, 3181);</span>
+<span class="nc" id="L1037">        BookieSocketAddress addr4 = new BookieSocketAddress(&quot;127.1.0.5&quot;, 3181);</span>
+<span class="nc" id="L1038">        BookieSocketAddress addr5 = new BookieSocketAddress(&quot;127.1.0.6&quot;, 3181);</span>
+<span class="nc" id="L1039">        BookieSocketAddress addr6 = new BookieSocketAddress(&quot;127.1.0.7&quot;, 3181);</span>
+<span class="nc" id="L1040">        BookieSocketAddress addr7 = new BookieSocketAddress(&quot;127.1.0.8&quot;, 3181);</span>
+<span class="nc" id="L1041">        BookieSocketAddress addr8 = new BookieSocketAddress(&quot;127.1.0.9&quot;, 3181);</span>
+<span class="nc" id="L1042">        BookieSocketAddress addr9 = new BookieSocketAddress(&quot;127.1.0.10&quot;, 3181);</span>
+        // update dns mapping
+<span class="nc" id="L1044">        StaticDNSResolver.addNodeToRack(addr1.getHostName(), &quot;/region1/r1&quot;);</span>
+<span class="nc" id="L1045">        StaticDNSResolver.addNodeToRack(addr2.getHostName(), &quot;/region1/r2&quot;);</span>
+<span class="nc" id="L1046">        StaticDNSResolver.addNodeToRack(addr3.getHostName(), &quot;/region1/r3&quot;);</span>
+<span class="nc" id="L1047">        StaticDNSResolver.addNodeToRack(addr4.getHostName(), &quot;/region1/r4&quot;);</span>
+<span class="nc" id="L1048">        StaticDNSResolver.addNodeToRack(addr5.getHostName(), &quot;/region1/r11&quot;);</span>
+<span class="nc" id="L1049">        StaticDNSResolver.addNodeToRack(addr6.getHostName(), &quot;/region1/r12&quot;);</span>
+<span class="nc" id="L1050">        StaticDNSResolver.addNodeToRack(addr7.getHostName(), &quot;/region1/r13&quot;);</span>
+<span class="nc" id="L1051">        StaticDNSResolver.addNodeToRack(addr8.getHostName(), &quot;/region1/r14&quot;);</span>
+<span class="nc" id="L1052">        StaticDNSResolver.addNodeToRack(addr9.getHostName(), &quot;/region1/r23&quot;);</span>
+
+        // Update cluster
+<span class="nc" id="L1055">        Set&lt;BookieSocketAddress&gt; addrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L1056">        addrs.add(addr1);</span>
+<span class="nc" id="L1057">        addrs.add(addr2);</span>
+<span class="nc" id="L1058">        addrs.add(addr3);</span>
+<span class="nc" id="L1059">        addrs.add(addr4);</span>
+<span class="nc" id="L1060">        addrs.add(addr5);</span>
+<span class="nc" id="L1061">        addrs.add(addr6);</span>
+<span class="nc" id="L1062">        addrs.add(addr7);</span>
+<span class="nc" id="L1063">        addrs.add(addr8);</span>
+<span class="nc" id="L1064">        addrs.add(addr9);</span>
+<span class="nc" id="L1065">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+
+<span class="nc bnc" id="L1067" title="All 2 branches missed.">        if (disableDurability) {</span>
+<span class="nc" id="L1068">            ((SettableFeature) featureProvider.getFeature(</span>
+                BookKeeperConstants.FEATURE_REPP_DISABLE_DURABILITY_ENFORCEMENT))
+<span class="nc" id="L1070">                    .set(true);</span>
+        }
+
+        List&lt;BookieSocketAddress&gt; ensemble;
+        try {
+<span class="nc" id="L1075">            ensemble = repp.newEnsemble(6, 6, 4, null, new HashSet&lt;BookieSocketAddress&gt;()).getResult();</span>
+<span class="nc bnc" id="L1076" title="All 4 branches missed.">            assert(ensemble.size() == 6);</span>
+<span class="nc" id="L1077">        } catch (BKNotEnoughBookiesException bnebe) {</span>
+<span class="nc" id="L1078">            LOG.error(&quot;BKNotEnoughBookiesException&quot;, bnebe);</span>
+<span class="nc" id="L1079">            fail(&quot;Should not get not enough bookies exception even there is only one rack.&quot;);</span>
+<span class="nc" id="L1080">            throw bnebe;</span>
+<span class="nc" id="L1081">        }</span>
+
+<span class="nc" id="L1083">        Set&lt;BookieSocketAddress&gt; excludedAddrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+
+        try {
+<span class="nc" id="L1086">            repp.replaceBookie(6, 6, 4, null, ensemble, ensemble.get(2), excludedAddrs);</span>
+<span class="nc" id="L1087">        } catch (BKNotEnoughBookiesException bnebe) {</span>
+<span class="nc" id="L1088">            fail(&quot;Should not get not enough bookies exception even there is only one rack.&quot;);</span>
+<span class="nc" id="L1089">        }</span>
+<span class="nc" id="L1090">    }</span>
+
+    @Test
+    public void testNewEnsembleFailWithFiveRegions() throws Exception {
+<span class="nc" id="L1094">        repp.uninitalize();</span>
+<span class="nc" id="L1095">        repp = new RegionAwareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L1096">        conf.setProperty(REPP_REGIONS_TO_WRITE, &quot;region1;region2;region3;region4;region5&quot;);</span>
+<span class="nc" id="L1097">        conf.setProperty(REPP_MINIMUM_REGIONS_FOR_DURABILITY, 5);</span>
+<span class="nc" id="L1098">        conf.setProperty(REPP_ENABLE_VALIDATION, false);</span>
+<span class="nc" id="L1099">        repp.initialize(conf, Optional.&lt;DNSToSwitchMapping&gt;empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+<span class="nc" id="L1100">        BookieSocketAddress addr1 = new BookieSocketAddress(&quot;127.0.0.2&quot;, 3181);</span>
+<span class="nc" id="L1101">        BookieSocketAddress addr2 = new BookieSocketAddress(&quot;127.0.0.3&quot;, 3181);</span>
+<span class="nc" id="L1102">        BookieSocketAddress addr3 = new BookieSocketAddress(&quot;127.0.0.4&quot;, 3181);</span>
+<span class="nc" id="L1103">        BookieSocketAddress addr4 = new BookieSocketAddress(&quot;127.0.0.5&quot;, 3181);</span>
+<span class="nc" id="L1104">        BookieSocketAddress addr5 = new BookieSocketAddress(&quot;127.0.0.6&quot;, 3181);</span>
+<span class="nc" id="L1105">        BookieSocketAddress addr6 = new BookieSocketAddress(&quot;127.0.0.7&quot;, 3181);</span>
+<span class="nc" id="L1106">        BookieSocketAddress addr7 = new BookieSocketAddress(&quot;127.0.0.8&quot;, 3181);</span>
+<span class="nc" id="L1107">        BookieSocketAddress addr8 = new BookieSocketAddress(&quot;127.0.0.9&quot;, 3181);</span>
+<span class="nc" id="L1108">        BookieSocketAddress addr9 = new BookieSocketAddress(&quot;127.0.0.10&quot;, 3181);</span>
+<span class="nc" id="L1109">        BookieSocketAddress addr10 = new BookieSocketAddress(&quot;127.0.0.11&quot;, 3181);</span>
+        // update dns mapping
+<span class="nc" id="L1111">        StaticDNSResolver.addNodeToRack(addr1.getHostName(), &quot;/region1/r1&quot;);</span>
+<span class="nc" id="L1112">        StaticDNSResolver.addNodeToRack(addr2.getHostName(), &quot;/region1/r2&quot;);</span>
+<span class="nc" id="L1113">        StaticDNSResolver.addNodeToRack(addr3.getHostName(), &quot;/region2/r3&quot;);</span>
+<span class="nc" id="L1114">        StaticDNSResolver.addNodeToRack(addr4.getHostName(), &quot;/region2/r4&quot;);</span>
+<span class="nc" id="L1115">        StaticDNSResolver.addNodeToRack(addr5.getHostName(), &quot;/region3/r11&quot;);</span>
+<span class="nc" id="L1116">        StaticDNSResolver.addNodeToRack(addr6.getHostName(), &quot;/region3/r12&quot;);</span>
+<span class="nc" id="L1117">        StaticDNSResolver.addNodeToRack(addr7.getHostName(), &quot;/region4/r13&quot;);</span>
+<span class="nc" id="L1118">        StaticDNSResolver.addNodeToRack(addr8.getHostName(), &quot;/region4/r14&quot;);</span>
+<span class="nc" id="L1119">        StaticDNSResolver.addNodeToRack(addr9.getHostName(), &quot;/region5/r23&quot;);</span>
+<span class="nc" id="L1120">        StaticDNSResolver.addNodeToRack(addr10.getHostName(), &quot;/region5/r24&quot;);</span>
+        // Update cluster
+<span class="nc" id="L1122">        Set&lt;BookieSocketAddress&gt; addrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L1123">        addrs.add(addr1);</span>
+<span class="nc" id="L1124">        addrs.add(addr2);</span>
+<span class="nc" id="L1125">        addrs.add(addr3);</span>
+<span class="nc" id="L1126">        addrs.add(addr4);</span>
+<span class="nc" id="L1127">        addrs.add(addr5);</span>
+<span class="nc" id="L1128">        addrs.add(addr6);</span>
+<span class="nc" id="L1129">        addrs.add(addr7);</span>
+<span class="nc" id="L1130">        addrs.add(addr8);</span>
+<span class="nc" id="L1131">        addrs.add(addr9);</span>
+<span class="nc" id="L1132">        addrs.add(addr10);</span>
+<span class="nc" id="L1133">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+
+<span class="nc" id="L1135">        Set&lt;BookieSocketAddress&gt; excludedAddrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L1136">        excludedAddrs.add(addr10);</span>
+<span class="nc" id="L1137">        excludedAddrs.add(addr9);</span>
+        try {
+<span class="nc" id="L1139">            LOG.info(&quot;Ensemble : {}&quot;, repp.newEnsemble(5, 5, 5, null, excludedAddrs).getResult());</span>
+<span class="nc" id="L1140">            fail(&quot;Should throw BKNotEnoughBookiesException when there is not enough bookies&quot;);</span>
+<span class="nc" id="L1141">        } catch (BKNotEnoughBookiesException bnebe) {</span>
+            // should throw not enou
+<span class="nc" id="L1143">        }</span>
+<span class="nc" id="L1144">    }</span>
+
+    private void prepareNetworkTopologyForReorderTests(String myRegion) throws Exception {
+<span class="nc" id="L1147">        repp.uninitalize();</span>
+<span class="nc" id="L1148">        updateMyRack(&quot;/&quot; + myRegion);</span>
+
+<span class="nc" id="L1150">        repp = new RegionAwareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L1151">        repp.initialize(conf, Optional.&lt;DNSToSwitchMapping&gt;empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+
+<span class="nc" id="L1153">        BookieSocketAddress addr1 = new BookieSocketAddress(&quot;127.0.0.2&quot;, 3181);</span>
+<span class="nc" id="L1154">        BookieSocketAddress addr2 = new BookieSocketAddress(&quot;127.0.0.3&quot;, 3181);</span>
+<span class="nc" id="L1155">        BookieSocketAddress addr3 = new BookieSocketAddress(&quot;127.0.0.4&quot;, 3181);</span>
+<span class="nc" id="L1156">        BookieSocketAddress addr4 = new BookieSocketAddress(&quot;127.0.0.5&quot;, 3181);</span>
+<span class="nc" id="L1157">        BookieSocketAddress addr5 = new BookieSocketAddress(&quot;127.0.0.6&quot;, 3181);</span>
+<span class="nc" id="L1158">        BookieSocketAddress addr6 = new BookieSocketAddress(&quot;127.0.0.7&quot;, 3181);</span>
+<span class="nc" id="L1159">        BookieSocketAddress addr7 = new BookieSocketAddress(&quot;127.0.0.8&quot;, 3181);</span>
+<span class="nc" id="L1160">        BookieSocketAddress addr8 = new BookieSocketAddress(&quot;127.0.0.9&quot;, 3181);</span>
+<span class="nc" id="L1161">        BookieSocketAddress addr9 = new BookieSocketAddress(&quot;127.0.0.10&quot;, 3181);</span>
+        // update dns mapping
+<span class="nc" id="L1163">        StaticDNSResolver.addNodeToRack(addr1.getHostName(), &quot;/region1/r1&quot;);</span>
+<span class="nc" id="L1164">        StaticDNSResolver.addNodeToRack(addr2.getHostName(), &quot;/region1/r2&quot;);</span>
+<span class="nc" id="L1165">        StaticDNSResolver.addNodeToRack(addr3.getHostName(), &quot;/region1/r3&quot;);</span>
+<span class="nc" id="L1166">        StaticDNSResolver.addNodeToRack(addr4.getHostName(), &quot;/region2/r1&quot;);</span>
+<span class="nc" id="L1167">        StaticDNSResolver.addNodeToRack(addr5.getHostName(), &quot;/region2/r2&quot;);</span>
+<span class="nc" id="L1168">        StaticDNSResolver.addNodeToRack(addr6.getHostName(), &quot;/region2/r3&quot;);</span>
+<span class="nc" id="L1169">        StaticDNSResolver.addNodeToRack(addr7.getHostName(), &quot;/region3/r1&quot;);</span>
+<span class="nc" id="L1170">        StaticDNSResolver.addNodeToRack(addr8.getHostName(), &quot;/region3/r2&quot;);</span>
+<span class="nc" id="L1171">        StaticDNSResolver.addNodeToRack(addr9.getHostName(), &quot;/region3/r3&quot;);</span>
+        // Update cluster
+<span class="nc" id="L1173">        Set&lt;BookieSocketAddress&gt; addrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L1174">        addrs.add(addr1);</span>
+<span class="nc" id="L1175">        addrs.add(addr2);</span>
+<span class="nc" id="L1176">        addrs.add(addr3);</span>
+<span class="nc" id="L1177">        addrs.add(addr4);</span>
+<span class="nc" id="L1178">        addrs.add(addr5);</span>
+<span class="nc" id="L1179">        addrs.add(addr6);</span>
+<span class="nc" id="L1180">        addrs.add(addr7);</span>
+<span class="nc" id="L1181">        addrs.add(addr8);</span>
+<span class="nc" id="L1182">        addrs.add(addr9);</span>
+<span class="nc" id="L1183">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+<span class="nc" id="L1184">    }</span>
+
+    @Test
+    public void testBasicReorderReadSequenceWithLocalRegion() throws Exception {
+<span class="nc" id="L1188">        basicReorderReadSequenceWithLocalRegionTest(&quot;region2&quot;, false);</span>
+<span class="nc" id="L1189">    }</span>
+
+    @Test
+    public void testBasicReorderReadLACSequenceWithLocalRegion() throws Exception {
+<span class="nc" id="L1193">        basicReorderReadSequenceWithLocalRegionTest(&quot;region2&quot;, true);</span>
+<span class="nc" id="L1194">    }</span>
+
+    private void basicReorderReadSequenceWithLocalRegionTest(String myRegion, boolean isReadLAC) throws Exception {
+<span class="nc" id="L1197">        prepareNetworkTopologyForReorderTests(myRegion);</span>
+<span class="nc" id="L1198">        List&lt;BookieSocketAddress&gt; ensemble = repp.newEnsemble(9, 9, 5, null,</span>
+<span class="nc" id="L1199">                                                              new HashSet&lt;BookieSocketAddress&gt;()).getResult();</span>
+<span class="nc" id="L1200">        assertEquals(9, getNumCoveredRegionsInWriteQuorum(ensemble, 9));</span>
+
+<span class="nc" id="L1202">        DistributionSchedule ds = new RoundRobinDistributionSchedule(9, 9, 9);</span>
+
+<span class="nc" id="L1204">        LOG.info(&quot;My region is {}, ensemble : {}&quot;, repp.myRegion, ensemble);</span>
+
+<span class="nc" id="L1206">        int ensembleSize = ensemble.size();</span>
+<span class="nc bnc" id="L1207" title="All 2 branches missed.">        for (int i = 0; i &lt; ensembleSize; i++) {</span>
+<span class="nc" id="L1208">            DistributionSchedule.WriteSet writeSet = ds.getWriteSet(i);</span>
+<span class="nc" id="L1209">            DistributionSchedule.WriteSet origWriteSet = writeSet.copy();</span>
+            DistributionSchedule.WriteSet readSet;
+<span class="nc bnc" id="L1211" title="All 2 branches missed.">            if (isReadLAC) {</span>
+<span class="nc" id="L1212">                readSet = repp.reorderReadLACSequence(</span>
+                        ensemble,
+<span class="nc" id="L1214">                        getBookiesHealthInfo(), writeSet);</span>
+            } else {
+<span class="nc" id="L1216">                readSet = repp.reorderReadSequence(</span>
+                        ensemble,
+<span class="nc" id="L1218">                        getBookiesHealthInfo(), writeSet);</span>
+            }
+
+<span class="nc" id="L1221">            LOG.info(&quot;Reorder {} =&gt; {}.&quot;, origWriteSet, readSet);</span>
+
+            // first few nodes less than REMOTE_NODE_IN_REORDER_SEQUENCE should be local region
+<span class="nc" id="L1224">            int k = 0;</span>
+<span class="nc bnc" id="L1225" title="All 2 branches missed.">            for (; k &lt; RegionAwareEnsemblePlacementPolicy.REMOTE_NODE_IN_REORDER_SEQUENCE; k++) {</span>
+<span class="nc" id="L1226">                BookieSocketAddress address = ensemble.get(readSet.get(k));</span>
+<span class="nc" id="L1227">                assertEquals(myRegion, StaticDNSResolver.getRegion(address.getHostName()));</span>
+            }
+<span class="nc" id="L1229">            BookieSocketAddress remoteAddress = ensemble.get(readSet.get(k));</span>
+<span class="nc" id="L1230">            assertFalse(myRegion.equals(StaticDNSResolver.getRegion(remoteAddress.getHostName())));</span>
+<span class="nc" id="L1231">            k++;</span>
+<span class="nc" id="L1232">            BookieSocketAddress localAddress = ensemble.get(readSet.get(k));</span>
+<span class="nc" id="L1233">            assertEquals(myRegion, StaticDNSResolver.getRegion(localAddress.getHostName()));</span>
+<span class="nc" id="L1234">            k++;</span>
+<span class="nc bnc" id="L1235" title="All 2 branches missed.">            for (; k &lt; ensembleSize; k++) {</span>
+<span class="nc" id="L1236">                BookieSocketAddress address = ensemble.get(readSet.get(k));</span>
+<span class="nc" id="L1237">                assertFalse(myRegion.equals(StaticDNSResolver.getRegion(address.getHostName())));</span>
+            }
+        }
+<span class="nc" id="L1240">    }</span>
+
+    @Test
+    public void testBasicReorderReadSequenceWithRemoteRegion() throws Exception {
+<span class="nc" id="L1244">        basicReorderReadSequenceWithRemoteRegionTest(&quot;region4&quot;, false);</span>
+<span class="nc" id="L1245">    }</span>
+
+    @Test
+    public void testBasicReorderReadLACSequenceWithRemoteRegion() throws Exception {
+<span class="nc" id="L1249">        basicReorderReadSequenceWithRemoteRegionTest(&quot;region4&quot;, true);</span>
+<span class="nc" id="L1250">    }</span>
+
+    private void basicReorderReadSequenceWithRemoteRegionTest(String myRegion, boolean isReadLAC) throws Exception {
+<span class="nc" id="L1253">        prepareNetworkTopologyForReorderTests(myRegion);</span>
+
+<span class="nc" id="L1255">        List&lt;BookieSocketAddress&gt; ensemble = repp.newEnsemble(9, 9, 5, null,</span>
+<span class="nc" id="L1256">                                                              new HashSet&lt;BookieSocketAddress&gt;()).getResult();</span>
+<span class="nc" id="L1257">        assertEquals(9, getNumCoveredRegionsInWriteQuorum(ensemble, 9));</span>
+
+<span class="nc" id="L1259">        DistributionSchedule ds = new RoundRobinDistributionSchedule(9, 9, 9);</span>
+
+<span class="nc" id="L1261">        LOG.info(&quot;My region is {}, ensemble : {}&quot;, repp.myRegion, ensemble);</span>
+
+<span class="nc" id="L1263">        int ensembleSize = ensemble.size();</span>
+<span class="nc bnc" id="L1264" title="All 2 branches missed.">        for (int i = 0; i &lt; ensembleSize; i++) {</span>
+<span class="nc" id="L1265">            DistributionSchedule.WriteSet writeSet = ds.getWriteSet(i);</span>
+            DistributionSchedule.WriteSet readSet;
+
+<span class="nc bnc" id="L1268" title="All 2 branches missed.">            if (isReadLAC) {</span>
+<span class="nc" id="L1269">                readSet = repp.reorderReadLACSequence(</span>
+                        ensemble,
+<span class="nc" id="L1271">                        getBookiesHealthInfo(),</span>
+<span class="nc" id="L1272">                        writeSet.copy());</span>
+            } else {
+<span class="nc" id="L1274">                readSet = repp.reorderReadSequence(</span>
+                        ensemble,
+<span class="nc" id="L1276">                        getBookiesHealthInfo(),</span>
+<span class="nc" id="L1277">                        writeSet.copy());</span>
+            }
+
+<span class="nc" id="L1280">            assertEquals(writeSet, readSet);</span>
+        }
+<span class="nc" id="L1282">    }</span>
+
+    @Test
+    public void testReorderReadSequenceWithUnavailableOrReadOnlyBookies() throws Exception {
+<span class="nc" id="L1286">        reorderReadSequenceWithUnavailableOrReadOnlyBookiesTest(false);</span>
+<span class="nc" id="L1287">    }</span>
+
+    @Test
+    public void testReorderReadLACSequenceWithUnavailableOrReadOnlyBookies() throws Exception {
+<span class="nc" id="L1291">        reorderReadSequenceWithUnavailableOrReadOnlyBookiesTest(true);</span>
+<span class="nc" id="L1292">    }</span>
+
+    static Set&lt;BookieSocketAddress&gt; getBookiesForRegion(List&lt;BookieSocketAddress&gt; ensemble, String region) {
+<span class="nc" id="L1295">        Set&lt;BookieSocketAddress&gt; regionBookies = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc bnc" id="L1296" title="All 2 branches missed.">        for (BookieSocketAddress address : ensemble) {</span>
+<span class="nc" id="L1297">            String r = StaticDNSResolver.getRegion(address.getHostName());</span>
+<span class="nc bnc" id="L1298" title="All 2 branches missed.">            if (r.equals(region)) {</span>
+<span class="nc" id="L1299">                regionBookies.add(address);</span>
+            }
+<span class="nc" id="L1301">        }</span>
+<span class="nc" id="L1302">        return regionBookies;</span>
+    }
+
+    static void appendBookieIndexByRegion(List&lt;BookieSocketAddress&gt; ensemble,
+                                          DistributionSchedule.WriteSet writeSet,
+                                          String region,
+                                          List&lt;Integer&gt; finalSet) {
+<span class="nc bnc" id="L1309" title="All 2 branches missed.">        for (int i = 0; i &lt; writeSet.size(); i++) {</span>
+<span class="nc" id="L1310">            int bi = writeSet.get(i);</span>
+<span class="nc" id="L1311">            String r = StaticDNSResolver.getRegion(ensemble.get(bi).getHostName());</span>
+<span class="nc bnc" id="L1312" title="All 2 branches missed.">            if (r.equals(region)) {</span>
+<span class="nc" id="L1313">                finalSet.add(bi);</span>
+            }
+        }
+<span class="nc" id="L1316">    }</span>
+
+    private void reorderReadSequenceWithUnavailableOrReadOnlyBookiesTest(boolean isReadLAC) throws Exception {
+<span class="nc" id="L1319">        String myRegion = &quot;region4&quot;;</span>
+<span class="nc" id="L1320">        String unavailableRegion = &quot;region1&quot;;</span>
+<span class="nc" id="L1321">        String writeRegion = &quot;region2&quot;;</span>
+<span class="nc" id="L1322">        String readOnlyRegion = &quot;region3&quot;;</span>
+
+<span class="nc" id="L1324">        prepareNetworkTopologyForReorderTests(myRegion);</span>
+
+<span class="nc" id="L1326">        List&lt;BookieSocketAddress&gt; ensemble = repp.newEnsemble(9, 9, 5, null,</span>
+<span class="nc" id="L1327">                                                              new HashSet&lt;BookieSocketAddress&gt;()).getResult();</span>
+<span class="nc" id="L1328">        assertEquals(9, getNumCoveredRegionsInWriteQuorum(ensemble, 9));</span>
+
+<span class="nc" id="L1330">        DistributionSchedule ds = new RoundRobinDistributionSchedule(9, 9, 9);</span>
+
+<span class="nc" id="L1332">        LOG.info(&quot;My region is {}, ensemble : {}&quot;, repp.myRegion, ensemble);</span>
+
+<span class="nc" id="L1334">        Set&lt;BookieSocketAddress&gt; readOnlyBookies = getBookiesForRegion(ensemble, readOnlyRegion);</span>
+<span class="nc" id="L1335">        Set&lt;BookieSocketAddress&gt; writeBookies = getBookiesForRegion(ensemble, writeRegion);</span>
+
+<span class="nc" id="L1337">        repp.onClusterChanged(writeBookies, readOnlyBookies);</span>
+
+<span class="nc" id="L1339">        LOG.info(&quot;Writable Bookies {}, ReadOnly Bookies {}.&quot;, repp.knownBookies.keySet(), repp.readOnlyBookies);</span>
+
+<span class="nc" id="L1341">        int ensembleSize = ensemble.size();</span>
+<span class="nc bnc" id="L1342" title="All 2 branches missed.">        for (int i = 0; i &lt; ensembleSize; i++) {</span>
+<span class="nc" id="L1343">            DistributionSchedule.WriteSet writeSet = ds.getWriteSet(i);</span>
+            DistributionSchedule.WriteSet readSet;
+<span class="nc bnc" id="L1345" title="All 2 branches missed.">            if (isReadLAC) {</span>
+<span class="nc" id="L1346">                readSet = repp.reorderReadLACSequence(</span>
+<span class="nc" id="L1347">                        ensemble, getBookiesHealthInfo(),</span>
+<span class="nc" id="L1348">                        writeSet.copy());</span>
+            } else {
+<span class="nc" id="L1350">                readSet = repp.reorderReadSequence(</span>
+<span class="nc" id="L1351">                        ensemble, getBookiesHealthInfo(),</span>
+<span class="nc" id="L1352">                        writeSet.copy());</span>
+            }
+
+<span class="nc" id="L1355">            LOG.info(&quot;Reorder {} =&gt; {}.&quot;, writeSet, readSet);</span>
+
+<span class="nc" id="L1357">            List&lt;Integer&gt; expectedReadSet = new ArrayList&lt;Integer&gt;();</span>
+            // writable bookies
+<span class="nc" id="L1359">            appendBookieIndexByRegion(ensemble, writeSet, writeRegion, expectedReadSet);</span>
+            // readonly bookies
+<span class="nc" id="L1361">            appendBookieIndexByRegion(ensemble, writeSet, readOnlyRegion, expectedReadSet);</span>
+            // unavailable bookies
+<span class="nc" id="L1363">            appendBookieIndexByRegion(ensemble, writeSet, unavailableRegion, expectedReadSet);</span>
+<span class="nc" id="L1364">            assertEquals(expectedReadSet.size(), readSet.size());</span>
+<span class="nc bnc" id="L1365" title="All 2 branches missed.">            for (int j = 0; j &lt; expectedReadSet.size(); j++) {</span>
+<span class="nc" id="L1366">                assertEquals(expectedReadSet.get(j).intValue(), readSet.get(j));</span>
+            }
+        }
+<span class="nc" id="L1369">    }</span>
+
+    private int getNumRegionsInEnsemble(List&lt;BookieSocketAddress&gt; ensemble) {
+<span class="nc" id="L1372">        Set&lt;String&gt; regions = new HashSet&lt;String&gt;();</span>
+<span class="nc bnc" id="L1373" title="All 2 branches missed.">        for (BookieSocketAddress addr: ensemble) {</span>
+<span class="nc" id="L1374">            regions.add(StaticDNSResolver.getRegion(addr.getHostName()));</span>
+<span class="nc" id="L1375">        }</span>
+<span class="nc" id="L1376">        return regions.size();</span>
+    }
+
+    private int getNumCoveredRegionsInWriteQuorum(List&lt;BookieSocketAddress&gt; ensemble, int writeQuorumSize)
+            throws Exception {
+<span class="nc" id="L1381">        int ensembleSize = ensemble.size();</span>
+<span class="nc" id="L1382">        int numCoveredWriteQuorums = 0;</span>
+<span class="nc bnc" id="L1383" title="All 2 branches missed.">        for (int i = 0; i &lt; ensembleSize; i++) {</span>
+<span class="nc" id="L1384">            Set&lt;String&gt; regions = new HashSet&lt;String&gt;();</span>
+<span class="nc bnc" id="L1385" title="All 2 branches missed.">            for (int j = 0; j &lt; writeQuorumSize; j++) {</span>
+<span class="nc" id="L1386">                int bookieIdx = (i + j) % ensembleSize;</span>
+<span class="nc" id="L1387">                BookieSocketAddress addr = ensemble.get(bookieIdx);</span>
+<span class="nc" id="L1388">                regions.add(StaticDNSResolver.getRegion(addr.getHostName()));</span>
+            }
+<span class="nc bnc" id="L1390" title="All 2 branches missed.">            numCoveredWriteQuorums += (regions.size() &gt; 1 ? 1 : 0);</span>
+        }
+<span class="nc" id="L1392">        return numCoveredWriteQuorums;</span>
+    }
+
+    @Test
+    public void testNodeWithFailures() throws Exception {
+<span class="nc" id="L1397">        repp.uninitalize();</span>
+<span class="nc" id="L1398">        updateMyRack(&quot;/r2/rack1&quot;);</span>
+
+<span class="nc" id="L1400">        repp = new RegionAwareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L1401">        repp.initialize(conf, Optional.&lt;DNSToSwitchMapping&gt;empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+
+<span class="nc" id="L1403">        BookieSocketAddress addr5 = new BookieSocketAddress(&quot;127.0.0.6&quot;, 3181);</span>
+<span class="nc" id="L1404">        BookieSocketAddress addr6 = new BookieSocketAddress(&quot;127.0.0.7&quot;, 3181);</span>
+<span class="nc" id="L1405">        BookieSocketAddress addr7 = new BookieSocketAddress(&quot;127.0.0.8&quot;, 3181);</span>
+<span class="nc" id="L1406">        BookieSocketAddress addr8 = new BookieSocketAddress(&quot;127.0.0.9&quot;, 3181);</span>
+        // update dns mapping
+<span class="nc" id="L1408">        StaticDNSResolver.addNodeToRack(addr2.getHostName(), &quot;/r2/rack1&quot;);</span>
+<span class="nc" id="L1409">        StaticDNSResolver.addNodeToRack(addr3.getHostName(), &quot;/r2/rack2&quot;);</span>
+<span class="nc" id="L1410">        StaticDNSResolver.addNodeToRack(addr5.getHostName(), &quot;/r1/rack3&quot;);</span>
+<span class="nc" id="L1411">        StaticDNSResolver.addNodeToRack(addr6.getHostName(), &quot;/r2/rack3&quot;);</span>
+<span class="nc" id="L1412">        StaticDNSResolver.addNodeToRack(addr7.getHostName(), &quot;/r2/rack4&quot;);</span>
+<span class="nc" id="L1413">        StaticDNSResolver.addNodeToRack(addr8.getHostName(), &quot;/r1/rack4&quot;);</span>
+<span class="nc" id="L1414">        ensemble.add(addr5);</span>
+<span class="nc" id="L1415">        ensemble.add(addr6);</span>
+<span class="nc" id="L1416">        ensemble.add(addr7);</span>
+<span class="nc" id="L1417">        ensemble.add(addr8);</span>
+
+<span class="nc" id="L1419">        DistributionSchedule.WriteSet writeSet2 = writeSetFromValues(0, 1, 2, 3, 4, 5, 6, 7);</span>
+
+<span class="nc" id="L1421">        Set&lt;BookieSocketAddress&gt; addrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L1422">        addrs.add(addr1);</span>
+<span class="nc" id="L1423">        addrs.add(addr2);</span>
+<span class="nc" id="L1424">        addrs.add(addr3);</span>
+<span class="nc" id="L1425">        addrs.add(addr4);</span>
+<span class="nc" id="L1426">        addrs.add(addr5);</span>
+<span class="nc" id="L1427">        addrs.add(addr6);</span>
+<span class="nc" id="L1428">        addrs.add(addr7);</span>
+<span class="nc" id="L1429">        addrs.add(addr8);</span>
+<span class="nc" id="L1430">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+
+<span class="nc" id="L1432">        HashMap&lt;BookieSocketAddress, Long&gt; bookieFailures = new HashMap&lt;BookieSocketAddress, Long&gt;();</span>
+
+<span class="nc" id="L1434">        bookieFailures.put(addr1, 20L);</span>
+<span class="nc" id="L1435">        bookieFailures.put(addr2, 22L);</span>
+<span class="nc" id="L1436">        bookieFailures.put(addr3, 24L);</span>
+<span class="nc" id="L1437">        bookieFailures.put(addr4, 25L);</span>
+
+<span class="nc" id="L1439">        LOG.info(&quot;write set : {}&quot;, writeSet2);</span>
+<span class="nc" id="L1440">        DistributionSchedule.WriteSet reoderSet = repp.reorderReadSequence(</span>
+<span class="nc" id="L1441">                ensemble, getBookiesHealthInfo(bookieFailures, new HashMap&lt;&gt;()), writeSet2);</span>
+<span class="nc" id="L1442">        LOG.info(&quot;reorder set : {}&quot;, reoderSet);</span>
+<span class="nc" id="L1443">        assertEquals(ensemble.get(reoderSet.get(0)), addr6);</span>
+<span class="nc" id="L1444">        assertEquals(ensemble.get(reoderSet.get(1)), addr7);</span>
+<span class="nc" id="L1445">        assertEquals(ensemble.get(reoderSet.get(2)), addr5);</span>
+<span class="nc" id="L1446">        assertEquals(ensemble.get(reoderSet.get(3)), addr2);</span>
+<span class="nc" id="L1447">        assertEquals(ensemble.get(reoderSet.get(4)), addr3);</span>
+<span class="nc" id="L1448">        assertEquals(ensemble.get(reoderSet.get(5)), addr8);</span>
+<span class="nc" id="L1449">        assertEquals(ensemble.get(reoderSet.get(6)), addr1);</span>
+<span class="nc" id="L1450">        assertEquals(ensemble.get(reoderSet.get(7)), addr4);</span>
+<span class="nc" id="L1451">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

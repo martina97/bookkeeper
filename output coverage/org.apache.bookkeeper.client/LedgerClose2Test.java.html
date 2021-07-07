@@ -1,0 +1,309 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>LedgerClose2Test.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">LedgerClose2Test.java</span></div><h1>LedgerClose2Test.java</h1><pre class="source lang-java linenums">/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.bookkeeper.client;
+
+import com.google.common.collect.Lists;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import org.apache.bookkeeper.client.api.LedgerMetadata;
+import org.apache.bookkeeper.client.api.WriteFlag;
+import org.apache.bookkeeper.common.concurrent.FutureUtils;
+import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.versioning.Versioned;
+
+import org.junit.Assert;
+import org.junit.Test;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Ledger recovery tests using mocks rather than a real cluster.
+ */
+<span class="nc" id="L38">public class LedgerClose2Test {</span>
+<span class="nc" id="L39">    private static final Logger log = LoggerFactory.getLogger(LedgerRecovery2Test.class);</span>
+
+<span class="nc" id="L41">    private static final BookieSocketAddress b1 = new BookieSocketAddress(&quot;b1&quot;, 3181);</span>
+<span class="nc" id="L42">    private static final BookieSocketAddress b2 = new BookieSocketAddress(&quot;b2&quot;, 3181);</span>
+<span class="nc" id="L43">    private static final BookieSocketAddress b3 = new BookieSocketAddress(&quot;b3&quot;, 3181);</span>
+<span class="nc" id="L44">    private static final BookieSocketAddress b4 = new BookieSocketAddress(&quot;b4&quot;, 3181);</span>
+<span class="nc" id="L45">    private static final BookieSocketAddress b5 = new BookieSocketAddress(&quot;b5&quot;, 3181);</span>
+
+    @Test
+    public void testTryAddAfterCloseHasBeenCalled() throws Exception {
+<span class="nc" id="L49">        MockClientContext clientCtx = MockClientContext.create();</span>
+
+<span class="nc bnc" id="L51" title="All 2 branches missed.">        for (int i = 0; i &lt; 1000; i++) {</span>
+<span class="nc" id="L52">            Versioned&lt;LedgerMetadata&gt; md = ClientUtil.setupLedger(clientCtx, i,</span>
+<span class="nc" id="L53">                    LedgerMetadataBuilder.create().newEnsembleEntry(0L, Lists.newArrayList(b1, b2, b3)));</span>
+<span class="nc" id="L54">            LedgerHandle lh = new LedgerHandle(clientCtx, i, md, BookKeeper.DigestType.CRC32C,</span>
+                                               ClientUtil.PASSWD, WriteFlag.NONE);
+<span class="nc" id="L56">            CompletableFuture&lt;?&gt; closeFuture = lh.closeAsync();</span>
+            try {
+<span class="nc" id="L58">                long eid = lh.append(&quot;entry&quot;.getBytes());</span>
+
+                // if it succeeds, it should be in final ledge
+<span class="nc" id="L61">                closeFuture.get();</span>
+<span class="nc" id="L62">                Assert.assertTrue(lh.getLedgerMetadata().isClosed());</span>
+<span class="nc" id="L63">                Assert.assertEquals(lh.getLedgerMetadata().getLastEntryId(), eid);</span>
+<span class="nc" id="L64">            } catch (BKException.BKLedgerClosedException bke) {</span>
+<span class="nc" id="L65">                closeFuture.get();</span>
+<span class="nc" id="L66">                Assert.assertTrue(lh.getLedgerMetadata().isClosed());</span>
+<span class="nc" id="L67">                Assert.assertEquals(lh.getLedgerMetadata().getLastEntryId(), LedgerHandle.INVALID_ENTRY_ID);</span>
+<span class="nc" id="L68">            }</span>
+        }
+<span class="nc" id="L70">    }</span>
+
+    @Test
+    public void testMetadataChangedDuringClose() throws Exception {
+<span class="nc" id="L74">        MockClientContext clientCtx = MockClientContext.create();</span>
+<span class="nc" id="L75">        Versioned&lt;LedgerMetadata&gt; md = ClientUtil.setupLedger(clientCtx, 10L,</span>
+<span class="nc" id="L76">                                                   LedgerMetadataBuilder.create()</span>
+<span class="nc" id="L77">                                                   .withEnsembleSize(3).withWriteQuorumSize(3).withAckQuorumSize(2)</span>
+<span class="nc" id="L78">                                                   .newEnsembleEntry(0L, Lists.newArrayList(b1, b2, b3)));</span>
+
+
+<span class="nc" id="L81">        LedgerHandle lh = new LedgerHandle(clientCtx, 10L, md, BookKeeper.DigestType.CRC32C,</span>
+                                           ClientUtil.PASSWD, WriteFlag.NONE);
+<span class="nc" id="L83">        lh.append(&quot;entry1&quot;.getBytes());</span>
+<span class="nc" id="L84">        clientCtx.getMockRegistrationClient().addBookies(b4).get();</span>
+<span class="nc" id="L85">        clientCtx.getMockBookieClient().errorBookies(b3);</span>
+<span class="nc" id="L86">        lh.append(&quot;entry2&quot;.getBytes());</span>
+
+<span class="nc" id="L88">        CompletableFuture&lt;Void&gt; closeInProgress = new CompletableFuture&lt;&gt;();</span>
+<span class="nc" id="L89">        CompletableFuture&lt;Void&gt; blockClose = new CompletableFuture&lt;&gt;();</span>
+<span class="nc" id="L90">        clientCtx.getMockLedgerManager().setPreWriteHook((ledgerId, metadata) -&gt; {</span>
+                 // block the write trying to replace b3 with b4
+<span class="nc bnc" id="L92" title="All 2 branches missed.">                if (metadata.isClosed()) {</span>
+<span class="nc" id="L93">                    closeInProgress.complete(null);</span>
+<span class="nc" id="L94">                    return blockClose;</span>
+                } else {
+<span class="nc" id="L96">                    return FutureUtils.value(null);</span>
+                }
+            });
+<span class="nc" id="L99">        CompletableFuture&lt;?&gt; closeFuture = lh.closeAsync();</span>
+<span class="nc" id="L100">        closeInProgress.get();</span>
+
+<span class="nc" id="L102">        ClientUtil.transformMetadata(clientCtx, 10L,</span>
+<span class="nc" id="L103">                                     (metadata) -&gt; LedgerMetadataBuilder.from(metadata).replaceEnsembleEntry(</span>
+<span class="nc" id="L104">                                             0L, Lists.newArrayList(b4, b2, b5)).build());</span>
+
+<span class="nc" id="L106">        blockClose.complete(null);</span>
+<span class="nc" id="L107">        closeFuture.get();</span>
+
+<span class="nc" id="L109">        Assert.assertTrue(lh.getLedgerMetadata().isClosed());</span>
+<span class="nc" id="L110">        Assert.assertEquals(lh.getLedgerMetadata().getAllEnsembles().size(), 2);</span>
+<span class="nc" id="L111">        Assert.assertEquals(lh.getLedgerMetadata().getAllEnsembles().get(0L), Lists.newArrayList(b4, b2, b5));</span>
+<span class="nc" id="L112">        Assert.assertEquals(lh.getLedgerMetadata().getAllEnsembles().get(1L), Lists.newArrayList(b1, b2, b4));</span>
+<span class="nc" id="L113">        Assert.assertEquals(lh.getLedgerMetadata().getLastEntryId(), 1L);</span>
+<span class="nc" id="L114">    }</span>
+
+    @Test
+    public void testMetadataCloseWithCorrectLengthDuringClose() throws Exception {
+<span class="nc" id="L118">        MockClientContext clientCtx = MockClientContext.create();</span>
+<span class="nc" id="L119">        Versioned&lt;LedgerMetadata&gt; md = ClientUtil.setupLedger(clientCtx, 10L,</span>
+<span class="nc" id="L120">                                                   LedgerMetadataBuilder.create()</span>
+<span class="nc" id="L121">                                                   .withEnsembleSize(3).withWriteQuorumSize(3).withAckQuorumSize(2)</span>
+<span class="nc" id="L122">                                                   .newEnsembleEntry(0L, Lists.newArrayList(b1, b2, b3)));</span>
+
+
+<span class="nc" id="L125">        LedgerHandle lh = new LedgerHandle(clientCtx, 10L, md, BookKeeper.DigestType.CRC32C,</span>
+                                           ClientUtil.PASSWD, WriteFlag.NONE);
+<span class="nc" id="L127">        long lac = lh.append(&quot;entry1&quot;.getBytes());</span>
+<span class="nc" id="L128">        long length = lh.getLength();</span>
+
+<span class="nc" id="L130">        CompletableFuture&lt;Void&gt; closeInProgress = new CompletableFuture&lt;&gt;();</span>
+<span class="nc" id="L131">        CompletableFuture&lt;Void&gt; blockClose = new CompletableFuture&lt;&gt;();</span>
+<span class="nc" id="L132">        clientCtx.getMockLedgerManager().setPreWriteHook((ledgerId, metadata) -&gt; {</span>
+                // block the write trying to do the first close
+<span class="nc bnc" id="L134" title="All 4 branches missed.">                if (!closeInProgress.isDone() &amp;&amp; metadata.isClosed()) {</span>
+<span class="nc" id="L135">                    closeInProgress.complete(null);</span>
+<span class="nc" id="L136">                    return blockClose;</span>
+                } else {
+<span class="nc" id="L138">                    return FutureUtils.value(null);</span>
+                }
+            });
+<span class="nc" id="L141">        CompletableFuture&lt;?&gt; closeFuture = lh.closeAsync();</span>
+<span class="nc" id="L142">        closeInProgress.get();</span>
+
+<span class="nc" id="L144">        ClientUtil.transformMetadata(clientCtx, 10L,</span>
+<span class="nc" id="L145">                (metadata) -&gt; LedgerMetadataBuilder.from(metadata)</span>
+<span class="nc" id="L146">                                     .withClosedState().withLastEntryId(lac).withLength(length).build());</span>
+
+<span class="nc" id="L148">        blockClose.complete(null);</span>
+<span class="nc" id="L149">        closeFuture.get();</span>
+
+<span class="nc" id="L151">        Assert.assertTrue(lh.getLedgerMetadata().isClosed());</span>
+<span class="nc" id="L152">        Assert.assertEquals(lh.getLedgerMetadata().getAllEnsembles().size(), 1);</span>
+<span class="nc" id="L153">        Assert.assertEquals(lh.getLedgerMetadata().getAllEnsembles().get(0L), Lists.newArrayList(b1, b2, b3));</span>
+<span class="nc" id="L154">        Assert.assertEquals(lh.getLedgerMetadata().getLastEntryId(), lac);</span>
+<span class="nc" id="L155">        Assert.assertEquals(lh.getLedgerMetadata().getLength(), length);</span>
+<span class="nc" id="L156">    }</span>
+
+    @Test
+    public void testMetadataCloseWithDifferentLengthDuringClose() throws Exception {
+<span class="nc" id="L160">        MockClientContext clientCtx = MockClientContext.create();</span>
+<span class="nc" id="L161">        Versioned&lt;LedgerMetadata&gt; md = ClientUtil.setupLedger(clientCtx, 10L,</span>
+<span class="nc" id="L162">                                                   LedgerMetadataBuilder.create()</span>
+<span class="nc" id="L163">                                                   .withEnsembleSize(3).withWriteQuorumSize(3).withAckQuorumSize(2)</span>
+<span class="nc" id="L164">                                                   .newEnsembleEntry(0L, Lists.newArrayList(b1, b2, b3)));</span>
+
+
+<span class="nc" id="L167">        LedgerHandle lh = new LedgerHandle(clientCtx, 10L, md, BookKeeper.DigestType.CRC32C,</span>
+                                           ClientUtil.PASSWD, WriteFlag.NONE);
+<span class="nc" id="L169">        long lac = lh.append(&quot;entry1&quot;.getBytes());</span>
+<span class="nc" id="L170">        long length = lh.getLength();</span>
+
+<span class="nc" id="L172">        CompletableFuture&lt;Void&gt; closeInProgress = new CompletableFuture&lt;&gt;();</span>
+<span class="nc" id="L173">        CompletableFuture&lt;Void&gt; blockClose = new CompletableFuture&lt;&gt;();</span>
+<span class="nc" id="L174">        clientCtx.getMockLedgerManager().setPreWriteHook((ledgerId, metadata) -&gt; {</span>
+                // block the write trying to do the first close
+<span class="nc bnc" id="L176" title="All 4 branches missed.">                if (!closeInProgress.isDone() &amp;&amp; metadata.isClosed()) {</span>
+<span class="nc" id="L177">                    closeInProgress.complete(null);</span>
+<span class="nc" id="L178">                    return blockClose;</span>
+                } else {
+<span class="nc" id="L180">                    return FutureUtils.value(null);</span>
+                }
+            });
+<span class="nc" id="L183">        CompletableFuture&lt;?&gt; closeFuture = lh.closeAsync();</span>
+<span class="nc" id="L184">        closeInProgress.get();</span>
+
+        /* close with different length. can happen in cases where there's a write outstanding */
+<span class="nc" id="L187">        ClientUtil.transformMetadata(clientCtx, 10L,</span>
+<span class="nc" id="L188">                (metadata) -&gt; LedgerMetadataBuilder.from(metadata)</span>
+<span class="nc" id="L189">                                     .withClosedState().withLastEntryId(lac + 1).withLength(length + 100).build());</span>
+
+<span class="nc" id="L191">        blockClose.complete(null);</span>
+        try {
+<span class="nc" id="L193">            closeFuture.get();</span>
+<span class="nc" id="L194">            Assert.fail(&quot;Close should fail. Ledger has been closed in a state we don't know how to untangle&quot;);</span>
+<span class="nc" id="L195">        } catch (ExecutionException ee) {</span>
+<span class="nc" id="L196">            Assert.assertEquals(ee.getCause().getClass(), BKException.BKMetadataVersionException.class);</span>
+<span class="nc" id="L197">        }</span>
+<span class="nc" id="L198">    }</span>
+
+    @Test
+    public void testMetadataCloseMarkedInRecoveryWhileClosing() throws Exception {
+<span class="nc" id="L202">        MockClientContext clientCtx = MockClientContext.create();</span>
+<span class="nc" id="L203">        Versioned&lt;LedgerMetadata&gt; md = ClientUtil.setupLedger(clientCtx, 10L,</span>
+<span class="nc" id="L204">                                                   LedgerMetadataBuilder.create()</span>
+<span class="nc" id="L205">                                                   .withEnsembleSize(3).withWriteQuorumSize(3).withAckQuorumSize(2)</span>
+<span class="nc" id="L206">                                                   .newEnsembleEntry(0L, Lists.newArrayList(b1, b2, b3)));</span>
+
+<span class="nc" id="L208">        LedgerHandle lh = new LedgerHandle(clientCtx, 10L, md, BookKeeper.DigestType.CRC32C,</span>
+                                           ClientUtil.PASSWD, WriteFlag.NONE);
+<span class="nc" id="L210">        long lac = lh.append(&quot;entry1&quot;.getBytes());</span>
+<span class="nc" id="L211">        long length = lh.getLength();</span>
+
+<span class="nc" id="L213">        CompletableFuture&lt;Void&gt; closeInProgress = new CompletableFuture&lt;&gt;();</span>
+<span class="nc" id="L214">        CompletableFuture&lt;Void&gt; blockClose = new CompletableFuture&lt;&gt;();</span>
+<span class="nc" id="L215">        clientCtx.getMockLedgerManager().setPreWriteHook((ledgerId, metadata) -&gt; {</span>
+                // block the write trying to do the first close
+<span class="nc bnc" id="L217" title="All 2 branches missed.">                if (metadata.isClosed()) {</span>
+<span class="nc" id="L218">                    closeInProgress.complete(null);</span>
+<span class="nc" id="L219">                    return blockClose;</span>
+                } else {
+<span class="nc" id="L221">                    return FutureUtils.value(null);</span>
+                }
+            });
+<span class="nc" id="L224">        CompletableFuture&lt;?&gt; closeFuture = lh.closeAsync();</span>
+<span class="nc" id="L225">        closeInProgress.get();</span>
+
+<span class="nc" id="L227">        ClientUtil.transformMetadata(clientCtx, 10L,</span>
+<span class="nc" id="L228">                (metadata) -&gt; LedgerMetadataBuilder.from(metadata).withInRecoveryState().build());</span>
+
+<span class="nc" id="L230">        blockClose.complete(null);</span>
+
+<span class="nc" id="L232">        closeFuture.get(); // should override in recovery, since this handle knows what it has written</span>
+<span class="nc" id="L233">        Assert.assertTrue(lh.getLedgerMetadata().isClosed());</span>
+<span class="nc" id="L234">        Assert.assertEquals(lh.getLedgerMetadata().getAllEnsembles().size(), 1);</span>
+<span class="nc" id="L235">        Assert.assertEquals(lh.getLedgerMetadata().getAllEnsembles().get(0L), Lists.newArrayList(b1, b2, b3));</span>
+<span class="nc" id="L236">        Assert.assertEquals(lh.getLedgerMetadata().getLastEntryId(), lac);</span>
+<span class="nc" id="L237">        Assert.assertEquals(lh.getLedgerMetadata().getLength(), length);</span>
+<span class="nc" id="L238">    }</span>
+
+    @Test
+    public void testCloseWhileAddInProgress() throws Exception {
+<span class="nc" id="L242">        MockClientContext clientCtx = MockClientContext.create();</span>
+<span class="nc" id="L243">        Versioned&lt;LedgerMetadata&gt; md = ClientUtil.setupLedger(clientCtx, 10L,</span>
+<span class="nc" id="L244">                                                   LedgerMetadataBuilder.create()</span>
+<span class="nc" id="L245">                                                   .withEnsembleSize(3).withWriteQuorumSize(3).withAckQuorumSize(2)</span>
+<span class="nc" id="L246">                                                   .newEnsembleEntry(0L, Lists.newArrayList(b1, b2, b3)));</span>
+        // block all entry writes from completing
+<span class="nc" id="L248">        CompletableFuture&lt;Void&gt; writesHittingBookies = new CompletableFuture&lt;&gt;();</span>
+<span class="nc" id="L249">        clientCtx.getMockBookieClient().setPreWriteHook((bookie, ledgerId, entryId) -&gt; {</span>
+<span class="nc" id="L250">                writesHittingBookies.complete(null);</span>
+<span class="nc" id="L251">                return new CompletableFuture&lt;Void&gt;();</span>
+            });
+<span class="nc" id="L253">        LedgerHandle lh = new LedgerHandle(clientCtx, 10L, md, BookKeeper.DigestType.CRC32C,</span>
+                                           ClientUtil.PASSWD, WriteFlag.NONE);
+<span class="nc" id="L255">        CompletableFuture&lt;?&gt; future = lh.appendAsync(&quot;entry1&quot;.getBytes());</span>
+<span class="nc" id="L256">        writesHittingBookies.get();</span>
+
+<span class="nc" id="L258">        lh.close();</span>
+        try {
+<span class="nc" id="L260">            future.get();</span>
+<span class="nc" id="L261">            Assert.fail(&quot;That write shouldn't have succeeded&quot;);</span>
+<span class="nc" id="L262">        } catch (ExecutionException ee) {</span>
+<span class="nc" id="L263">            Assert.assertEquals(ee.getCause().getClass(), BKException.BKLedgerClosedException.class);</span>
+<span class="nc" id="L264">        }</span>
+<span class="nc" id="L265">        Assert.assertTrue(lh.getLedgerMetadata().isClosed());</span>
+<span class="nc" id="L266">        Assert.assertEquals(lh.getLedgerMetadata().getAllEnsembles().size(), 1);</span>
+<span class="nc" id="L267">        Assert.assertEquals(lh.getLedgerMetadata().getAllEnsembles().get(0L), Lists.newArrayList(b1, b2, b3));</span>
+<span class="nc" id="L268">        Assert.assertEquals(lh.getLedgerMetadata().getLastEntryId(), LedgerHandle.INVALID_ENTRY_ID);</span>
+<span class="nc" id="L269">        Assert.assertEquals(lh.getLedgerMetadata().getLength(), 0);</span>
+<span class="nc" id="L270">    }</span>
+
+    @Test
+    public void testDoubleCloseOnHandle() throws Exception {
+<span class="nc" id="L274">        long ledgerId = 123L;</span>
+<span class="nc" id="L275">        MockClientContext clientCtx = MockClientContext.create();</span>
+
+<span class="nc" id="L277">        Versioned&lt;LedgerMetadata&gt; md = ClientUtil.setupLedger(clientCtx, ledgerId,</span>
+<span class="nc" id="L278">                LedgerMetadataBuilder.create()</span>
+<span class="nc" id="L279">                .withEnsembleSize(3).withWriteQuorumSize(3).withAckQuorumSize(3)</span>
+<span class="nc" id="L280">                .newEnsembleEntry(0L, Lists.newArrayList(b1, b2, b3)));</span>
+
+<span class="nc" id="L282">        CompletableFuture&lt;Void&gt; metadataPromise = new CompletableFuture&lt;&gt;();</span>
+<span class="nc" id="L283">        CompletableFuture&lt;Void&gt; clientPromise = new CompletableFuture&lt;&gt;();</span>
+
+<span class="nc" id="L285">        LedgerHandle writer = new LedgerHandle(clientCtx, ledgerId, md,</span>
+                                               BookKeeper.DigestType.CRC32C,
+                                               ClientUtil.PASSWD, WriteFlag.NONE);
+<span class="nc" id="L288">        long eid1 = writer.append(&quot;entry1&quot;.getBytes());</span>
+
+<span class="nc" id="L290">        log.info(&quot;block writes from completing on bookies and metadata&quot;);</span>
+<span class="nc" id="L291">        clientCtx.getMockBookieClient().setPostWriteHook((bookie, lid, eid) -&gt; clientPromise);</span>
+<span class="nc" id="L292">        clientCtx.getMockLedgerManager().setPreWriteHook((lid, metadata) -&gt; metadataPromise);</span>
+
+<span class="nc" id="L294">        log.info(&quot;try to add another entry, it will block&quot;);</span>
+<span class="nc" id="L295">        writer.appendAsync(&quot;entry2&quot;.getBytes());</span>
+
+<span class="nc" id="L297">        log.info(&quot;attempt one close, should block forever&quot;);</span>
+<span class="nc" id="L298">        CompletableFuture&lt;Void&gt; firstClose = writer.closeAsync();</span>
+
+<span class="nc" id="L300">        log.info(&quot;attempt second close, should not finish before first one&quot;);</span>
+<span class="nc" id="L301">        CompletableFuture&lt;Void&gt; secondClose = writer.closeAsync();</span>
+
+<span class="nc" id="L303">        Thread.sleep(500); // give it a chance to complete, the request jumps around threads</span>
+<span class="nc" id="L304">        Assert.assertFalse(firstClose.isDone());</span>
+<span class="nc" id="L305">        Assert.assertFalse(secondClose.isDone());</span>
+<span class="nc" id="L306">    }</span>
+}
+
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

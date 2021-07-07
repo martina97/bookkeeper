@@ -1,0 +1,502 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>LedgerRecoveryTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">LedgerRecoveryTest.java</span></div><h1>LedgerRecoveryTest.java</h1><pre class="source lang-java linenums">/*
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.client;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import io.netty.buffer.ByteBuf;
+
+import java.io.IOException;
+import java.util.Enumeration;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.apache.bookkeeper.bookie.Bookie;
+import org.apache.bookkeeper.bookie.BookieException;
+import org.apache.bookkeeper.client.AsyncCallback.AddCallback;
+import org.apache.bookkeeper.client.BookKeeper.DigestType;
+import org.apache.bookkeeper.conf.ClientConfiguration;
+import org.apache.bookkeeper.conf.ServerConfiguration;
+import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.proto.BookieProtocol;
+import org.apache.bookkeeper.proto.BookkeeperInternalCallbacks.WriteCallback;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * This unit test tests ledger recovery.
+ */
+public class LedgerRecoveryTest extends BookKeeperClusterTestCase {
+<span class="nc" id="L55">    private static final Logger LOG = LoggerFactory.getLogger(LedgerRecoveryTest.class);</span>
+
+    private final DigestType digestType;
+
+    public LedgerRecoveryTest() {
+<span class="nc" id="L60">        super(3);</span>
+<span class="nc" id="L61">        this.digestType = DigestType.CRC32;</span>
+<span class="nc" id="L62">        this.baseConf.setAllowEphemeralPorts(false);</span>
+<span class="nc" id="L63">    }</span>
+
+    private void testInternal(int numEntries) throws Exception {
+        /*
+         * Create ledger.
+         */
+<span class="nc" id="L69">        LedgerHandle beforelh = null;</span>
+<span class="nc" id="L70">        beforelh = bkc.createLedger(digestType, &quot;&quot;.getBytes());</span>
+
+<span class="nc" id="L72">        String tmp = &quot;BookKeeper is cool!&quot;;</span>
+<span class="nc bnc" id="L73" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L74">            beforelh.addEntry(tmp.getBytes());</span>
+        }
+
+<span class="nc" id="L77">        long length = (long) (numEntries * tmp.length());</span>
+
+        /*
+         * Try to open ledger.
+         */
+<span class="nc" id="L82">        LedgerHandle afterlh = bkc.openLedger(beforelh.getId(), digestType, &quot;&quot;.getBytes());</span>
+
+        /*
+         * Check if has recovered properly.
+         */
+<span class="nc" id="L87">        assertEquals(&quot;Has not recovered correctly&quot;, numEntries - 1, afterlh.getLastAddConfirmed());</span>
+<span class="nc" id="L88">        assertEquals(&quot;Has not set the length correctly&quot;, length, afterlh.getLength());</span>
+<span class="nc" id="L89">    }</span>
+
+    @Test
+    public void testLedgerRecovery() throws Exception {
+<span class="nc" id="L93">        testInternal(100);</span>
+
+<span class="nc" id="L95">    }</span>
+
+    @Test
+    public void testEmptyLedgerRecoveryOne() throws Exception {
+<span class="nc" id="L99">        testInternal(1);</span>
+<span class="nc" id="L100">    }</span>
+
+    @Test
+    public void testEmptyLedgerRecovery() throws Exception {
+<span class="nc" id="L104">        testInternal(0);</span>
+<span class="nc" id="L105">    }</span>
+
+    @Test
+    public void testLedgerRecoveryWithWrongPassword() throws Exception {
+        // Create a ledger
+<span class="nc" id="L110">        byte[] ledgerPassword = &quot;aaaa&quot;.getBytes();</span>
+<span class="nc" id="L111">        LedgerHandle lh = bkc.createLedger(digestType, ledgerPassword);</span>
+        // bkc.initMessageDigest(&quot;SHA1&quot;);
+<span class="nc" id="L113">        long ledgerId = lh.getId();</span>
+<span class="nc" id="L114">        LOG.info(&quot;Ledger ID: &quot; + lh.getId());</span>
+<span class="nc" id="L115">        String tmp = &quot;BookKeeper is cool!&quot;;</span>
+<span class="nc" id="L116">        int numEntries = 30;</span>
+<span class="nc bnc" id="L117" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L118">            lh.addEntry(tmp.getBytes());</span>
+        }
+
+        // Using wrong password
+<span class="nc" id="L122">        ledgerPassword = &quot;bbbb&quot;.getBytes();</span>
+        try {
+<span class="nc" id="L124">            lh = bkc.openLedger(ledgerId, digestType, ledgerPassword);</span>
+<span class="nc" id="L125">            fail(&quot;Opening ledger with wrong password should fail&quot;);</span>
+<span class="nc" id="L126">        } catch (BKException e) {</span>
+            // should failed
+<span class="nc" id="L128">        }</span>
+<span class="nc" id="L129">    }</span>
+
+    @Test
+    public void testLedgerRecoveryWithNotEnoughBookies() throws Exception {
+<span class="nc" id="L133">        int numEntries = 3;</span>
+
+        // Create a ledger
+<span class="nc" id="L136">        LedgerHandle beforelh = null;</span>
+<span class="nc" id="L137">        beforelh = bkc.createLedger(3, 3, digestType, &quot;&quot;.getBytes());</span>
+
+<span class="nc" id="L139">        String tmp = &quot;BookKeeper is cool!&quot;;</span>
+<span class="nc bnc" id="L140" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L141">            beforelh.addEntry(tmp.getBytes());</span>
+        }
+
+        // shutdown first bookie server
+<span class="nc" id="L145">        bs.get(0).shutdown();</span>
+<span class="nc" id="L146">        bs.remove(0);</span>
+
+        /*
+         * Try to open ledger.
+         */
+        try {
+<span class="nc" id="L152">            bkc.openLedger(beforelh.getId(), digestType, &quot;&quot;.getBytes());</span>
+<span class="nc" id="L153">            fail(&quot;should not reach here!&quot;);</span>
+<span class="nc" id="L154">        } catch (Exception e) {</span>
+            // should thrown recovery exception
+<span class="nc" id="L156">        }</span>
+
+        // start a new bookie server
+<span class="nc" id="L159">        startNewBookie();</span>
+
+<span class="nc" id="L161">        LedgerHandle afterlh = bkc.openLedger(beforelh.getId(), digestType, &quot;&quot;.getBytes());</span>
+
+        /*
+         * Check if has recovered properly.
+         */
+<span class="nc" id="L166">        assertEquals(numEntries - 1, afterlh.getLastAddConfirmed());</span>
+<span class="nc" id="L167">    }</span>
+
+    @Test
+    public void testLedgerRecoveryWithSlowBookie() throws Exception {
+<span class="nc bnc" id="L171" title="All 2 branches missed.">        for (int i = 0; i &lt; 3; i++) {</span>
+<span class="nc" id="L172">            LOG.info(&quot;TestLedgerRecoveryWithAckQuorum @ slow bookie {}&quot;, i);</span>
+<span class="nc" id="L173">            ledgerRecoveryWithSlowBookie(3, 3, 2, 1, i);</span>
+        }
+<span class="nc" id="L175">    }</span>
+
+    private void ledgerRecoveryWithSlowBookie(int ensembleSize, int writeQuorumSize,
+        int ackQuorumSize, int numEntries, int slowBookieIdx) throws Exception {
+
+        // Create a ledger
+<span class="nc" id="L181">        LedgerHandle beforelh = null;</span>
+<span class="nc" id="L182">        beforelh = bkc.createLedger(ensembleSize, writeQuorumSize, ackQuorumSize,</span>
+<span class="nc" id="L183">                                    digestType, &quot;&quot;.getBytes());</span>
+
+        // kill first bookie server to start a fake one to simulate a slow bookie
+        // and failed to add entry on crash
+        // until write succeed
+<span class="nc" id="L188">        BookieSocketAddress host = beforelh.getCurrentEnsemble().get(slowBookieIdx);</span>
+<span class="nc" id="L189">        ServerConfiguration conf = killBookie(host);</span>
+
+<span class="nc" id="L191">        Bookie fakeBookie = new Bookie(conf) {</span>
+            @Override
+            public void addEntry(ByteBuf entry, boolean ackBeforeSync, WriteCallback cb, Object ctx, byte[] masterKey)
+                    throws IOException, BookieException {
+                // drop request to simulate a slow and failed bookie
+<span class="nc" id="L196">            }</span>
+        };
+<span class="nc" id="L198">        bsConfs.add(conf);</span>
+<span class="nc" id="L199">        bs.add(startBookie(conf, fakeBookie));</span>
+
+        // avoid not-enough-bookies case
+<span class="nc" id="L202">        startNewBookie();</span>
+
+        // write would still succeed with 2 bookies ack
+<span class="nc" id="L205">        String tmp = &quot;BookKeeper is cool!&quot;;</span>
+<span class="nc bnc" id="L206" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L207">            beforelh.addEntry(tmp.getBytes());</span>
+        }
+
+<span class="nc" id="L210">        conf = killBookie(host);</span>
+<span class="nc" id="L211">        bsConfs.add(conf);</span>
+        // the bookie goes normally
+<span class="nc" id="L213">        bs.add(startBookie(conf));</span>
+
+        /*
+         * Try to open ledger.
+         */
+<span class="nc" id="L218">        LedgerHandle afterlh = bkc.openLedger(beforelh.getId(), digestType, &quot;&quot;.getBytes());</span>
+
+        /*
+         * Check if has recovered properly.
+         */
+<span class="nc" id="L223">        assertEquals(numEntries - 1, afterlh.getLastAddConfirmed());</span>
+<span class="nc" id="L224">    }</span>
+
+    /**
+     * {@link https://issues.apache.org/jira/browse/BOOKKEEPER-355}
+     * A recovery during a rolling restart shouldn't affect the ability
+     * to recovery the ledger later.
+     * We have a ledger on ensemble B1,B2,B3.
+     * The sequence of events is
+     * 1. B1 brought down for maintenance
+     * 2. Ledger recovery started
+     * 3. B2 answers read last confirmed.
+     * 4. B1 replaced in ensemble by B4
+     * 5. Write to B4 fails for some reason
+     * 6. B1 comes back up.
+     * 7. B2 goes down for maintenance.
+     * 8. Ledger recovery starts (ledger is now unavailable)
+     */
+    @Test
+    public void testLedgerRecoveryWithRollingRestart() throws Exception {
+<span class="nc" id="L243">        LedgerHandle lhbefore = bkc.createLedger(numBookies, 2, digestType, &quot;&quot;.getBytes());</span>
+<span class="nc bnc" id="L244" title="All 2 branches missed.">        for (int i = 0; i &lt; (numBookies * 3) + 1; i++) {</span>
+<span class="nc" id="L245">            lhbefore.addEntry(&quot;data&quot;.getBytes());</span>
+        }
+
+        // Add a dead bookie to the cluster
+<span class="nc" id="L249">        ServerConfiguration conf = newServerConfiguration();</span>
+<span class="nc" id="L250">        Bookie deadBookie1 = new Bookie(conf) {</span>
+            @Override
+            public void recoveryAddEntry(ByteBuf entry, WriteCallback cb, Object ctx, byte[] masterKey)
+                    throws IOException, BookieException {
+                // drop request to simulate a slow and failed bookie
+<span class="nc" id="L255">                throw new IOException(&quot;Couldn't write for some reason&quot;);</span>
+            }
+        };
+<span class="nc" id="L258">        bsConfs.add(conf);</span>
+<span class="nc" id="L259">        bs.add(startBookie(conf, deadBookie1));</span>
+
+        // kill first bookie server
+<span class="nc" id="L262">        BookieSocketAddress bookie1 = lhbefore.getCurrentEnsemble().get(0);</span>
+<span class="nc" id="L263">        ServerConfiguration conf1 = killBookie(bookie1);</span>
+
+        // Try to recover and fence the ledger after killing one bookie in the
+        // ensemble in the ensemble, and another bookie is available in zk, but not writtable
+        try {
+<span class="nc" id="L268">            bkc.openLedger(lhbefore.getId(), digestType, &quot;&quot;.getBytes());</span>
+<span class="nc" id="L269">            fail(&quot;Shouldn't be able to open ledger, there should be entries missing&quot;);</span>
+<span class="nc" id="L270">        } catch (BKException.BKLedgerRecoveryException e) {</span>
+            // expected
+<span class="nc" id="L272">        }</span>
+
+        // restart the first server, kill the second
+<span class="nc" id="L275">        bsConfs.add(conf1);</span>
+<span class="nc" id="L276">        bs.add(startBookie(conf1));</span>
+<span class="nc" id="L277">        BookieSocketAddress bookie2 = lhbefore.getCurrentEnsemble().get(1);</span>
+<span class="nc" id="L278">        ServerConfiguration conf2 = killBookie(bookie2);</span>
+
+        // using async, because this could trigger an assertion
+<span class="nc" id="L281">        final AtomicInteger returnCode = new AtomicInteger(0);</span>
+<span class="nc" id="L282">        final CountDownLatch openLatch = new CountDownLatch(1);</span>
+<span class="nc" id="L283">        bkc.asyncOpenLedger(lhbefore.getId(), digestType, &quot;&quot;.getBytes(),</span>
+<span class="nc" id="L284">                            new AsyncCallback.OpenCallback() {</span>
+                                public void openComplete(int rc, LedgerHandle lh, Object ctx) {
+<span class="nc" id="L286">                                    returnCode.set(rc);</span>
+<span class="nc" id="L287">                                    openLatch.countDown();</span>
+<span class="nc bnc" id="L288" title="All 2 branches missed.">                                    if (rc == BKException.Code.OK) {</span>
+                                        try {
+<span class="nc" id="L290">                                            lh.close();</span>
+<span class="nc" id="L291">                                        } catch (Exception e) {</span>
+<span class="nc" id="L292">                                            LOG.error(&quot;Exception closing ledger handle&quot;, e);</span>
+<span class="nc" id="L293">                                        }</span>
+                                    }
+<span class="nc" id="L295">                                }</span>
+                            }, null);
+<span class="nc" id="L297">        assertTrue(&quot;Open call should have completed&quot;, openLatch.await(5, TimeUnit.SECONDS));</span>
+<span class="nc bnc" id="L298" title="All 2 branches missed.">        assertFalse(&quot;Open should not have succeeded&quot;, returnCode.get() == BKException.Code.OK);</span>
+
+<span class="nc" id="L300">        bsConfs.add(conf2);</span>
+<span class="nc" id="L301">        bs.add(startBookie(conf2));</span>
+
+<span class="nc" id="L303">        LedgerHandle lhafter = bkc.openLedger(lhbefore.getId(), digestType,</span>
+<span class="nc" id="L304">                &quot;&quot;.getBytes());</span>
+<span class="nc" id="L305">        assertEquals(&quot;Fenced ledger should have correct lastAddConfirmed&quot;,</span>
+<span class="nc" id="L306">                     lhbefore.getLastAddConfirmed(), lhafter.getLastAddConfirmed());</span>
+<span class="nc" id="L307">    }</span>
+
+    /**
+     * {@link https://issues.apache.org/jira/browse/BOOKKEEPER-355}
+     * Verify that if a recovery happens with 1 replica missing, and it's replaced
+     * with a faulty bookie, it doesn't break future recovery from happening.
+     * 1. Ledger is created with quorum size as 2, and entries are written
+     * 2. Now first bookie is in the ensemble is brought down.
+     * 3. Another client fence and trying to recover the same ledger
+     * 4. During this time ensemble change will happen
+     *    and new bookie will be added. But this bookie is not able to write.
+     * 5. This recovery will fail.
+     * 7. A new non-faulty bookie comes up
+     * 8. Another client trying to recover the same ledger.
+     */
+    @Test
+    public void testBookieFailureDuringRecovery() throws Exception {
+<span class="nc" id="L324">        LedgerHandle lhbefore = bkc.createLedger(numBookies, 2, digestType, &quot;&quot;.getBytes());</span>
+<span class="nc bnc" id="L325" title="All 2 branches missed.">        for (int i = 0; i &lt; (numBookies * 3) + 1; i++) {</span>
+<span class="nc" id="L326">            lhbefore.addEntry(&quot;data&quot;.getBytes());</span>
+        }
+
+        // Add a dead bookie to the cluster
+<span class="nc" id="L330">        ServerConfiguration conf = newServerConfiguration();</span>
+<span class="nc" id="L331">        Bookie deadBookie1 = new Bookie(conf) {</span>
+            @Override
+            public void recoveryAddEntry(ByteBuf entry, WriteCallback cb, Object ctx, byte[] masterKey)
+                    throws IOException, BookieException {
+                // drop request to simulate a slow and failed bookie
+<span class="nc" id="L336">                throw new IOException(&quot;Couldn't write for some reason&quot;);</span>
+            }
+        };
+<span class="nc" id="L339">        bsConfs.add(conf);</span>
+<span class="nc" id="L340">        bs.add(startBookie(conf, deadBookie1));</span>
+
+        // kill first bookie server
+<span class="nc" id="L343">        BookieSocketAddress bookie1 = lhbefore.getCurrentEnsemble().get(0);</span>
+<span class="nc" id="L344">        killBookie(bookie1);</span>
+
+        // Try to recover and fence the ledger after killing one bookie in the
+        // ensemble in the ensemble, and another bookie is available in zk but not writtable
+        try {
+<span class="nc" id="L349">            bkc.openLedger(lhbefore.getId(), digestType, &quot;&quot;.getBytes());</span>
+<span class="nc" id="L350">            fail(&quot;Shouldn't be able to open ledger, there should be entries missing&quot;);</span>
+<span class="nc" id="L351">        } catch (BKException.BKLedgerRecoveryException e) {</span>
+            // expected
+<span class="nc" id="L353">        }</span>
+
+        // start a new good server
+<span class="nc" id="L356">        startNewBookie();</span>
+<span class="nc" id="L357">        LedgerHandle lhafter = bkc.openLedger(lhbefore.getId(), digestType,</span>
+<span class="nc" id="L358">                &quot;&quot;.getBytes());</span>
+<span class="nc" id="L359">        assertEquals(&quot;Fenced ledger should have correct lastAddConfirmed&quot;,</span>
+<span class="nc" id="L360">                     lhbefore.getLastAddConfirmed(), lhafter.getLastAddConfirmed());</span>
+<span class="nc" id="L361">    }</span>
+
+    /**
+     * Verify that it doesn't break the recovery when changing ensemble in
+     * recovery add.
+     */
+    @Test
+    public void testEnsembleChangeDuringRecovery() throws Exception {
+<span class="nc" id="L369">        LedgerHandle lh = bkc.createLedger(numBookies, 2, 2, digestType, &quot;&quot;.getBytes());</span>
+<span class="nc" id="L370">        int numEntries = (numBookies * 3) + 1;</span>
+<span class="nc" id="L371">        final AtomicInteger numPendingAdds = new AtomicInteger(numEntries);</span>
+<span class="nc" id="L372">        final CountDownLatch addDone = new CountDownLatch(1);</span>
+<span class="nc bnc" id="L373" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L374">            lh.asyncAddEntry(&quot;data&quot;.getBytes(), new AddCallback() {</span>
+
+                @Override
+                public void addComplete(int rc, LedgerHandle lh, long entryId, Object ctx) {
+<span class="nc bnc" id="L378" title="All 2 branches missed.">                    if (BKException.Code.OK != rc) {</span>
+<span class="nc" id="L379">                        addDone.countDown();</span>
+<span class="nc" id="L380">                        return;</span>
+                    }
+<span class="nc bnc" id="L382" title="All 2 branches missed.">                    if (numPendingAdds.decrementAndGet() == 0) {</span>
+<span class="nc" id="L383">                        addDone.countDown();</span>
+                    }
+<span class="nc" id="L385">                }</span>
+
+            }, null);
+        }
+<span class="nc" id="L389">        addDone.await(10, TimeUnit.SECONDS);</span>
+<span class="nc bnc" id="L390" title="All 2 branches missed.">        if (numPendingAdds.get() &gt; 0) {</span>
+<span class="nc" id="L391">            fail(&quot;Failed to add &quot; + numEntries + &quot; to ledger handle &quot; + lh.getId());</span>
+        }
+        // kill first 2 bookies to replace bookies
+<span class="nc" id="L394">        BookieSocketAddress bookie1 = lh.getCurrentEnsemble().get(0);</span>
+<span class="nc" id="L395">        ServerConfiguration conf1 = killBookie(bookie1);</span>
+<span class="nc" id="L396">        BookieSocketAddress bookie2 = lh.getCurrentEnsemble().get(1);</span>
+<span class="nc" id="L397">        ServerConfiguration conf2 = killBookie(bookie2);</span>
+
+        // replace these two bookies
+<span class="nc" id="L400">        startDeadBookie(conf1);</span>
+<span class="nc" id="L401">        startDeadBookie(conf2);</span>
+        // kick in two brand new bookies
+<span class="nc" id="L403">        startNewBookie();</span>
+<span class="nc" id="L404">        startNewBookie();</span>
+
+        // two dead bookies are put in the ensemble which would cause ensemble
+        // change
+<span class="nc" id="L408">        LedgerHandle recoveredLh = bkc.openLedger(lh.getId(), digestType, &quot;&quot;.getBytes());</span>
+<span class="nc" id="L409">        assertEquals(&quot;Fenced ledger should have correct lastAddConfirmed&quot;, lh.getLastAddConfirmed(),</span>
+<span class="nc" id="L410">                recoveredLh.getLastAddConfirmed());</span>
+<span class="nc" id="L411">    }</span>
+
+    private void startDeadBookie(ServerConfiguration conf) throws Exception {
+<span class="nc" id="L414">        Bookie rBookie = new Bookie(conf) {</span>
+            @Override
+            public void recoveryAddEntry(ByteBuf entry, WriteCallback cb, Object ctx, byte[] masterKey)
+                    throws IOException, BookieException {
+                // drop request to simulate a dead bookie
+<span class="nc" id="L419">                throw new IOException(&quot;Couldn't write entries for some reason&quot;);</span>
+            }
+        };
+<span class="nc" id="L422">        bsConfs.add(conf);</span>
+<span class="nc" id="L423">        bs.add(startBookie(conf, rBookie));</span>
+<span class="nc" id="L424">    }</span>
+
+    @Test
+    public void testBatchRecoverySize3() throws Exception {
+<span class="nc" id="L428">        batchRecovery(3);</span>
+<span class="nc" id="L429">    }</span>
+
+    @Test
+    public void testBatchRecoverySize13() throws Exception {
+<span class="nc" id="L433">        batchRecovery(13);</span>
+<span class="nc" id="L434">    }</span>
+
+    private void batchRecovery(int batchSize) throws Exception {
+<span class="nc" id="L437">        ClientConfiguration newConf = new ClientConfiguration()</span>
+<span class="nc" id="L438">            .setReadEntryTimeout(60000)</span>
+<span class="nc" id="L439">            .setAddEntryTimeout(60000)</span>
+<span class="nc" id="L440">            .setEnableParallelRecoveryRead(false)</span>
+<span class="nc" id="L441">            .setRecoveryReadBatchSize(batchSize);</span>
+
+<span class="nc" id="L443">        newConf.setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+<span class="nc" id="L444">        BookKeeper newBk = new BookKeeper(newConf);</span>
+
+<span class="nc" id="L446">        LedgerHandle lh = newBk.createLedger(numBookies, 2, 2, digestType, &quot;&quot;.getBytes());</span>
+
+<span class="nc" id="L448">        CountDownLatch latch1 = new CountDownLatch(1);</span>
+<span class="nc" id="L449">        CountDownLatch latch2 = new CountDownLatch(1);</span>
+<span class="nc" id="L450">        sleepBookie(lh.getCurrentEnsemble().get(0), latch1);</span>
+<span class="nc" id="L451">        sleepBookie(lh.getCurrentEnsemble().get(1), latch2);</span>
+
+<span class="nc" id="L453">        int numEntries = (numBookies * 3) + 1;</span>
+<span class="nc" id="L454">        final AtomicInteger numPendingAdds = new AtomicInteger(numEntries);</span>
+<span class="nc" id="L455">        final CountDownLatch addDone = new CountDownLatch(1);</span>
+<span class="nc bnc" id="L456" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L457">            lh.asyncAddEntry((&quot;&quot; + i).getBytes(), new AddCallback() {</span>
+                @Override
+                public void addComplete(int rc, LedgerHandle lh, long entryId, Object ctx) {
+<span class="nc bnc" id="L460" title="All 2 branches missed.">                    if (BKException.Code.OK != rc) {</span>
+<span class="nc" id="L461">                        addDone.countDown();</span>
+<span class="nc" id="L462">                        return;</span>
+                    }
+<span class="nc bnc" id="L464" title="All 2 branches missed.">                    if (numPendingAdds.decrementAndGet() == 0) {</span>
+<span class="nc" id="L465">                        addDone.countDown();</span>
+                    }
+<span class="nc" id="L467">                }</span>
+            }, null);
+        }
+<span class="nc" id="L470">        latch1.countDown();</span>
+<span class="nc" id="L471">        latch2.countDown();</span>
+<span class="nc" id="L472">        addDone.await(10, TimeUnit.SECONDS);</span>
+<span class="nc" id="L473">        assertEquals(0, numPendingAdds.get());</span>
+
+<span class="nc" id="L475">        LedgerHandle recoverLh = newBk.openLedgerNoRecovery(lh.getId(), digestType, &quot;&quot;.getBytes());</span>
+<span class="nc" id="L476">        assertEquals(BookieProtocol.INVALID_ENTRY_ID, recoverLh.getLastAddConfirmed());</span>
+
+<span class="nc" id="L478">        MockClientContext parallelReadCtx = MockClientContext.copyOf(bkc.getClientCtx())</span>
+<span class="nc" id="L479">            .setConf(ClientInternalConf.fromConfig(newConf.setEnableParallelRecoveryRead(true)));</span>
+
+<span class="nc" id="L481">        LedgerRecoveryOp recoveryOp = new LedgerRecoveryOp(recoverLh, parallelReadCtx);</span>
+<span class="nc" id="L482">        CompletableFuture&lt;LedgerHandle&gt; f = recoveryOp.initiate();</span>
+<span class="nc" id="L483">        f.get(10, TimeUnit.SECONDS);</span>
+
+<span class="nc" id="L485">        assertEquals(numEntries, recoveryOp.readCount.get());</span>
+<span class="nc" id="L486">        assertEquals(numEntries, recoveryOp.writeCount.get());</span>
+
+<span class="nc" id="L488">        Enumeration&lt;LedgerEntry&gt; enumeration = recoverLh.readEntries(0, numEntries - 1);</span>
+
+<span class="nc" id="L490">        int numReads = 0;</span>
+<span class="nc bnc" id="L491" title="All 2 branches missed.">        while (enumeration.hasMoreElements()) {</span>
+<span class="nc" id="L492">            LedgerEntry entry = enumeration.nextElement();</span>
+<span class="nc" id="L493">            assertEquals((long) numReads, entry.getEntryId());</span>
+<span class="nc" id="L494">            assertEquals(numReads, Integer.parseInt(new String(entry.getEntry())));</span>
+<span class="nc" id="L495">            ++numReads;</span>
+<span class="nc" id="L496">        }</span>
+<span class="nc" id="L497">        assertEquals(numEntries, numReads);</span>
+
+<span class="nc" id="L499">        newBk.close();</span>
+<span class="nc" id="L500">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

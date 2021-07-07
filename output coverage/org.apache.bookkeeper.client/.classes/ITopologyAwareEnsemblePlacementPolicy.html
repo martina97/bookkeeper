@@ -1,0 +1,248 @@
+
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html id="htmlId">
+<head>
+  <title>Coverage Report :: ITopologyAwareEnsemblePlacementPolicy</title>
+  <style type="text/css">
+    @import "../../.css/coverage.css";
+  </style>
+</head>
+
+<body>
+<div class="header"></div>
+
+<div class="content">
+<div class="breadCrumbs">
+    [ <a href="../../index.html">all classes</a> ]
+    [ <a href="../index.html">org.apache.bookkeeper.client</a> ]
+</div>
+
+<h1>Coverage Summary for Class: ITopologyAwareEnsemblePlacementPolicy (org.apache.bookkeeper.client)</h1>
+
+<table class="coverageStats">
+
+<tr>
+  <th class="name">Class</th>
+</tr>
+  <tr>
+    <td class="name">ITopologyAwareEnsemblePlacementPolicy$Ensemble</td>
+  </tr>
+  <tr>
+    <td class="name">ITopologyAwareEnsemblePlacementPolicy$Predicate</td>
+  </tr>
+<tr>
+  <td class="name"><strong>total</strong></td>
+</tr>
+</table>
+
+<br/>
+<br/>
+
+
+<div class="sourceCode"><i>1</i>&nbsp;/*
+<i>2</i>&nbsp; * Licensed to the Apache Software Foundation (ASF) under one
+<i>3</i>&nbsp; * or more contributor license agreements.  See the NOTICE file
+<i>4</i>&nbsp; * distributed with this work for additional information
+<i>5</i>&nbsp; * regarding copyright ownership.  The ASF licenses this file
+<i>6</i>&nbsp; * to you under the Apache License, Version 2.0 (the
+<i>7</i>&nbsp; * &quot;License&quot;); you may not use this file except in compliance
+<i>8</i>&nbsp; * with the License.  You may obtain a copy of the License at
+<i>9</i>&nbsp; *
+<i>10</i>&nbsp; *     http://www.apache.org/licenses/LICENSE-2.0
+<i>11</i>&nbsp; *
+<i>12</i>&nbsp; * Unless required by applicable law or agreed to in writing, software
+<i>13</i>&nbsp; * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+<i>14</i>&nbsp; * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+<i>15</i>&nbsp; * See the License for the specific language governing permissions and
+<i>16</i>&nbsp; * limitations under the License.
+<i>17</i>&nbsp; */
+<i>18</i>&nbsp;package org.apache.bookkeeper.client;
+<i>19</i>&nbsp;
+<i>20</i>&nbsp;import java.util.List;
+<i>21</i>&nbsp;import java.util.Set;
+<i>22</i>&nbsp;
+<i>23</i>&nbsp;import org.apache.bookkeeper.client.BKException.BKNotEnoughBookiesException;
+<i>24</i>&nbsp;import org.apache.bookkeeper.client.ITopologyAwareEnsemblePlacementPolicy.Ensemble;
+<i>25</i>&nbsp;import org.apache.bookkeeper.client.ITopologyAwareEnsemblePlacementPolicy.Predicate;
+<i>26</i>&nbsp;import org.apache.bookkeeper.common.annotation.InterfaceAudience;
+<i>27</i>&nbsp;import org.apache.bookkeeper.common.annotation.InterfaceStability;
+<i>28</i>&nbsp;import org.apache.bookkeeper.net.BookieNode;
+<i>29</i>&nbsp;import org.apache.bookkeeper.net.BookieSocketAddress;
+<i>30</i>&nbsp;import org.apache.bookkeeper.net.Node;
+<i>31</i>&nbsp;
+<i>32</i>&nbsp;/**
+<i>33</i>&nbsp; * Interface for topology aware ensemble placement policy.
+<i>34</i>&nbsp; *
+<i>35</i>&nbsp; * &lt;p&gt;All the implementations of this interface are using {@link org.apache.bookkeeper.net.NetworkTopology}
+<i>36</i>&nbsp; *    for placing ensembles.
+<i>37</i>&nbsp; *
+<i>38</i>&nbsp; * @see EnsemblePlacementPolicy
+<i>39</i>&nbsp; */
+<i>40</i>&nbsp;@InterfaceAudience.Private
+<i>41</i>&nbsp;@InterfaceStability.Evolving
+<i>42</i>&nbsp;public interface ITopologyAwareEnsemblePlacementPolicy&lt;T extends Node&gt; extends EnsemblePlacementPolicy {
+<i>43</i>&nbsp;    /**
+<i>44</i>&nbsp;     * Predicate used when choosing an ensemble.
+<i>45</i>&nbsp;     */
+<i>46</i>&nbsp;    interface Predicate&lt;T extends Node&gt; {
+<i>47</i>&nbsp;        boolean apply(T candidate, Ensemble&lt;T&gt; chosenBookies);
+<i>48</i>&nbsp;    }
+<i>49</i>&nbsp;
+<i>50</i>&nbsp;    /**
+<i>51</i>&nbsp;     * Ensemble used to hold the result of an ensemble selected for placement.
+<i>52</i>&nbsp;     */
+<i>53</i>&nbsp;    interface Ensemble&lt;T extends Node&gt; {
+<i>54</i>&nbsp;
+<i>55</i>&nbsp;        /**
+<i>56</i>&nbsp;         * Append the new bookie node to the ensemble only if the ensemble doesnt
+<i>57</i>&nbsp;         * already contain the same bookie.
+<i>58</i>&nbsp;         *
+<i>59</i>&nbsp;         * @param node
+<i>60</i>&nbsp;         *          new candidate bookie node.
+<i>61</i>&nbsp;         * @return
+<i>62</i>&nbsp;         *          true if the node was added
+<i>63</i>&nbsp;         */
+<i>64</i>&nbsp;        boolean addNode(T node);
+<i>65</i>&nbsp;
+<i>66</i>&nbsp;        /**
+<i>67</i>&nbsp;         * @return list of addresses representing the ensemble
+<i>68</i>&nbsp;         */
+<i>69</i>&nbsp;        List&lt;BookieSocketAddress&gt; toList();
+<i>70</i>&nbsp;
+<i>71</i>&nbsp;        /**
+<i>72</i>&nbsp;         * Validates if an ensemble is valid.
+<i>73</i>&nbsp;         *
+<i>74</i>&nbsp;         * @return true if the ensemble is valid; false otherwise
+<i>75</i>&nbsp;         */
+<i>76</i>&nbsp;        boolean validate();
+<i>77</i>&nbsp;
+<i>78</i>&nbsp;    }
+<i>79</i>&nbsp;
+<i>80</i>&nbsp;    /**
+<i>81</i>&nbsp;     * Create an ensemble with parent ensemble.
+<i>82</i>&nbsp;     *
+<i>83</i>&nbsp;     * @param ensembleSize
+<i>84</i>&nbsp;     *          ensemble size
+<i>85</i>&nbsp;     * @param writeQuorumSize
+<i>86</i>&nbsp;     *          write quorum size
+<i>87</i>&nbsp;     * @param ackQuorumSize
+<i>88</i>&nbsp;     *          ack quorum size
+<i>89</i>&nbsp;     * @param excludeBookies
+<i>90</i>&nbsp;     *          exclude bookies
+<i>91</i>&nbsp;     * @param parentEnsemble
+<i>92</i>&nbsp;     *          parent ensemble
+<i>93</i>&nbsp;     * @return list of bookies forming the ensemble
+<i>94</i>&nbsp;     * @throws BKException.BKNotEnoughBookiesException
+<i>95</i>&nbsp;     */
+<i>96</i>&nbsp;    PlacementResult&lt;List&lt;BookieSocketAddress&gt;&gt; newEnsemble(
+<i>97</i>&nbsp;            int ensembleSize,
+<i>98</i>&nbsp;            int writeQuorumSize,
+<i>99</i>&nbsp;            int ackQuorumSize,
+<i>100</i>&nbsp;            Set&lt;BookieSocketAddress&gt; excludeBookies,
+<i>101</i>&nbsp;            Ensemble&lt;T&gt; parentEnsemble,
+<i>102</i>&nbsp;            Predicate&lt;T&gt; parentPredicate)
+<i>103</i>&nbsp;            throws BKException.BKNotEnoughBookiesException;
+<i>104</i>&nbsp;
+<i>105</i>&nbsp;    /**
+<i>106</i>&nbsp;     * Select a node from a given network location.
+<i>107</i>&nbsp;     *
+<i>108</i>&nbsp;     * @param networkLoc
+<i>109</i>&nbsp;     *          network location
+<i>110</i>&nbsp;     * @param excludeBookies
+<i>111</i>&nbsp;     *          exclude bookies set
+<i>112</i>&nbsp;     * @param predicate
+<i>113</i>&nbsp;     *          predicate to apply
+<i>114</i>&nbsp;     * @param ensemble
+<i>115</i>&nbsp;     *          ensemble
+<i>116</i>&nbsp;     * @param fallbackToRandom
+<i>117</i>&nbsp;     *          fallbackToRandom
+<i>118</i>&nbsp;     * @return the selected bookie.
+<i>119</i>&nbsp;     * @throws BKException.BKNotEnoughBookiesException
+<i>120</i>&nbsp;     */
+<i>121</i>&nbsp;    T selectFromNetworkLocation(String networkLoc,
+<i>122</i>&nbsp;                                Set&lt;Node&gt; excludeBookies,
+<i>123</i>&nbsp;                                Predicate&lt;T&gt; predicate,
+<i>124</i>&nbsp;                                Ensemble&lt;T&gt; ensemble,
+<i>125</i>&nbsp;                                boolean fallbackToRandom)
+<i>126</i>&nbsp;            throws BKException.BKNotEnoughBookiesException;
+<i>127</i>&nbsp;
+<i>128</i>&nbsp;    /**
+<i>129</i>&nbsp;     * Select a node from cluster excluding excludeBookies and bookie nodes of
+<i>130</i>&nbsp;     * excludeRacks. If there isn&#39;t a BookieNode excluding those racks and
+<i>131</i>&nbsp;     * nodes, then if fallbackToRandom is set to true then pick a random node
+<i>132</i>&nbsp;     * from cluster just excluding excludeBookies.
+<i>133</i>&nbsp;     *
+<i>134</i>&nbsp;     * @param excludeRacks
+<i>135</i>&nbsp;     * @param excludeBookies
+<i>136</i>&nbsp;     * @param predicate
+<i>137</i>&nbsp;     * @param ensemble
+<i>138</i>&nbsp;     * @param fallbackToRandom
+<i>139</i>&nbsp;     * @return
+<i>140</i>&nbsp;     * @throws BKException.BKNotEnoughBookiesException
+<i>141</i>&nbsp;     */
+<i>142</i>&nbsp;    T selectFromNetworkLocation(Set&lt;String&gt; excludeRacks,
+<i>143</i>&nbsp;                                Set&lt;Node&gt; excludeBookies,
+<i>144</i>&nbsp;                                Predicate&lt;BookieNode&gt; predicate,
+<i>145</i>&nbsp;                                Ensemble&lt;BookieNode&gt; ensemble,
+<i>146</i>&nbsp;                                boolean fallbackToRandom)
+<i>147</i>&nbsp;            throws BKException.BKNotEnoughBookiesException;
+<i>148</i>&nbsp;
+<i>149</i>&nbsp;    /**
+<i>150</i>&nbsp;     * Select a node from networkLoc rack excluding excludeBookies. If there
+<i>151</i>&nbsp;     * isn&#39;t any node in &#39;networkLoc&#39;, then it will try to get a node from
+<i>152</i>&nbsp;     * cluster excluding excludeRacks and excludeBookies. If fallbackToRandom is
+<i>153</i>&nbsp;     * set to true then it will get a random bookie from cluster excluding
+<i>154</i>&nbsp;     * excludeBookies if it couldn&#39;t find a bookie
+<i>155</i>&nbsp;     *
+<i>156</i>&nbsp;     * @param networkLoc
+<i>157</i>&nbsp;     * @param excludeRacks
+<i>158</i>&nbsp;     * @param excludeBookies
+<i>159</i>&nbsp;     * @param predicate
+<i>160</i>&nbsp;     * @param ensemble
+<i>161</i>&nbsp;     * @param fallbackToRandom
+<i>162</i>&nbsp;     * @return
+<i>163</i>&nbsp;     * @throws BKNotEnoughBookiesException
+<i>164</i>&nbsp;     */
+<i>165</i>&nbsp;    T selectFromNetworkLocation(String networkLoc,
+<i>166</i>&nbsp;                                Set&lt;String&gt; excludeRacks,
+<i>167</i>&nbsp;                                Set&lt;Node&gt; excludeBookies,
+<i>168</i>&nbsp;                                Predicate&lt;BookieNode&gt; predicate,
+<i>169</i>&nbsp;                                Ensemble&lt;BookieNode&gt; ensemble,
+<i>170</i>&nbsp;                                boolean fallbackToRandom)
+<i>171</i>&nbsp;            throws BKNotEnoughBookiesException;
+<i>172</i>&nbsp;
+<i>173</i>&nbsp;    /**
+<i>174</i>&nbsp;     * Handle bookies that left.
+<i>175</i>&nbsp;     *
+<i>176</i>&nbsp;     * @param leftBookies
+<i>177</i>&nbsp;     *          bookies that left
+<i>178</i>&nbsp;     */
+<i>179</i>&nbsp;    void handleBookiesThatLeft(Set&lt;BookieSocketAddress&gt; leftBookies);
+<i>180</i>&nbsp;
+<i>181</i>&nbsp;    /**
+<i>182</i>&nbsp;     * Handle bookies that joined.
+<i>183</i>&nbsp;     *
+<i>184</i>&nbsp;     * @param joinedBookies
+<i>185</i>&nbsp;     *          bookies that joined.
+<i>186</i>&nbsp;     */
+<i>187</i>&nbsp;    void handleBookiesThatJoined(Set&lt;BookieSocketAddress&gt; joinedBookies);
+<i>188</i>&nbsp;
+<i>189</i>&nbsp;    /**
+<i>190</i>&nbsp;     * Handle rack change for the bookies.
+<i>191</i>&nbsp;     *
+<i>192</i>&nbsp;     * @param bookieAddressList
+<i>193</i>&nbsp;     */
+<i>194</i>&nbsp;    void onBookieRackChange(List&lt;BookieSocketAddress&gt; bookieAddressList);
+<i>195</i>&nbsp;}
+</div>
+</div>
+
+<div class="footer">
+    
+    <div style="float:right;">generated on 2021-06-28 15:57</div>
+</div>
+</body>
+</html>

@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TestReadTimeout.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">TestReadTimeout.java</span></div><h1>TestReadTimeout.java</h1><pre class="source lang-java linenums">/*
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.client;
+
+import java.util.HashSet;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import org.apache.bookkeeper.client.AsyncCallback.AddCallback;
+import org.apache.bookkeeper.client.BookKeeper.DigestType;
+import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.junit.Assert;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * This unit test tests ledger fencing.
+ *
+ */
+public class TestReadTimeout extends BookKeeperClusterTestCase {
+<span class="nc" id="L42">    private static final Logger LOG = LoggerFactory.getLogger(TestReadTimeout.class);</span>
+
+    DigestType digestType;
+
+    public TestReadTimeout() {
+<span class="nc" id="L47">        super(10);</span>
+<span class="nc" id="L48">        this.digestType = DigestType.CRC32;</span>
+<span class="nc" id="L49">    }</span>
+
+    @SuppressWarnings(&quot;deprecation&quot;)
+    @Test
+    public void testReadTimeout() throws Exception {
+<span class="nc" id="L54">        final AtomicBoolean completed = new AtomicBoolean(false);</span>
+
+<span class="nc" id="L56">        LedgerHandle writelh = bkc.createLedger(3, 3, digestType, &quot;testPasswd&quot;.getBytes());</span>
+<span class="nc" id="L57">        String tmp = &quot;Foobar&quot;;</span>
+
+<span class="nc" id="L59">        final int numEntries = 10;</span>
+<span class="nc bnc" id="L60" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L61">            writelh.addEntry(tmp.getBytes());</span>
+        }
+
+<span class="nc" id="L64">        Set&lt;BookieSocketAddress&gt; beforeSet = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L65">        beforeSet.addAll(writelh.getLedgerMetadata().getEnsembleAt(numEntries));</span>
+
+<span class="nc" id="L67">        final BookieSocketAddress bookieToSleep = writelh.getLedgerMetadata().getEnsembleAt(numEntries).get(0);</span>
+<span class="nc" id="L68">        int sleeptime = baseClientConf.getReadTimeout() * 3;</span>
+<span class="nc" id="L69">        CountDownLatch latch = sleepBookie(bookieToSleep, sleeptime);</span>
+<span class="nc" id="L70">        latch.await();</span>
+
+<span class="nc" id="L72">        writelh.asyncAddEntry(tmp.getBytes(),</span>
+<span class="nc" id="L73">            new AddCallback() {</span>
+                public void addComplete(int rc, LedgerHandle lh,
+                                        long entryId, Object ctx) {
+<span class="nc" id="L76">                    completed.set(true);</span>
+<span class="nc" id="L77">                }</span>
+            }, null);
+<span class="nc" id="L79">        Thread.sleep((baseClientConf.getReadTimeout() * 3) * 1000);</span>
+<span class="nc" id="L80">        Assert.assertTrue(&quot;Write request did not finish&quot;, completed.get());</span>
+
+<span class="nc" id="L82">        Set&lt;BookieSocketAddress&gt; afterSet = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L83">        afterSet.addAll(writelh.getLedgerMetadata().getEnsembleAt(numEntries + 1));</span>
+<span class="nc" id="L84">        beforeSet.removeAll(afterSet);</span>
+<span class="nc bnc" id="L85" title="All 2 branches missed.">        Assert.assertTrue(&quot;Bookie set should not match&quot;, beforeSet.size() != 0);</span>
+
+<span class="nc" id="L87">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

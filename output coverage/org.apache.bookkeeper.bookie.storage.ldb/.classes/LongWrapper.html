@@ -1,0 +1,176 @@
+
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html id="htmlId">
+<head>
+  <title>Coverage Report :: LongWrapper</title>
+  <style type="text/css">
+    @import "../../.css/coverage.css";
+  </style>
+</head>
+
+<body>
+<div class="header"></div>
+
+<div class="content">
+<div class="breadCrumbs">
+    [ <a href="../../index.html">all classes</a> ]
+    [ <a href="../index.html">org.apache.bookkeeper.bookie.storage.ldb</a> ]
+</div>
+
+<h1>Coverage Summary for Class: LongWrapper (org.apache.bookkeeper.bookie.storage.ldb)</h1>
+
+<table class="coverageStats">
+
+<tr>
+  <th class="name">Class</th>
+<th class="coverageStat 
+">
+  Method, %
+</th>
+<th class="coverageStat 
+">
+  Line, %
+</th>
+</tr>
+<tr>
+  <td class="name">LongWrapper</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 7)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 14)
+  </span>
+</td>
+</tr>
+  <tr>
+    <td class="name">LongWrapper$1</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 2)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 2)
+  </span>
+</td>
+  </tr>
+<tr>
+  <td class="name"><strong>total</strong></td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 9)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 16)
+  </span>
+</td>
+</tr>
+</table>
+
+<br/>
+<br/>
+
+
+<div class="sourceCode"><i>1</i>&nbsp;/**
+<i>2</i>&nbsp; *
+<i>3</i>&nbsp; * Licensed to the Apache Software Foundation (ASF) under one
+<i>4</i>&nbsp; * or more contributor license agreements.  See the NOTICE file
+<i>5</i>&nbsp; * distributed with this work for additional information
+<i>6</i>&nbsp; * regarding copyright ownership.  The ASF licenses this file
+<i>7</i>&nbsp; * to you under the Apache License, Version 2.0 (the
+<i>8</i>&nbsp; * &quot;License&quot;); you may not use this file except in compliance
+<i>9</i>&nbsp; * with the License.  You may obtain a copy of the License at
+<i>10</i>&nbsp; *
+<i>11</i>&nbsp; *   http://www.apache.org/licenses/LICENSE-2.0
+<i>12</i>&nbsp; *
+<i>13</i>&nbsp; * Unless required by applicable law or agreed to in writing,
+<i>14</i>&nbsp; * software distributed under the License is distributed on an
+<i>15</i>&nbsp; * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+<i>16</i>&nbsp; * KIND, either express or implied.  See the License for the
+<i>17</i>&nbsp; * specific language governing permissions and limitations
+<i>18</i>&nbsp; * under the License.
+<i>19</i>&nbsp; *
+<i>20</i>&nbsp; */
+<i>21</i>&nbsp;package org.apache.bookkeeper.bookie.storage.ldb;
+<i>22</i>&nbsp;
+<i>23</i>&nbsp;import io.netty.util.Recycler;
+<i>24</i>&nbsp;import io.netty.util.Recycler.Handle;
+<i>25</i>&nbsp;
+<i>26</i>&nbsp;/**
+<i>27</i>&nbsp; * Wrapper for a long serialized into a byte array.
+<i>28</i>&nbsp; */
+<i>29</i>&nbsp;class LongWrapper {
+<i>30</i>&nbsp;
+<b class="nc"><i>31</i>&nbsp;    final byte[] array = new byte[8];</b>
+<i>32</i>&nbsp;
+<i>33</i>&nbsp;    public void set(long value) {
+<b class="nc"><i>34</i>&nbsp;        ArrayUtil.setLong(array, 0, value);</b>
+<b class="nc"><i>35</i>&nbsp;    }</b>
+<i>36</i>&nbsp;
+<i>37</i>&nbsp;    public long getValue() {
+<b class="nc"><i>38</i>&nbsp;        return ArrayUtil.getLong(array, 0);</b>
+<i>39</i>&nbsp;    }
+<i>40</i>&nbsp;
+<i>41</i>&nbsp;    public static LongWrapper get() {
+<b class="nc"><i>42</i>&nbsp;        return RECYCLER.get();</b>
+<i>43</i>&nbsp;    }
+<i>44</i>&nbsp;
+<i>45</i>&nbsp;    public static LongWrapper get(long value) {
+<b class="nc"><i>46</i>&nbsp;        LongWrapper lp = RECYCLER.get();</b>
+<b class="nc"><i>47</i>&nbsp;        ArrayUtil.setLong(lp.array, 0, value);</b>
+<b class="nc"><i>48</i>&nbsp;        return lp;</b>
+<i>49</i>&nbsp;    }
+<i>50</i>&nbsp;
+<i>51</i>&nbsp;    public void recycle() {
+<b class="nc"><i>52</i>&nbsp;        handle.recycle(this);</b>
+<b class="nc"><i>53</i>&nbsp;    }</b>
+<i>54</i>&nbsp;
+<b class="nc"><i>55</i>&nbsp;    private static final Recycler&lt;LongWrapper&gt; RECYCLER = new Recycler&lt;LongWrapper&gt;() {</b>
+<i>56</i>&nbsp;        @Override
+<i>57</i>&nbsp;        protected LongWrapper newObject(Handle&lt;LongWrapper&gt; handle) {
+<b class="nc"><i>58</i>&nbsp;            return new LongWrapper(handle);</b>
+<i>59</i>&nbsp;        }
+<i>60</i>&nbsp;    };
+<i>61</i>&nbsp;
+<i>62</i>&nbsp;    private final Handle&lt;LongWrapper&gt; handle;
+<i>63</i>&nbsp;
+<b class="nc"><i>64</i>&nbsp;    private LongWrapper(Handle&lt;LongWrapper&gt; handle) {</b>
+<b class="nc"><i>65</i>&nbsp;        this.handle = handle;</b>
+<b class="nc"><i>66</i>&nbsp;    }</b>
+<i>67</i>&nbsp;}
+</div>
+</div>
+
+<div class="footer">
+    
+    <div style="float:right;">generated on 2021-06-29 13:53</div>
+</div>
+</body>
+</html>

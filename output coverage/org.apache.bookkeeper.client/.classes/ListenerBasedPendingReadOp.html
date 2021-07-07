@@ -1,0 +1,156 @@
+
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html id="htmlId">
+<head>
+  <title>Coverage Report :: ListenerBasedPendingReadOp</title>
+  <style type="text/css">
+    @import "../../.css/coverage.css";
+  </style>
+</head>
+
+<body>
+<div class="header"></div>
+
+<div class="content">
+<div class="breadCrumbs">
+    [ <a href="../../index.html">all classes</a> ]
+    [ <a href="../index.html">org.apache.bookkeeper.client</a> ]
+</div>
+
+<h1>Coverage Summary for Class: ListenerBasedPendingReadOp (org.apache.bookkeeper.client)</h1>
+
+<table class="coverageStats">
+<tr>
+  <th class="name">Class</th>
+<th class="coverageStat 
+">
+  Class, %
+</th>
+<th class="coverageStat 
+">
+  Method, %
+</th>
+<th class="coverageStat 
+">
+  Line, %
+</th>
+</tr>
+<tr>
+  <td class="name">ListenerBasedPendingReadOp</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 1)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 3)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 22)
+  </span>
+</td>
+</tr>
+
+</table>
+
+<br/>
+<br/>
+
+
+<div class="sourceCode"><i>1</i>&nbsp;/*
+<i>2</i>&nbsp; *
+<i>3</i>&nbsp; * Licensed to the Apache Software Foundation (ASF) under one
+<i>4</i>&nbsp; * or more contributor license agreements.  See the NOTICE file
+<i>5</i>&nbsp; * distributed with this work for additional information
+<i>6</i>&nbsp; * regarding copyright ownership.  The ASF licenses this file
+<i>7</i>&nbsp; * to you under the Apache License, Version 2.0 (the
+<i>8</i>&nbsp; * &quot;License&quot;); you may not use this file except in compliance
+<i>9</i>&nbsp; * with the License.  You may obtain a copy of the License at
+<i>10</i>&nbsp; *
+<i>11</i>&nbsp; *   http://www.apache.org/licenses/LICENSE-2.0
+<i>12</i>&nbsp; *
+<i>13</i>&nbsp; * Unless required by applicable law or agreed to in writing,
+<i>14</i>&nbsp; * software distributed under the License is distributed on an
+<i>15</i>&nbsp; * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+<i>16</i>&nbsp; * KIND, either express or implied.  See the License for the
+<i>17</i>&nbsp; * specific language governing permissions and limitations
+<i>18</i>&nbsp; * under the License.
+<i>19</i>&nbsp; *
+<i>20</i>&nbsp; */
+<i>21</i>&nbsp;package org.apache.bookkeeper.client;
+<i>22</i>&nbsp;
+<i>23</i>&nbsp;import java.util.concurrent.TimeUnit;
+<i>24</i>&nbsp;import lombok.extern.slf4j.Slf4j;
+<i>25</i>&nbsp;import org.apache.bookkeeper.proto.BookkeeperInternalCallbacks.ReadEntryListener;
+<i>26</i>&nbsp;import org.apache.bookkeeper.util.MathUtils;
+<i>27</i>&nbsp;
+<b class="nc"><i>28</i>&nbsp;@Slf4j</b>
+<i>29</i>&nbsp;class ListenerBasedPendingReadOp extends PendingReadOp {
+<i>30</i>&nbsp;
+<i>31</i>&nbsp;    final ReadEntryListener listener;
+<i>32</i>&nbsp;    final Object ctx;
+<i>33</i>&nbsp;
+<i>34</i>&nbsp;    ListenerBasedPendingReadOp(LedgerHandle lh,
+<i>35</i>&nbsp;                               ClientContext clientCtx,
+<i>36</i>&nbsp;                               long startEntryId,
+<i>37</i>&nbsp;                               long endEntryId,
+<i>38</i>&nbsp;                               ReadEntryListener listener,
+<i>39</i>&nbsp;                               Object ctx,
+<i>40</i>&nbsp;                               boolean isRecoveryRead) {
+<b class="nc"><i>41</i>&nbsp;        super(lh, clientCtx, startEntryId, endEntryId, isRecoveryRead);</b>
+<b class="nc"><i>42</i>&nbsp;        this.listener = listener;</b>
+<b class="nc"><i>43</i>&nbsp;        this.ctx = ctx;</b>
+<b class="nc"><i>44</i>&nbsp;    }</b>
+<i>45</i>&nbsp;
+<i>46</i>&nbsp;    @Override
+<i>47</i>&nbsp;    protected void submitCallback(int code) {
+<i>48</i>&nbsp;        LedgerEntryRequest request;
+<b class="nc"><i>49</i>&nbsp;        while (!seq.isEmpty() &amp;&amp; (request = seq.get(0)) != null) {</b>
+<b class="nc"><i>50</i>&nbsp;            if (!request.isComplete()) {</b>
+<b class="nc"><i>51</i>&nbsp;                return;</b>
+<i>52</i>&nbsp;            }
+<b class="nc"><i>53</i>&nbsp;            seq.remove(0);</b>
+<b class="nc"><i>54</i>&nbsp;            long latencyNanos = MathUtils.elapsedNanos(requestTimeNanos);</b>
+<i>55</i>&nbsp;            LedgerEntry entry;
+<b class="nc"><i>56</i>&nbsp;            if (BKException.Code.OK == request.getRc()) {</b>
+<b class="nc"><i>57</i>&nbsp;                clientCtx.getClientStats().getReadOpLogger()</b>
+<b class="nc"><i>58</i>&nbsp;                    .registerSuccessfulEvent(latencyNanos, TimeUnit.NANOSECONDS);</b>
+<i>59</i>&nbsp;                // callback with completed entry
+<b class="nc"><i>60</i>&nbsp;                entry = new LedgerEntry(request.entryImpl);</b>
+<i>61</i>&nbsp;            } else {
+<b class="nc"><i>62</i>&nbsp;                clientCtx.getClientStats().getReadOpLogger()</b>
+<b class="nc"><i>63</i>&nbsp;                    .registerFailedEvent(latencyNanos, TimeUnit.NANOSECONDS);</b>
+<b class="nc"><i>64</i>&nbsp;                entry = null;</b>
+<i>65</i>&nbsp;            }
+<b class="nc"><i>66</i>&nbsp;            request.close();</b>
+<b class="nc"><i>67</i>&nbsp;            listener.onEntryComplete(request.getRc(), lh, entry, ctx);</b>
+<b class="nc"><i>68</i>&nbsp;        }</b>
+<i>69</i>&nbsp;        // if all entries are already completed.
+<b class="nc"><i>70</i>&nbsp;        cancelSpeculativeTask(true);</b>
+<b class="nc"><i>71</i>&nbsp;    }</b>
+<i>72</i>&nbsp;
+<i>73</i>&nbsp;}
+</div>
+</div>
+
+<div class="footer">
+    
+    <div style="float:right;">generated on 2021-06-28 15:57</div>
+</div>
+</body>
+</html>

@@ -1,0 +1,385 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TestSpeculativeRead.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">TestSpeculativeRead.java</span></div><h1>TestSpeculativeRead.java</h1><pre class="source lang-java linenums">/*
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.client;
+
+import static org.apache.bookkeeper.client.BookKeeperClientStats.CLIENT_SCOPE;
+import static org.apache.bookkeeper.client.BookKeeperClientStats.SPECULATIVE_READ_COUNT;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+
+import java.util.BitSet;
+import java.util.Enumeration;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+
+import org.apache.bookkeeper.client.AsyncCallback.ReadCallback;
+import org.apache.bookkeeper.client.BookKeeper.DigestType;
+import org.apache.bookkeeper.conf.ClientConfiguration;
+import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.apache.bookkeeper.test.TestStatsProvider;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * This unit test tests ledger fencing.
+ *
+ */
+public class TestSpeculativeRead extends BookKeeperClusterTestCase {
+<span class="nc" id="L53">    private static final Logger LOG = LoggerFactory.getLogger(TestSpeculativeRead.class);</span>
+
+    private final DigestType digestType;
+<span class="nc" id="L56">    byte[] passwd = &quot;specPW&quot;.getBytes();</span>
+
+    public TestSpeculativeRead() {
+<span class="nc" id="L59">        super(10);</span>
+<span class="nc" id="L60">        this.digestType = DigestType.CRC32;</span>
+<span class="nc" id="L61">    }</span>
+
+    long getLedgerToRead(int ensemble, int quorum) throws Exception {
+<span class="nc" id="L64">        byte[] data = &quot;Data for test&quot;.getBytes();</span>
+<span class="nc" id="L65">        LedgerHandle l = bkc.createLedger(ensemble, quorum, digestType, passwd);</span>
+<span class="nc bnc" id="L66" title="All 2 branches missed.">        for (int i = 0; i &lt; 10; i++) {</span>
+<span class="nc" id="L67">            l.addEntry(data);</span>
+        }
+<span class="nc" id="L69">        l.close();</span>
+
+<span class="nc" id="L71">        return l.getId();</span>
+    }
+
+    @SuppressWarnings(&quot;deprecation&quot;)
+    BookKeeperTestClient createClient(int specTimeout) throws Exception {
+<span class="nc" id="L76">        ClientConfiguration conf = new ClientConfiguration()</span>
+<span class="nc" id="L77">            .setSpeculativeReadTimeout(specTimeout)</span>
+<span class="nc" id="L78">            .setReadTimeout(30000)</span>
+<span class="nc" id="L79">            .setReorderReadSequenceEnabled(true)</span>
+<span class="nc" id="L80">            .setEnsemblePlacementPolicySlowBookies(true)</span>
+<span class="nc" id="L81">            .setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+<span class="nc" id="L82">        return new BookKeeperTestClient(conf, new TestStatsProvider());</span>
+    }
+
+<span class="nc" id="L85">    class LatchCallback implements ReadCallback {</span>
+<span class="nc" id="L86">        CountDownLatch l = new CountDownLatch(1);</span>
+<span class="nc" id="L87">        boolean success = false;</span>
+<span class="nc" id="L88">        long startMillis = System.currentTimeMillis();</span>
+<span class="nc" id="L89">        long endMillis = Long.MAX_VALUE;</span>
+
+        public void readComplete(int rc,
+                                 LedgerHandle lh,
+                                 Enumeration&lt;LedgerEntry&gt; seq,
+                                 Object ctx) {
+<span class="nc" id="L95">            endMillis = System.currentTimeMillis();</span>
+<span class="nc" id="L96">            LOG.debug(&quot;Got response {} {}&quot;, rc, getDuration());</span>
+<span class="nc bnc" id="L97" title="All 2 branches missed.">            success = rc == BKException.Code.OK;</span>
+<span class="nc" id="L98">            l.countDown();</span>
+<span class="nc" id="L99">        }</span>
+
+        long getDuration() {
+<span class="nc" id="L102">            return endMillis - startMillis;</span>
+        }
+
+        void expectSuccess(int milliseconds) throws Exception {
+<span class="nc" id="L106">            assertTrue(l.await(milliseconds, TimeUnit.MILLISECONDS));</span>
+<span class="nc" id="L107">            assertTrue(success);</span>
+<span class="nc" id="L108">        }</span>
+
+        void expectFail(int milliseconds) throws Exception {
+<span class="nc" id="L111">            assertTrue(l.await(milliseconds, TimeUnit.MILLISECONDS));</span>
+<span class="nc" id="L112">            assertFalse(success);</span>
+<span class="nc" id="L113">        }</span>
+
+        void expectTimeout(int milliseconds) throws Exception {
+<span class="nc" id="L116">            assertFalse(l.await(milliseconds, TimeUnit.MILLISECONDS));</span>
+<span class="nc" id="L117">        }</span>
+    }
+
+    /**
+     * Test basic speculative functionality.
+     * - Create 2 clients with read timeout disabled, one with spec
+     *   read enabled, the other not.
+     * - create ledger
+     * - sleep second bookie in ensemble
+     * - read first entry, both should find on first bookie.
+     * - read second bookie, spec client should find on bookie three,
+     *   non spec client should hang.
+     */
+    @Test
+    public void testSpeculativeRead() throws Exception {
+<span class="nc" id="L132">        long id = getLedgerToRead(3, 2);</span>
+<span class="nc" id="L133">        BookKeeperTestClient bknospec = createClient(0); // disabled</span>
+<span class="nc" id="L134">        BookKeeperTestClient bkspec = createClient(2000);</span>
+
+<span class="nc" id="L136">        LedgerHandle lnospec = bknospec.openLedger(id, digestType, passwd);</span>
+<span class="nc" id="L137">        LedgerHandle lspec = bkspec.openLedger(id, digestType, passwd);</span>
+
+        // sleep second bookie
+<span class="nc" id="L140">        CountDownLatch sleepLatch = new CountDownLatch(1);</span>
+<span class="nc" id="L141">        BookieSocketAddress second = lnospec.getLedgerMetadata().getAllEnsembles().get(0L).get(1);</span>
+<span class="nc" id="L142">        sleepBookie(second, sleepLatch);</span>
+
+        try {
+            // read first entry, both go to first bookie, should be fine
+<span class="nc" id="L146">            LatchCallback nospeccb = new LatchCallback();</span>
+<span class="nc" id="L147">            LatchCallback speccb = new LatchCallback();</span>
+<span class="nc" id="L148">            lnospec.asyncReadEntries(0, 0, nospeccb, null);</span>
+<span class="nc" id="L149">            lspec.asyncReadEntries(0, 0, speccb, null);</span>
+<span class="nc" id="L150">            nospeccb.expectSuccess(2000);</span>
+<span class="nc" id="L151">            speccb.expectSuccess(2000);</span>
+
+            // read second entry, both look for second book, spec read client
+            // tries third bookie, nonspec client hangs as read timeout is very long.
+<span class="nc" id="L155">            nospeccb = new LatchCallback();</span>
+<span class="nc" id="L156">            speccb = new LatchCallback();</span>
+<span class="nc" id="L157">            lnospec.asyncReadEntries(1, 1, nospeccb, null);</span>
+<span class="nc" id="L158">            lspec.asyncReadEntries(1, 1, speccb, null);</span>
+<span class="nc" id="L159">            speccb.expectSuccess(4000);</span>
+<span class="nc" id="L160">            nospeccb.expectTimeout(4000);</span>
+            // Check that the second bookie is registered as slow at entryId 1
+<span class="nc" id="L162">            RackawareEnsemblePlacementPolicy rep = (RackawareEnsemblePlacementPolicy) bkspec.getPlacementPolicy();</span>
+<span class="nc bnc" id="L163" title="All 2 branches missed.">            assertTrue(rep.slowBookies.asMap().size() == 1);</span>
+
+<span class="nc" id="L165">            assertTrue(</span>
+                    &quot;Stats should not reflect speculative reads if disabled&quot;,
+<span class="nc bnc" id="L167" title="All 2 branches missed.">                    bknospec.getTestStatsProvider()</span>
+<span class="nc" id="L168">                            .getCounter(CLIENT_SCOPE + &quot;.&quot; + SPECULATIVE_READ_COUNT).get() == 0);</span>
+<span class="nc" id="L169">            assertTrue(</span>
+                    &quot;Stats should reflect speculative reads&quot;,
+<span class="nc bnc" id="L171" title="All 2 branches missed.">                    bkspec.getTestStatsProvider()</span>
+<span class="nc" id="L172">                            .getCounter(CLIENT_SCOPE + &quot;.&quot; + SPECULATIVE_READ_COUNT).get() &gt; 0);</span>
+
+        } finally {
+<span class="nc" id="L175">            sleepLatch.countDown();</span>
+<span class="nc" id="L176">            lspec.close();</span>
+<span class="nc" id="L177">            lnospec.close();</span>
+<span class="nc" id="L178">            bkspec.close();</span>
+<span class="nc" id="L179">            bknospec.close();</span>
+        }
+<span class="nc" id="L181">    }</span>
+
+    /**
+     * Test that if more than one replica is down, we can still read, as long as the quorum
+     * size is larger than the number of down replicas.
+     */
+    @Test
+    public void testSpeculativeReadMultipleReplicasDown() throws Exception {
+<span class="nc" id="L189">        long id = getLedgerToRead(5, 5);</span>
+<span class="nc" id="L190">        int timeout = 5000;</span>
+<span class="nc" id="L191">        BookKeeper bkspec = createClient(timeout);</span>
+
+<span class="nc" id="L193">        LedgerHandle l = bkspec.openLedger(id, digestType, passwd);</span>
+
+        // sleep bookie 1, 2 &amp; 4
+<span class="nc" id="L196">        CountDownLatch sleepLatch = new CountDownLatch(1);</span>
+<span class="nc" id="L197">        sleepBookie(l.getLedgerMetadata().getAllEnsembles().get(0L).get(1), sleepLatch);</span>
+<span class="nc" id="L198">        sleepBookie(l.getLedgerMetadata().getAllEnsembles().get(0L).get(2), sleepLatch);</span>
+<span class="nc" id="L199">        sleepBookie(l.getLedgerMetadata().getAllEnsembles().get(0L).get(4), sleepLatch);</span>
+
+        try {
+            // read first entry, should complete faster than timeout
+            // as bookie 0 has the entry
+<span class="nc" id="L204">            LatchCallback latch0 = new LatchCallback();</span>
+<span class="nc" id="L205">            l.asyncReadEntries(0, 0, latch0, null);</span>
+<span class="nc" id="L206">            latch0.expectSuccess(timeout / 2);</span>
+
+            // second should have to hit two timeouts (bookie 1 &amp; 2)
+            // bookie 3 has the entry
+<span class="nc" id="L210">            LatchCallback latch1 = new LatchCallback();</span>
+<span class="nc" id="L211">            l.asyncReadEntries(1, 1, latch1, null);</span>
+<span class="nc" id="L212">            latch1.expectTimeout(timeout);</span>
+<span class="nc" id="L213">            latch1.expectSuccess(timeout * 2);</span>
+<span class="nc" id="L214">            LOG.info(&quot;Timeout {} latch1 duration {}&quot;, timeout, latch1.getDuration());</span>
+<span class="nc" id="L215">            assertTrue(&quot;should have taken longer than two timeouts, but less than 3&quot;,</span>
+<span class="nc bnc" id="L216" title="All 2 branches missed.">                       latch1.getDuration() &gt;= timeout * 2</span>
+<span class="nc bnc" id="L217" title="All 2 branches missed.">                       &amp;&amp; latch1.getDuration() &lt; timeout * 3);</span>
+
+            // bookies 1 &amp; 2 should be registered as slow bookies because of speculative reads
+<span class="nc" id="L220">            Set&lt;BookieSocketAddress&gt; expectedSlowBookies = new HashSet&lt;&gt;();</span>
+<span class="nc" id="L221">            expectedSlowBookies.add(l.getLedgerMetadata().getAllEnsembles().get(0L).get(1));</span>
+<span class="nc" id="L222">            expectedSlowBookies.add(l.getLedgerMetadata().getAllEnsembles().get(0L).get(2));</span>
+<span class="nc" id="L223">            assertEquals(((RackawareEnsemblePlacementPolicy) bkspec.getPlacementPolicy()).slowBookies.asMap().keySet(),</span>
+                expectedSlowBookies);
+
+            // third should not hit timeouts since bookies 1 &amp; 2 are registered as slow
+            // bookie 3 has the entry
+<span class="nc" id="L228">            LatchCallback latch2 = new LatchCallback();</span>
+<span class="nc" id="L229">            l.asyncReadEntries(2, 2, latch2, null);</span>
+<span class="nc" id="L230">            latch2.expectSuccess(timeout);</span>
+
+            // fourth should have no timeout
+            // bookie 3 has the entry
+<span class="nc" id="L234">            LatchCallback latch3 = new LatchCallback();</span>
+<span class="nc" id="L235">            l.asyncReadEntries(3, 3, latch3, null);</span>
+<span class="nc" id="L236">            latch3.expectSuccess(timeout / 2);</span>
+
+            // fifth should hit one timeout, (bookie 4)
+            // bookie 0 has the entry
+<span class="nc" id="L240">            LatchCallback latch4 = new LatchCallback();</span>
+<span class="nc" id="L241">            l.asyncReadEntries(4, 4, latch4, null);</span>
+<span class="nc" id="L242">            latch4.expectTimeout(timeout / 2);</span>
+<span class="nc" id="L243">            latch4.expectSuccess(timeout);</span>
+<span class="nc" id="L244">            LOG.info(&quot;Timeout {} latch4 duration {}&quot;, timeout, latch4.getDuration());</span>
+<span class="nc" id="L245">            assertTrue(&quot;should have taken longer than one timeout, but less than 2&quot;,</span>
+<span class="nc bnc" id="L246" title="All 2 branches missed.">                       latch4.getDuration() &gt;= timeout</span>
+<span class="nc bnc" id="L247" title="All 2 branches missed.">                       &amp;&amp; latch4.getDuration() &lt; timeout * 2);</span>
+
+        } finally {
+<span class="nc" id="L250">            sleepLatch.countDown();</span>
+<span class="nc" id="L251">            l.close();</span>
+<span class="nc" id="L252">            bkspec.close();</span>
+        }
+<span class="nc" id="L254">    }</span>
+
+    /**
+     * Test that if after a speculative read is kicked off, the original read completes
+     * nothing bad happens.
+     */
+    @Test
+    public void testSpeculativeReadFirstReadCompleteIsOk() throws Exception {
+<span class="nc" id="L262">        long id = getLedgerToRead(2, 2);</span>
+<span class="nc" id="L263">        int timeout = 1000;</span>
+<span class="nc" id="L264">        BookKeeper bkspec = createClient(timeout);</span>
+
+<span class="nc" id="L266">        LedgerHandle l = bkspec.openLedger(id, digestType, passwd);</span>
+
+        // sleep bookies
+<span class="nc" id="L269">        CountDownLatch sleepLatch0 = new CountDownLatch(1);</span>
+<span class="nc" id="L270">        CountDownLatch sleepLatch1 = new CountDownLatch(1);</span>
+<span class="nc" id="L271">        sleepBookie(l.getLedgerMetadata().getAllEnsembles().get(0L).get(0), sleepLatch0);</span>
+<span class="nc" id="L272">        sleepBookie(l.getLedgerMetadata().getAllEnsembles().get(0L).get(1), sleepLatch1);</span>
+
+        try {
+            // read goes to first bookie, spec read timeout occurs,
+            // goes to second
+<span class="nc" id="L277">            LatchCallback latch0 = new LatchCallback();</span>
+<span class="nc" id="L278">            l.asyncReadEntries(0, 0, latch0, null);</span>
+<span class="nc" id="L279">            latch0.expectTimeout(timeout);</span>
+
+            // wake up first bookie
+<span class="nc" id="L282">            sleepLatch0.countDown();</span>
+<span class="nc" id="L283">            latch0.expectSuccess(timeout / 2);</span>
+
+<span class="nc" id="L285">            sleepLatch1.countDown();</span>
+
+            // check we can read next entry without issue
+<span class="nc" id="L288">            LatchCallback latch1 = new LatchCallback();</span>
+<span class="nc" id="L289">            l.asyncReadEntries(1, 1, latch1, null);</span>
+<span class="nc" id="L290">            latch1.expectSuccess(timeout / 2);</span>
+
+        } finally {
+<span class="nc" id="L293">            sleepLatch0.countDown();</span>
+<span class="nc" id="L294">            sleepLatch1.countDown();</span>
+<span class="nc" id="L295">            l.close();</span>
+<span class="nc" id="L296">            bkspec.close();</span>
+        }
+<span class="nc" id="L298">    }</span>
+
+    /**
+     * Unit test to check if the scheduled speculative task gets cancelled
+     * on successful read.
+     */
+    @Test
+    public void testSpeculativeReadScheduledTaskCancel() throws Exception {
+<span class="nc" id="L306">        long id = getLedgerToRead(3, 2);</span>
+<span class="nc" id="L307">        int timeout = 1000;</span>
+<span class="nc" id="L308">        BookKeeper bkspec = createClient(timeout);</span>
+<span class="nc" id="L309">        LedgerHandle l = bkspec.openLedger(id, digestType, passwd);</span>
+<span class="nc" id="L310">        PendingReadOp op = null;</span>
+        try {
+<span class="nc" id="L312">            op = new PendingReadOp(l, bkspec.getClientCtx(), 0, 5, false);</span>
+<span class="nc" id="L313">            op.initiate();</span>
+<span class="nc" id="L314">            op.future().get();</span>
+        } finally {
+<span class="nc" id="L316">            assertNull(&quot;Speculative Read tasks must be null&quot;, op.getSpeculativeTask());</span>
+        }
+<span class="nc" id="L318">    }</span>
+
+    /**
+     * Unit test for the speculative read scheduling method.
+     */
+    @Test
+    public void testSpeculativeReadScheduling() throws Exception {
+<span class="nc" id="L325">        long id = getLedgerToRead(3, 2);</span>
+<span class="nc" id="L326">        int timeout = 1000;</span>
+<span class="nc" id="L327">        BookKeeper bkspec = createClient(timeout);</span>
+
+<span class="nc" id="L329">        LedgerHandle l = bkspec.openLedger(id, digestType, passwd);</span>
+
+<span class="nc" id="L331">        List&lt;BookieSocketAddress&gt; ensemble = l.getLedgerMetadata().getAllEnsembles().get(0L);</span>
+<span class="nc" id="L332">        BitSet allHosts = new BitSet(ensemble.size());</span>
+<span class="nc bnc" id="L333" title="All 2 branches missed.">        for (int i = 0; i &lt; ensemble.size(); i++) {</span>
+<span class="nc" id="L334">            allHosts.set(i, true);</span>
+        }
+<span class="nc" id="L336">        BitSet noHost = new BitSet(ensemble.size());</span>
+<span class="nc" id="L337">        BitSet secondHostOnly = new BitSet(ensemble.size());</span>
+<span class="nc" id="L338">        secondHostOnly.set(1, true);</span>
+<span class="nc" id="L339">        PendingReadOp.LedgerEntryRequest req0 = null, req2 = null, req4 = null;</span>
+        try {
+<span class="nc" id="L341">            PendingReadOp op = new PendingReadOp(l, bkspec.getClientCtx(), 0, 5, false);</span>
+            // if we've already heard from all hosts,
+            // we only send the initial read
+<span class="nc" id="L344">            req0 = op.new SequenceReadRequest(ensemble, l.getId(), 0);</span>
+<span class="nc" id="L345">            assertTrue(&quot;Should have sent to first&quot;,</span>
+<span class="nc" id="L346">                       req0.maybeSendSpeculativeRead(allHosts).equals(ensemble.get(0)));</span>
+<span class="nc" id="L347">            assertNull(&quot;Should not have sent another&quot;,</span>
+<span class="nc" id="L348">                       req0.maybeSendSpeculativeRead(allHosts));</span>
+
+            // if we have heard from some hosts, but not one we have sent to
+            // send again
+<span class="nc" id="L352">            req2 = op.new SequenceReadRequest(ensemble, l.getId(), 2);</span>
+<span class="nc" id="L353">            assertTrue(&quot;Should have sent to third&quot;,</span>
+<span class="nc" id="L354">                       req2.maybeSendSpeculativeRead(noHost).equals(ensemble.get(2)));</span>
+<span class="nc" id="L355">            assertTrue(&quot;Should have sent to first&quot;,</span>
+<span class="nc" id="L356">                       req2.maybeSendSpeculativeRead(secondHostOnly).equals(ensemble.get(0)));</span>
+
+            // if we have heard from some hosts, which includes one we sent to
+            // do not read again
+<span class="nc" id="L360">            req4 = op.new SequenceReadRequest(ensemble, l.getId(), 4);</span>
+<span class="nc" id="L361">            assertTrue(&quot;Should have sent to second&quot;,</span>
+<span class="nc" id="L362">                       req4.maybeSendSpeculativeRead(noHost).equals(ensemble.get(1)));</span>
+<span class="nc" id="L363">            assertNull(&quot;Should not have sent another&quot;,</span>
+<span class="nc" id="L364">                       req4.maybeSendSpeculativeRead(secondHostOnly));</span>
+        } finally {
+            for (PendingReadOp.LedgerEntryRequest req
+<span class="nc bnc" id="L367" title="All 2 branches missed.">                     : new PendingReadOp.LedgerEntryRequest[] { req0, req2, req4 }) {</span>
+<span class="nc bnc" id="L368" title="All 2 branches missed.">                if (req != null) {</span>
+<span class="nc" id="L369">                    int i = 0;</span>
+<span class="nc bnc" id="L370" title="All 2 branches missed.">                    while (!req.isComplete()) {</span>
+<span class="nc bnc" id="L371" title="All 2 branches missed.">                        if (i++ &gt; 10) {</span>
+<span class="nc" id="L372">                            break; // wait for up to 10 seconds</span>
+                        }
+<span class="nc" id="L374">                        Thread.sleep(1000);</span>
+                    }
+<span class="nc" id="L376">                    assertTrue(&quot;Request should be done&quot;, req.isComplete());</span>
+                }
+            }
+
+<span class="nc" id="L380">            l.close();</span>
+<span class="nc" id="L381">            bkspec.close();</span>
+        }
+<span class="nc" id="L383">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>BookieDeferredSyncTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$myBookieFenceLedgerTest.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.bookie</a> &gt; <span class="el_source">BookieDeferredSyncTest.java</span></div><h1>BookieDeferredSyncTest.java</h1><pre class="source lang-java linenums">/*
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.bookie;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.apache.bookkeeper.common.concurrent.FutureUtils.result;
+import static org.junit.Assert.assertEquals;
+
+import java.util.EnumSet;
+import org.apache.bookkeeper.client.api.DigestType;
+import org.apache.bookkeeper.client.api.LedgerEntries;
+import org.apache.bookkeeper.client.api.LedgerEntry;
+import org.apache.bookkeeper.client.api.ReadHandle;
+import org.apache.bookkeeper.client.api.WriteFlag;
+import org.apache.bookkeeper.client.api.WriteHandle;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.junit.Test;
+
+/**
+ * Test the bookie journal without sync, driven by client with
+ * {@link WriteFlag#DEFERRED_SYNC} write flag.
+ */
+public class BookieDeferredSyncTest extends BookKeeperClusterTestCase {
+
+    public BookieDeferredSyncTest() {
+<span class="nc" id="L44">        super(1);</span>
+<span class="nc" id="L45">    }</span>
+
+    @Test
+    public void testWriteAndRecovery() throws Exception {
+        // this WriteHandle will not be closed
+<span class="nc" id="L50">        WriteHandle lh = result(bkc.newCreateLedgerOp()</span>
+<span class="nc" id="L51">                .withEnsembleSize(1)</span>
+<span class="nc" id="L52">                .withWriteQuorumSize(1)</span>
+<span class="nc" id="L53">                .withAckQuorumSize(1)</span>
+<span class="nc" id="L54">                .withWriteFlags(WriteFlag.DEFERRED_SYNC)</span>
+<span class="nc" id="L55">                .withDigestType(DigestType.CRC32C)</span>
+<span class="nc" id="L56">                .withPassword(new byte[0])</span>
+<span class="nc" id="L57">                .execute());</span>
+
+<span class="nc" id="L59">        int n = 10;</span>
+
+<span class="nc" id="L61">        long ledgerId = lh.getId();</span>
+
+<span class="nc bnc" id="L63" title="All 2 branches missed.">        for (int i = 0; i &lt; n; i++) {</span>
+<span class="nc" id="L64">            lh.append((&quot;entry-&quot; + i).getBytes(UTF_8));</span>
+        }
+
+<span class="nc" id="L67">        try (ReadHandle readLh = result(bkc.newOpenLedgerOp()</span>
+<span class="nc" id="L68">                .withLedgerId(ledgerId)</span>
+<span class="nc" id="L69">                .withRecovery(true)</span>
+<span class="nc" id="L70">                .withPassword(new byte[0])</span>
+<span class="nc" id="L71">                .execute())) {</span>
+
+<span class="nc" id="L73">            try (LedgerEntries entries = readLh.read(0, n - 1)) {</span>
+<span class="nc bnc" id="L74" title="All 2 branches missed.">                for (int i = 0; i &lt; n; i++) {</span>
+<span class="nc" id="L75">                    org.apache.bookkeeper.client.api.LedgerEntry entry = entries.getEntry(i);</span>
+<span class="nc" id="L76">                    assertEquals(&quot;entry-&quot; + i, new String(entry.getEntryBytes()));</span>
+                }
+            }
+        }
+<span class="nc" id="L80">    }</span>
+
+    @Test
+    public void testCloseNoForce() throws Exception {
+<span class="nc" id="L84">        testClose(true);</span>
+<span class="nc" id="L85">    }</span>
+
+    @Test
+    public void testCloseWithForce() throws Exception {
+<span class="nc" id="L89">        testClose(false);</span>
+<span class="nc" id="L90">    }</span>
+
+    private void testClose(boolean force) throws Exception {
+<span class="nc" id="L93">        final int n = 10;</span>
+        long ledgerId;
+<span class="nc" id="L95">        try (WriteHandle lh = result(bkc.newCreateLedgerOp()</span>
+<span class="nc" id="L96">                .withEnsembleSize(1)</span>
+<span class="nc" id="L97">                .withWriteQuorumSize(1)</span>
+<span class="nc" id="L98">                .withAckQuorumSize(1)</span>
+<span class="nc" id="L99">                .withWriteFlags(WriteFlag.DEFERRED_SYNC)</span>
+<span class="nc" id="L100">                .withDigestType(DigestType.CRC32C)</span>
+<span class="nc" id="L101">                .withPassword(new byte[0])</span>
+<span class="nc" id="L102">                .execute())) {</span>
+
+<span class="nc" id="L104">            ledgerId = lh.getId();</span>
+<span class="nc bnc" id="L105" title="All 2 branches missed.">            for (int i = 0; i &lt; n; i++) {</span>
+<span class="nc" id="L106">                lh.append((&quot;entry-&quot; + i).getBytes(UTF_8));</span>
+<span class="nc bnc" id="L107" title="All 2 branches missed.">            }   if (force) {</span>
+                // with force() LastAddConfirmed is updated
+<span class="nc" id="L109">                result(lh.force());</span>
+                // on close metadata will have LastAddConfirmed = n - 1
+<span class="nc" id="L111">                assertEquals(n - 1, lh.getLastAddConfirmed());</span>
+            } else {
+                // on close metadata will have LastAddConfirmed = -1
+<span class="nc" id="L114">                assertEquals(-1, lh.getLastAddConfirmed());</span>
+            }
+        }
+
+<span class="nc bnc" id="L118" title="All 2 branches missed.">        if (force) {</span>
+            // the reader will be able to read
+<span class="nc" id="L120">            try (ReadHandle readLh = result(bkc.newOpenLedgerOp()</span>
+<span class="nc" id="L121">                    .withLedgerId(ledgerId)</span>
+<span class="nc" id="L122">                    .withRecovery(true)</span>
+<span class="nc" id="L123">                    .withPassword(new byte[0])</span>
+<span class="nc" id="L124">                    .execute())) {</span>
+
+<span class="nc" id="L126">                try (LedgerEntries entries = readLh.read(0, n - 1)) {</span>
+<span class="nc bnc" id="L127" title="All 2 branches missed.">                    for (int i = 0; i &lt; n; i++) {</span>
+<span class="nc" id="L128">                        LedgerEntry entry = entries.getEntry(i);</span>
+<span class="nc" id="L129">                        assertEquals(&quot;entry-&quot; + i, new String(entry.getEntryBytes()));</span>
+                    }
+                }
+
+<span class="nc" id="L133">                try (LedgerEntries entries = readLh.readUnconfirmed(0, n - 1)) {</span>
+<span class="nc bnc" id="L134" title="All 2 branches missed.">                    for (int i = 0; i &lt; n; i++) {</span>
+<span class="nc" id="L135">                        LedgerEntry entry = entries.getEntry(i);</span>
+<span class="nc" id="L136">                        assertEquals(&quot;entry-&quot; + i, new String(entry.getEntryBytes()));</span>
+                    }
+                }
+<span class="nc" id="L139">            }</span>
+        } else {
+            // reader will see LastAddConfirmed = -1
+<span class="nc" id="L142">            try (ReadHandle readLh = result(bkc.newOpenLedgerOp()</span>
+<span class="nc" id="L143">                    .withLedgerId(ledgerId)</span>
+<span class="nc" id="L144">                    .withRecovery(true)</span>
+<span class="nc" id="L145">                    .withPassword(new byte[0])</span>
+<span class="nc" id="L146">                    .execute())) {</span>
+<span class="nc" id="L147">                assertEquals(-1, readLh.getLastAddConfirmed());</span>
+
+                // entry will be readable with readUnconfirmed
+<span class="nc" id="L150">                try (LedgerEntries entries = readLh.readUnconfirmed(0, n - 1)) {</span>
+<span class="nc bnc" id="L151" title="All 2 branches missed.">                    for (int i = 0; i &lt; n; i++) {</span>
+<span class="nc" id="L152">                        LedgerEntry entry = entries.getEntry(i);</span>
+<span class="nc" id="L153">                        assertEquals(&quot;entry-&quot; + i, new String(entry.getEntryBytes()));</span>
+                    }
+                }
+            }
+        }
+<span class="nc" id="L158">    }</span>
+
+    @Test
+    public void testForceWithDeferredSyncWriteFlags() throws Exception {
+<span class="nc" id="L162">        testForce(EnumSet.of(WriteFlag.DEFERRED_SYNC));</span>
+<span class="nc" id="L163">    }</span>
+
+    @Test
+    public void testForceNoWriteFlag() throws Exception {
+        // force API will work even without DEFERRED_SYNC flag
+<span class="nc" id="L168">        testForce(WriteFlag.NONE);</span>
+<span class="nc" id="L169">    }</span>
+
+    private void testForce(EnumSet&lt;WriteFlag&gt; writeFlags) throws Exception {
+<span class="nc" id="L172">        try (WriteHandle lh = result(bkc.newCreateLedgerOp()</span>
+<span class="nc" id="L173">                .withEnsembleSize(1)</span>
+<span class="nc" id="L174">                .withWriteQuorumSize(1)</span>
+<span class="nc" id="L175">                .withAckQuorumSize(1)</span>
+<span class="nc" id="L176">                .withWriteFlags(writeFlags)</span>
+<span class="nc" id="L177">                .withDigestType(DigestType.CRC32C)</span>
+<span class="nc" id="L178">                .withPassword(new byte[0])</span>
+<span class="nc" id="L179">                .execute())) {</span>
+<span class="nc" id="L180">            int n = 10;</span>
+<span class="nc bnc" id="L181" title="All 2 branches missed.">            for (int i = 0; i &lt; n; i++) {</span>
+<span class="nc" id="L182">                lh.append((&quot;entry-&quot; + i).getBytes(UTF_8));</span>
+            }
+<span class="nc" id="L184">            result(lh.force());</span>
+<span class="nc" id="L185">            assertEquals(n - 1, lh.getLastAddConfirmed());</span>
+        }
+<span class="nc" id="L187">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

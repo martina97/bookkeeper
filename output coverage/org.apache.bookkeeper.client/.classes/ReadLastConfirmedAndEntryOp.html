@@ -1,0 +1,820 @@
+
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html id="htmlId">
+<head>
+  <title>Coverage Report :: ReadLastConfirmedAndEntryOp</title>
+  <style type="text/css">
+    @import "../../.css/coverage.css";
+  </style>
+</head>
+
+<body>
+<div class="header"></div>
+
+<div class="content">
+<div class="breadCrumbs">
+    [ <a href="../../index.html">all classes</a> ]
+    [ <a href="../index.html">org.apache.bookkeeper.client</a> ]
+</div>
+
+<h1>Coverage Summary for Class: ReadLastConfirmedAndEntryOp (org.apache.bookkeeper.client)</h1>
+
+<table class="coverageStats">
+
+<tr>
+  <th class="name">Class</th>
+<th class="coverageStat 
+">
+  Method, %
+</th>
+<th class="coverageStat 
+">
+  Line, %
+</th>
+</tr>
+<tr>
+  <td class="name">ReadLastConfirmedAndEntryOp</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 12)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 115)
+  </span>
+</td>
+</tr>
+  <tr>
+    <td class="name">ReadLastConfirmedAndEntryOp$1</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 2)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 8)
+  </span>
+</td>
+  </tr>
+  <tr>
+    <td class="name">ReadLastConfirmedAndEntryOp$LastConfirmedAndEntryCallback</td>
+  </tr>
+  <tr>
+    <td class="name">ReadLastConfirmedAndEntryOp$ParallelReadRequest</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 4)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 22)
+  </span>
+</td>
+  </tr>
+  <tr>
+    <td class="name">ReadLastConfirmedAndEntryOp$ReadLACAndEntryRequest</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 10)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 54)
+  </span>
+</td>
+  </tr>
+  <tr>
+    <td class="name">ReadLastConfirmedAndEntryOp$SequenceReadRequest</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 10)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 61)
+  </span>
+</td>
+  </tr>
+<tr>
+  <td class="name"><strong>total</strong></td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 38)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 260)
+  </span>
+</td>
+</tr>
+</table>
+
+<br/>
+<br/>
+
+
+<div class="sourceCode"><i>1</i>&nbsp;/**
+<i>2</i>&nbsp; *
+<i>3</i>&nbsp; * Licensed to the Apache Software Foundation (ASF) under one
+<i>4</i>&nbsp; * or more contributor license agreements.  See the NOTICE file
+<i>5</i>&nbsp; * distributed with this work for additional information
+<i>6</i>&nbsp; * regarding copyright ownership.  The ASF licenses this file
+<i>7</i>&nbsp; * to you under the Apache License, Version 2.0 (the
+<i>8</i>&nbsp; * &quot;License&quot;); you may not use this file except in compliance
+<i>9</i>&nbsp; * with the License.  You may obtain a copy of the License at
+<i>10</i>&nbsp; *
+<i>11</i>&nbsp; *   http://www.apache.org/licenses/LICENSE-2.0
+<i>12</i>&nbsp; *
+<i>13</i>&nbsp; * Unless required by applicable law or agreed to in writing,
+<i>14</i>&nbsp; * software distributed under the License is distributed on an
+<i>15</i>&nbsp; * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+<i>16</i>&nbsp; * KIND, either express or implied.  See the License for the
+<i>17</i>&nbsp; * specific language governing permissions and limitations
+<i>18</i>&nbsp; * under the License.
+<i>19</i>&nbsp; *
+<i>20</i>&nbsp; */
+<i>21</i>&nbsp;package org.apache.bookkeeper.client;
+<i>22</i>&nbsp;
+<i>23</i>&nbsp;import com.google.common.util.concurrent.ListenableFuture;
+<i>24</i>&nbsp;import io.netty.buffer.ByteBuf;
+<i>25</i>&nbsp;import java.util.BitSet;
+<i>26</i>&nbsp;import java.util.List;
+<i>27</i>&nbsp;import java.util.concurrent.Callable;
+<i>28</i>&nbsp;import java.util.concurrent.ScheduledFuture;
+<i>29</i>&nbsp;import java.util.concurrent.TimeUnit;
+<i>30</i>&nbsp;import java.util.concurrent.atomic.AtomicBoolean;
+<i>31</i>&nbsp;import org.apache.bookkeeper.client.api.LedgerMetadata;
+<i>32</i>&nbsp;import org.apache.bookkeeper.client.impl.LedgerEntryImpl;
+<i>33</i>&nbsp;import org.apache.bookkeeper.net.BookieSocketAddress;
+<i>34</i>&nbsp;import org.apache.bookkeeper.proto.BookieProtocol;
+<i>35</i>&nbsp;import org.apache.bookkeeper.proto.BookkeeperInternalCallbacks;
+<i>36</i>&nbsp;import org.apache.bookkeeper.proto.ReadLastConfirmedAndEntryContext;
+<i>37</i>&nbsp;import org.apache.bookkeeper.proto.checksum.DigestManager;
+<i>38</i>&nbsp;import org.apache.bookkeeper.util.MathUtils;
+<i>39</i>&nbsp;import org.slf4j.Logger;
+<i>40</i>&nbsp;import org.slf4j.LoggerFactory;
+<i>41</i>&nbsp;
+<i>42</i>&nbsp;/**
+<i>43</i>&nbsp; * Long poll read operation.
+<i>44</i>&nbsp; */
+<i>45</i>&nbsp;class ReadLastConfirmedAndEntryOp implements BookkeeperInternalCallbacks.ReadEntryCallback,
+<i>46</i>&nbsp;                                             SpeculativeRequestExecutor {
+<i>47</i>&nbsp;
+<b class="nc"><i>48</i>&nbsp;    static final Logger LOG = LoggerFactory.getLogger(ReadLastConfirmedAndEntryOp.class);</b>
+<i>49</i>&nbsp;
+<i>50</i>&nbsp;    ReadLACAndEntryRequest request;
+<i>51</i>&nbsp;    final BitSet heardFromHostsBitSet;
+<i>52</i>&nbsp;    final BitSet emptyResponsesFromHostsBitSet;
+<i>53</i>&nbsp;    final int maxMissedReadsAllowed;
+<b class="nc"><i>54</i>&nbsp;    boolean parallelRead = false;</b>
+<b class="nc"><i>55</i>&nbsp;    final AtomicBoolean requestComplete = new AtomicBoolean(false);</b>
+<i>56</i>&nbsp;
+<i>57</i>&nbsp;    final long requestTimeNano;
+<i>58</i>&nbsp;    private final LedgerHandle lh;
+<i>59</i>&nbsp;    private final ClientContext clientCtx;
+<i>60</i>&nbsp;    private final LastConfirmedAndEntryCallback cb;
+<i>61</i>&nbsp;
+<i>62</i>&nbsp;    private int numResponsesPending;
+<i>63</i>&nbsp;    private final int numEmptyResponsesAllowed;
+<b class="nc"><i>64</i>&nbsp;    private volatile boolean hasValidResponse = false;</b>
+<i>65</i>&nbsp;    private final long prevEntryId;
+<i>66</i>&nbsp;    private long lastAddConfirmed;
+<i>67</i>&nbsp;    private long timeOutInMillis;
+<i>68</i>&nbsp;    private final List&lt;BookieSocketAddress&gt; currentEnsemble;
+<b class="nc"><i>69</i>&nbsp;    private ScheduledFuture&lt;?&gt; speculativeTask = null;</b>
+<i>70</i>&nbsp;
+<i>71</i>&nbsp;    abstract class ReadLACAndEntryRequest implements AutoCloseable {
+<i>72</i>&nbsp;
+<b class="nc"><i>73</i>&nbsp;        final AtomicBoolean complete = new AtomicBoolean(false);</b>
+<i>74</i>&nbsp;
+<b class="nc"><i>75</i>&nbsp;        int rc = BKException.Code.OK;</b>
+<b class="nc"><i>76</i>&nbsp;        int firstError = BKException.Code.OK;</b>
+<b class="nc"><i>77</i>&nbsp;        int numMissedEntryReads = 0;</b>
+<i>78</i>&nbsp;
+<i>79</i>&nbsp;        final List&lt;BookieSocketAddress&gt; ensemble;
+<i>80</i>&nbsp;        final DistributionSchedule.WriteSet writeSet;
+<i>81</i>&nbsp;        final DistributionSchedule.WriteSet orderedEnsemble;
+<i>82</i>&nbsp;        final LedgerEntryImpl entryImpl;
+<i>83</i>&nbsp;
+<b class="nc"><i>84</i>&nbsp;        ReadLACAndEntryRequest(List&lt;BookieSocketAddress&gt; ensemble, long lId, long eId) {</b>
+<b class="nc"><i>85</i>&nbsp;            this.entryImpl = LedgerEntryImpl.create(lId, eId);</b>
+<b class="nc"><i>86</i>&nbsp;            this.ensemble = ensemble;</b>
+<b class="nc"><i>87</i>&nbsp;            this.writeSet = lh.getDistributionSchedule().getEnsembleSet(eId);</b>
+<b class="nc"><i>88</i>&nbsp;            if (clientCtx.getConf().enableReorderReadSequence) {</b>
+<b class="nc"><i>89</i>&nbsp;                this.orderedEnsemble = clientCtx.getPlacementPolicy().reorderReadLACSequence(ensemble,</b>
+<b class="nc"><i>90</i>&nbsp;                        lh.getBookiesHealthInfo(), writeSet.copy());</b>
+<i>91</i>&nbsp;            } else {
+<b class="nc"><i>92</i>&nbsp;                this.orderedEnsemble = writeSet.copy();</b>
+<i>93</i>&nbsp;            }
+<b class="nc"><i>94</i>&nbsp;        }</b>
+<i>95</i>&nbsp;
+<i>96</i>&nbsp;        @Override
+<i>97</i>&nbsp;        public void close() {
+<b class="nc"><i>98</i>&nbsp;            entryImpl.close();</b>
+<b class="nc"><i>99</i>&nbsp;        }</b>
+<i>100</i>&nbsp;
+<i>101</i>&nbsp;        synchronized int getFirstError() {
+<b class="nc"><i>102</i>&nbsp;            return firstError;</b>
+<i>103</i>&nbsp;        }
+<i>104</i>&nbsp;
+<i>105</i>&nbsp;        /**
+<i>106</i>&nbsp;         * Execute the read request.
+<i>107</i>&nbsp;         */
+<i>108</i>&nbsp;        abstract void read();
+<i>109</i>&nbsp;
+<i>110</i>&nbsp;        /**
+<i>111</i>&nbsp;         * Complete the read request from &lt;i&gt;host&lt;/i&gt;.
+<i>112</i>&nbsp;         *
+<i>113</i>&nbsp;         * @param bookieIndex
+<i>114</i>&nbsp;         *          bookie index
+<i>115</i>&nbsp;         * @param host
+<i>116</i>&nbsp;         *          host that respond the read
+<i>117</i>&nbsp;         * @param buffer
+<i>118</i>&nbsp;         *          the data buffer
+<i>119</i>&nbsp;         * @return return true if we managed to complete the entry;
+<i>120</i>&nbsp;         *         otherwise return false if the read entry is not complete or it is already completed before
+<i>121</i>&nbsp;         */
+<i>122</i>&nbsp;        boolean complete(int bookieIndex, BookieSocketAddress host, final ByteBuf buffer, long entryId) {
+<i>123</i>&nbsp;            ByteBuf content;
+<i>124</i>&nbsp;            try {
+<b class="nc"><i>125</i>&nbsp;                content = lh.getDigestManager().verifyDigestAndReturnData(entryId, buffer);</b>
+<b class="nc"><i>126</i>&nbsp;            } catch (BKException.BKDigestMatchException e) {</b>
+<b class="nc"><i>127</i>&nbsp;                logErrorAndReattemptRead(bookieIndex, host, &quot;Mac mismatch&quot;, BKException.Code.DigestMatchException);</b>
+<b class="nc"><i>128</i>&nbsp;                return false;</b>
+<b class="nc"><i>129</i>&nbsp;            }</b>
+<i>130</i>&nbsp;
+<b class="nc"><i>131</i>&nbsp;            if (!complete.getAndSet(true)) {</b>
+<b class="nc"><i>132</i>&nbsp;                writeSet.recycle();</b>
+<b class="nc"><i>133</i>&nbsp;                orderedEnsemble.recycle();</b>
+<b class="nc"><i>134</i>&nbsp;                rc = BKException.Code.OK;</b>
+<i>135</i>&nbsp;                /*
+<i>136</i>&nbsp;                 * The length is a long and it is the last field of the metadata of an entry.
+<i>137</i>&nbsp;                 * Consequently, we have to subtract 8 from METADATA_LENGTH to get the length.
+<i>138</i>&nbsp;                 */
+<b class="nc"><i>139</i>&nbsp;                entryImpl.setLength(buffer.getLong(DigestManager.METADATA_LENGTH - 8));</b>
+<b class="nc"><i>140</i>&nbsp;                entryImpl.setEntryBuf(content);</b>
+<b class="nc"><i>141</i>&nbsp;                return true;</b>
+<i>142</i>&nbsp;            } else {
+<b class="nc"><i>143</i>&nbsp;                return false;</b>
+<i>144</i>&nbsp;            }
+<i>145</i>&nbsp;        }
+<i>146</i>&nbsp;
+<i>147</i>&nbsp;        /**
+<i>148</i>&nbsp;         * Fail the request with given result code &lt;i&gt;rc&lt;/i&gt;.
+<i>149</i>&nbsp;         *
+<i>150</i>&nbsp;         * @param rc
+<i>151</i>&nbsp;         *          result code to fail the request.
+<i>152</i>&nbsp;         * @return true if we managed to fail the entry; otherwise return false if it already failed or completed.
+<i>153</i>&nbsp;         */
+<i>154</i>&nbsp;        boolean fail(int rc) {
+<b class="nc"><i>155</i>&nbsp;            if (complete.compareAndSet(false, true)) {</b>
+<b class="nc"><i>156</i>&nbsp;                writeSet.recycle();</b>
+<b class="nc"><i>157</i>&nbsp;                orderedEnsemble.recycle();</b>
+<b class="nc"><i>158</i>&nbsp;                this.rc = rc;</b>
+<b class="nc"><i>159</i>&nbsp;                translateAndSetFirstError(rc);</b>
+<b class="nc"><i>160</i>&nbsp;                completeRequest();</b>
+<b class="nc"><i>161</i>&nbsp;                return true;</b>
+<i>162</i>&nbsp;            } else {
+<b class="nc"><i>163</i>&nbsp;                return false;</b>
+<i>164</i>&nbsp;            }
+<i>165</i>&nbsp;        }
+<i>166</i>&nbsp;
+<i>167</i>&nbsp;        private synchronized void translateAndSetFirstError(int rc) {
+<b class="nc"><i>168</i>&nbsp;            if (BKException.Code.OK == firstError</b>
+<i>169</i>&nbsp;                || BKException.Code.NoSuchEntryException == firstError
+<i>170</i>&nbsp;                || BKException.Code.NoSuchLedgerExistsException == firstError) {
+<b class="nc"><i>171</i>&nbsp;                firstError = rc;</b>
+<b class="nc"><i>172</i>&nbsp;            } else if (BKException.Code.BookieHandleNotAvailableException == firstError</b>
+<i>173</i>&nbsp;                &amp;&amp; BKException.Code.NoSuchEntryException != rc
+<i>174</i>&nbsp;                &amp;&amp; BKException.Code.NoSuchLedgerExistsException != rc) {
+<i>175</i>&nbsp;                // if other exception rather than NoSuchEntryException is returned
+<i>176</i>&nbsp;                // we need to update firstError to indicate that it might be a valid read but just failed.
+<b class="nc"><i>177</i>&nbsp;                firstError = rc;</b>
+<i>178</i>&nbsp;            }
+<b class="nc"><i>179</i>&nbsp;        }</b>
+<i>180</i>&nbsp;
+<i>181</i>&nbsp;        /**
+<i>182</i>&nbsp;         * Log error &lt;i&gt;errMsg&lt;/i&gt; and reattempt read from &lt;i&gt;host&lt;/i&gt;.
+<i>183</i>&nbsp;         *
+<i>184</i>&nbsp;         * @param bookieIndex
+<i>185</i>&nbsp;         *          bookie index
+<i>186</i>&nbsp;         * @param host
+<i>187</i>&nbsp;         *          host that just respond
+<i>188</i>&nbsp;         * @param errMsg
+<i>189</i>&nbsp;         *          error msg to log
+<i>190</i>&nbsp;         * @param rc
+<i>191</i>&nbsp;         *          read result code
+<i>192</i>&nbsp;         */
+<i>193</i>&nbsp;        synchronized void logErrorAndReattemptRead(int bookieIndex, BookieSocketAddress host, String errMsg, int rc) {
+<b class="nc"><i>194</i>&nbsp;            translateAndSetFirstError(rc);</b>
+<i>195</i>&nbsp;
+<b class="nc"><i>196</i>&nbsp;            if (BKException.Code.NoSuchEntryException == rc || BKException.Code.NoSuchLedgerExistsException == rc) {</b>
+<i>197</i>&nbsp;                // Since we send all long poll requests to every available node, we should only
+<i>198</i>&nbsp;                // treat these errors as failures if the node from which we received this is part of
+<i>199</i>&nbsp;                // the writeSet
+<b class="nc"><i>200</i>&nbsp;                if (this.writeSet.contains(bookieIndex)) {</b>
+<b class="nc"><i>201</i>&nbsp;                    lh.registerOperationFailureOnBookie(host, entryImpl.getEntryId());</b>
+<i>202</i>&nbsp;                }
+<b class="nc"><i>203</i>&nbsp;                ++numMissedEntryReads;</b>
+<i>204</i>&nbsp;            }
+<i>205</i>&nbsp;
+<b class="nc"><i>206</i>&nbsp;            if (LOG.isDebugEnabled()) {</b>
+<b class="nc"><i>207</i>&nbsp;                LOG.debug(&quot;{} while reading entry: {} ledgerId: {} from bookie: {}&quot;, errMsg, entryImpl.getEntryId(),</b>
+<b class="nc"><i>208</i>&nbsp;                        lh.getId(), host);</b>
+<i>209</i>&nbsp;            }
+<b class="nc"><i>210</i>&nbsp;        }</b>
+<i>211</i>&nbsp;
+<i>212</i>&nbsp;        /**
+<i>213</i>&nbsp;         * Send to next replica speculatively, if required and possible.
+<i>214</i>&nbsp;         * This returns the host we may have sent to for unit testing.
+<i>215</i>&nbsp;         *
+<i>216</i>&nbsp;         * @param heardFromHostsBitSet
+<i>217</i>&nbsp;         *      the set of hosts that we already received responses.
+<i>218</i>&nbsp;         * @return host we sent to if we sent. null otherwise.
+<i>219</i>&nbsp;         */
+<i>220</i>&nbsp;        abstract BookieSocketAddress maybeSendSpeculativeRead(BitSet heardFromHostsBitSet);
+<i>221</i>&nbsp;
+<i>222</i>&nbsp;        /**
+<i>223</i>&nbsp;         * Whether the read request completed.
+<i>224</i>&nbsp;         *
+<i>225</i>&nbsp;         * @return true if the read request is completed.
+<i>226</i>&nbsp;         */
+<i>227</i>&nbsp;        boolean isComplete() {
+<b class="nc"><i>228</i>&nbsp;            return complete.get();</b>
+<i>229</i>&nbsp;        }
+<i>230</i>&nbsp;
+<i>231</i>&nbsp;        /**
+<i>232</i>&nbsp;         * Get result code of this entry.
+<i>233</i>&nbsp;         *
+<i>234</i>&nbsp;         * @return result code.
+<i>235</i>&nbsp;         */
+<i>236</i>&nbsp;        int getRc() {
+<b class="nc"><i>237</i>&nbsp;            return rc;</b>
+<i>238</i>&nbsp;        }
+<i>239</i>&nbsp;
+<i>240</i>&nbsp;        @Override
+<i>241</i>&nbsp;        public String toString() {
+<b class="nc"><i>242</i>&nbsp;            return String.format(&quot;L%d-E%d&quot;, entryImpl.getLedgerId(), entryImpl.getEntryId());</b>
+<i>243</i>&nbsp;        }
+<i>244</i>&nbsp;    }
+<i>245</i>&nbsp;
+<i>246</i>&nbsp;    class ParallelReadRequest extends ReadLACAndEntryRequest {
+<i>247</i>&nbsp;
+<i>248</i>&nbsp;        int numPendings;
+<i>249</i>&nbsp;
+<b class="nc"><i>250</i>&nbsp;        ParallelReadRequest(List&lt;BookieSocketAddress&gt; ensemble, long lId, long eId) {</b>
+<b class="nc"><i>251</i>&nbsp;            super(ensemble, lId, eId);</b>
+<b class="nc"><i>252</i>&nbsp;            numPendings = orderedEnsemble.size();</b>
+<b class="nc"><i>253</i>&nbsp;        }</b>
+<i>254</i>&nbsp;
+<i>255</i>&nbsp;        @Override
+<i>256</i>&nbsp;        void read() {
+<b class="nc"><i>257</i>&nbsp;            for (int i = 0; i &lt; orderedEnsemble.size(); i++) {</b>
+<b class="nc"><i>258</i>&nbsp;                BookieSocketAddress to = ensemble.get(orderedEnsemble.get(i));</b>
+<i>259</i>&nbsp;                try {
+<b class="nc"><i>260</i>&nbsp;                    sendReadTo(orderedEnsemble.get(i), to, this);</b>
+<b class="nc"><i>261</i>&nbsp;                } catch (InterruptedException ie) {</b>
+<b class="nc"><i>262</i>&nbsp;                    LOG.error(&quot;Interrupted reading entry {} : &quot;, this, ie);</b>
+<b class="nc"><i>263</i>&nbsp;                    Thread.currentThread().interrupt();</b>
+<b class="nc"><i>264</i>&nbsp;                    fail(BKException.Code.InterruptedException);</b>
+<b class="nc"><i>265</i>&nbsp;                    return;</b>
+<b class="nc"><i>266</i>&nbsp;                }</b>
+<i>267</i>&nbsp;            }
+<b class="nc"><i>268</i>&nbsp;        }</b>
+<i>269</i>&nbsp;
+<i>270</i>&nbsp;        @Override
+<i>271</i>&nbsp;        synchronized void logErrorAndReattemptRead(int bookieIndex, BookieSocketAddress host, String errMsg, int rc) {
+<b class="nc"><i>272</i>&nbsp;            super.logErrorAndReattemptRead(bookieIndex, host, errMsg, rc);</b>
+<b class="nc"><i>273</i>&nbsp;            --numPendings;</b>
+<i>274</i>&nbsp;            // if received all responses or this entry doesn&#39;t meet quorum write, complete the request.
+<b class="nc"><i>275</i>&nbsp;            if (numMissedEntryReads &gt; maxMissedReadsAllowed || numPendings == 0) {</b>
+<b class="nc"><i>276</i>&nbsp;                if (BKException.Code.BookieHandleNotAvailableException == firstError</b>
+<i>277</i>&nbsp;                        &amp;&amp; numMissedEntryReads &gt; maxMissedReadsAllowed) {
+<b class="nc"><i>278</i>&nbsp;                    firstError = BKException.Code.NoSuchEntryException;</b>
+<i>279</i>&nbsp;                }
+<i>280</i>&nbsp;
+<b class="nc"><i>281</i>&nbsp;                fail(firstError);</b>
+<i>282</i>&nbsp;            }
+<b class="nc"><i>283</i>&nbsp;        }</b>
+<i>284</i>&nbsp;
+<i>285</i>&nbsp;        @Override
+<i>286</i>&nbsp;        BookieSocketAddress maybeSendSpeculativeRead(BitSet heardFromHostsBitSet) {
+<i>287</i>&nbsp;            // no speculative read
+<b class="nc"><i>288</i>&nbsp;            return null;</b>
+<i>289</i>&nbsp;        }
+<i>290</i>&nbsp;    }
+<i>291</i>&nbsp;
+<i>292</i>&nbsp;    class SequenceReadRequest extends ReadLACAndEntryRequest {
+<i>293</i>&nbsp;        static final int NOT_FOUND = -1;
+<b class="nc"><i>294</i>&nbsp;        int nextReplicaIndexToReadFrom = 0;</b>
+<i>295</i>&nbsp;
+<i>296</i>&nbsp;        final BitSet sentReplicas;
+<i>297</i>&nbsp;        final BitSet erroredReplicas;
+<i>298</i>&nbsp;        final BitSet emptyResponseReplicas;
+<i>299</i>&nbsp;
+<b class="nc"><i>300</i>&nbsp;        SequenceReadRequest(List&lt;BookieSocketAddress&gt; ensemble, long lId, long eId) {</b>
+<b class="nc"><i>301</i>&nbsp;            super(ensemble, lId, eId);</b>
+<i>302</i>&nbsp;
+<b class="nc"><i>303</i>&nbsp;            this.sentReplicas = new BitSet(orderedEnsemble.size());</b>
+<b class="nc"><i>304</i>&nbsp;            this.erroredReplicas = new BitSet(orderedEnsemble.size());</b>
+<b class="nc"><i>305</i>&nbsp;            this.emptyResponseReplicas = new BitSet(orderedEnsemble.size());</b>
+<b class="nc"><i>306</i>&nbsp;        }</b>
+<i>307</i>&nbsp;
+<i>308</i>&nbsp;        private synchronized int getNextReplicaIndexToReadFrom() {
+<b class="nc"><i>309</i>&nbsp;            return nextReplicaIndexToReadFrom;</b>
+<i>310</i>&nbsp;        }
+<i>311</i>&nbsp;
+<i>312</i>&nbsp;        private int getReplicaIndex(int bookieIndex) {
+<b class="nc"><i>313</i>&nbsp;            return orderedEnsemble.indexOf(bookieIndex);</b>
+<i>314</i>&nbsp;        }
+<i>315</i>&nbsp;
+<i>316</i>&nbsp;        private BitSet getSentToBitSet() {
+<b class="nc"><i>317</i>&nbsp;            BitSet b = new BitSet(ensemble.size());</b>
+<i>318</i>&nbsp;
+<b class="nc"><i>319</i>&nbsp;            for (int i = 0; i &lt; sentReplicas.length(); i++) {</b>
+<b class="nc"><i>320</i>&nbsp;                if (sentReplicas.get(i)) {</b>
+<b class="nc"><i>321</i>&nbsp;                    b.set(orderedEnsemble.get(i));</b>
+<i>322</i>&nbsp;                }
+<i>323</i>&nbsp;            }
+<b class="nc"><i>324</i>&nbsp;            return b;</b>
+<i>325</i>&nbsp;        }
+<i>326</i>&nbsp;
+<i>327</i>&nbsp;        private boolean readsOutstanding() {
+<b class="nc"><i>328</i>&nbsp;            return (sentReplicas.cardinality() - erroredReplicas.cardinality()</b>
+<b class="nc"><i>329</i>&nbsp;                    - emptyResponseReplicas.cardinality()) &gt; 0;</b>
+<i>330</i>&nbsp;        }
+<i>331</i>&nbsp;
+<i>332</i>&nbsp;        /**
+<i>333</i>&nbsp;         * Send to next replica speculatively, if required and possible.
+<i>334</i>&nbsp;         * This returns the host we may have sent to for unit testing.
+<i>335</i>&nbsp;         * @return host we sent to if we sent. null otherwise.
+<i>336</i>&nbsp;         */
+<i>337</i>&nbsp;        @Override
+<i>338</i>&nbsp;        synchronized BookieSocketAddress maybeSendSpeculativeRead(BitSet heardFrom) {
+<b class="nc"><i>339</i>&nbsp;            if (nextReplicaIndexToReadFrom &gt;= getLedgerMetadata().getEnsembleSize()) {</b>
+<b class="nc"><i>340</i>&nbsp;                return null;</b>
+<i>341</i>&nbsp;            }
+<i>342</i>&nbsp;
+<b class="nc"><i>343</i>&nbsp;            BitSet sentTo = getSentToBitSet();</b>
+<b class="nc"><i>344</i>&nbsp;            sentTo.and(heardFrom);</b>
+<i>345</i>&nbsp;
+<i>346</i>&nbsp;            // only send another read, if we have had no response at all (even for other entries)
+<i>347</i>&nbsp;            // from any of the other bookies we have sent the request to
+<b class="nc"><i>348</i>&nbsp;            if (sentTo.cardinality() == 0) {</b>
+<b class="nc"><i>349</i>&nbsp;                return sendNextRead();</b>
+<i>350</i>&nbsp;            } else {
+<b class="nc"><i>351</i>&nbsp;                return null;</b>
+<i>352</i>&nbsp;            }
+<i>353</i>&nbsp;        }
+<i>354</i>&nbsp;
+<i>355</i>&nbsp;        @Override
+<i>356</i>&nbsp;        void read() {
+<b class="nc"><i>357</i>&nbsp;            sendNextRead();</b>
+<b class="nc"><i>358</i>&nbsp;        }</b>
+<i>359</i>&nbsp;
+<i>360</i>&nbsp;        synchronized BookieSocketAddress sendNextRead() {
+<b class="nc"><i>361</i>&nbsp;            if (nextReplicaIndexToReadFrom &gt;= getLedgerMetadata().getEnsembleSize()) {</b>
+<i>362</i>&nbsp;                // we are done, the read has failed from all replicas, just fail the
+<i>363</i>&nbsp;                // read
+<i>364</i>&nbsp;
+<i>365</i>&nbsp;                // Do it a bit pessimistically, only when finished trying all replicas
+<i>366</i>&nbsp;                // to check whether we received more missed reads than requiredBookiesMissingEntryForRecovery
+<b class="nc"><i>367</i>&nbsp;                if (BKException.Code.BookieHandleNotAvailableException == firstError</b>
+<i>368</i>&nbsp;                        &amp;&amp; numMissedEntryReads &gt; maxMissedReadsAllowed) {
+<b class="nc"><i>369</i>&nbsp;                    firstError = BKException.Code.NoSuchEntryException;</b>
+<i>370</i>&nbsp;                }
+<i>371</i>&nbsp;
+<b class="nc"><i>372</i>&nbsp;                fail(firstError);</b>
+<b class="nc"><i>373</i>&nbsp;                return null;</b>
+<i>374</i>&nbsp;            }
+<i>375</i>&nbsp;
+<b class="nc"><i>376</i>&nbsp;            int replica = nextReplicaIndexToReadFrom;</b>
+<b class="nc"><i>377</i>&nbsp;            int bookieIndex = orderedEnsemble.get(nextReplicaIndexToReadFrom);</b>
+<b class="nc"><i>378</i>&nbsp;            nextReplicaIndexToReadFrom++;</b>
+<i>379</i>&nbsp;
+<i>380</i>&nbsp;            try {
+<b class="nc"><i>381</i>&nbsp;                BookieSocketAddress to = ensemble.get(bookieIndex);</b>
+<b class="nc"><i>382</i>&nbsp;                sendReadTo(bookieIndex, to, this);</b>
+<b class="nc"><i>383</i>&nbsp;                sentReplicas.set(replica);</b>
+<b class="nc"><i>384</i>&nbsp;                return to;</b>
+<b class="nc"><i>385</i>&nbsp;            } catch (InterruptedException ie) {</b>
+<b class="nc"><i>386</i>&nbsp;                LOG.error(&quot;Interrupted reading entry &quot; + this, ie);</b>
+<b class="nc"><i>387</i>&nbsp;                Thread.currentThread().interrupt();</b>
+<b class="nc"><i>388</i>&nbsp;                fail(BKException.Code.InterruptedException);</b>
+<b class="nc"><i>389</i>&nbsp;                return null;</b>
+<i>390</i>&nbsp;            }
+<i>391</i>&nbsp;        }
+<i>392</i>&nbsp;
+<i>393</i>&nbsp;        @Override
+<i>394</i>&nbsp;        synchronized void logErrorAndReattemptRead(int bookieIndex, BookieSocketAddress host, String errMsg, int rc) {
+<b class="nc"><i>395</i>&nbsp;            super.logErrorAndReattemptRead(bookieIndex, host, errMsg, rc);</b>
+<i>396</i>&nbsp;
+<b class="nc"><i>397</i>&nbsp;            int replica = getReplicaIndex(bookieIndex);</b>
+<b class="nc"><i>398</i>&nbsp;            if (replica == NOT_FOUND) {</b>
+<b class="nc"><i>399</i>&nbsp;                LOG.error(&quot;Received error from a host which is not in the ensemble {} {}.&quot;, host, ensemble);</b>
+<b class="nc"><i>400</i>&nbsp;                return;</b>
+<i>401</i>&nbsp;            }
+<i>402</i>&nbsp;
+<b class="nc"><i>403</i>&nbsp;            if (BKException.Code.OK == rc) {</b>
+<b class="nc"><i>404</i>&nbsp;                emptyResponseReplicas.set(replica);</b>
+<i>405</i>&nbsp;            } else {
+<b class="nc"><i>406</i>&nbsp;                erroredReplicas.set(replica);</b>
+<i>407</i>&nbsp;            }
+<i>408</i>&nbsp;
+<b class="nc"><i>409</i>&nbsp;            if (!readsOutstanding()) {</b>
+<b class="nc"><i>410</i>&nbsp;                sendNextRead();</b>
+<i>411</i>&nbsp;            }
+<b class="nc"><i>412</i>&nbsp;        }</b>
+<i>413</i>&nbsp;
+<i>414</i>&nbsp;        @Override
+<i>415</i>&nbsp;        boolean complete(int bookieIndex, BookieSocketAddress host, ByteBuf buffer, long entryId) {
+<b class="nc"><i>416</i>&nbsp;            boolean completed = super.complete(bookieIndex, host, buffer, entryId);</b>
+<b class="nc"><i>417</i>&nbsp;            if (completed) {</b>
+<b class="nc"><i>418</i>&nbsp;                int numReplicasTried = getNextReplicaIndexToReadFrom();</b>
+<i>419</i>&nbsp;                // Check if any speculative reads were issued and mark any bookies before the
+<i>420</i>&nbsp;                // first speculative read as slow
+<b class="nc"><i>421</i>&nbsp;                for (int i = 0; i &lt; numReplicasTried; i++) {</b>
+<b class="nc"><i>422</i>&nbsp;                    int slowBookieIndex = orderedEnsemble.get(i);</b>
+<b class="nc"><i>423</i>&nbsp;                    BookieSocketAddress slowBookieSocketAddress = ensemble.get(slowBookieIndex);</b>
+<b class="nc"><i>424</i>&nbsp;                    clientCtx.getPlacementPolicy().registerSlowBookie(slowBookieSocketAddress, entryId);</b>
+<i>425</i>&nbsp;                }
+<i>426</i>&nbsp;            }
+<b class="nc"><i>427</i>&nbsp;            return completed;</b>
+<i>428</i>&nbsp;        }
+<i>429</i>&nbsp;    }
+<i>430</i>&nbsp;
+<i>431</i>&nbsp;    ReadLastConfirmedAndEntryOp(LedgerHandle lh,
+<i>432</i>&nbsp;                                ClientContext clientCtx,
+<i>433</i>&nbsp;                                List&lt;BookieSocketAddress&gt; ensemble,
+<i>434</i>&nbsp;                                LastConfirmedAndEntryCallback cb,
+<i>435</i>&nbsp;                                long prevEntryId,
+<b class="nc"><i>436</i>&nbsp;                                long timeOutInMillis) {</b>
+<b class="nc"><i>437</i>&nbsp;        this.lh = lh;</b>
+<b class="nc"><i>438</i>&nbsp;        this.clientCtx = clientCtx;</b>
+<b class="nc"><i>439</i>&nbsp;        this.cb = cb;</b>
+<b class="nc"><i>440</i>&nbsp;        this.prevEntryId = prevEntryId;</b>
+<b class="nc"><i>441</i>&nbsp;        this.lastAddConfirmed = lh.getLastAddConfirmed();</b>
+<b class="nc"><i>442</i>&nbsp;        this.timeOutInMillis = timeOutInMillis;</b>
+<b class="nc"><i>443</i>&nbsp;        this.numResponsesPending = 0;</b>
+<i>444</i>&nbsp;
+<b class="nc"><i>445</i>&nbsp;        this.currentEnsemble = ensemble;</b>
+<i>446</i>&nbsp;        // since long poll is effectively reading lac with waits, lac can be potentially
+<i>447</i>&nbsp;        // be advanced in different write quorums, so we need to make sure to cover enough
+<i>448</i>&nbsp;        // bookies before claiming lac is not advanced.
+<b class="nc"><i>449</i>&nbsp;        this.numEmptyResponsesAllowed = getLedgerMetadata().getEnsembleSize()</b>
+<b class="nc"><i>450</i>&nbsp;                - getLedgerMetadata().getAckQuorumSize() + 1;</b>
+<b class="nc"><i>451</i>&nbsp;        this.requestTimeNano = MathUtils.nowInNano();</b>
+<i>452</i>&nbsp;
+<b class="nc"><i>453</i>&nbsp;        maxMissedReadsAllowed = getLedgerMetadata().getEnsembleSize()</b>
+<b class="nc"><i>454</i>&nbsp;            - getLedgerMetadata().getAckQuorumSize();</b>
+<b class="nc"><i>455</i>&nbsp;        heardFromHostsBitSet = new BitSet(getLedgerMetadata().getEnsembleSize());</b>
+<b class="nc"><i>456</i>&nbsp;        emptyResponsesFromHostsBitSet = new BitSet(getLedgerMetadata().getEnsembleSize());</b>
+<b class="nc"><i>457</i>&nbsp;    }</b>
+<i>458</i>&nbsp;
+<i>459</i>&nbsp;    protected LedgerMetadata getLedgerMetadata() {
+<b class="nc"><i>460</i>&nbsp;        return lh.getLedgerMetadata();</b>
+<i>461</i>&nbsp;    }
+<i>462</i>&nbsp;
+<i>463</i>&nbsp;    ReadLastConfirmedAndEntryOp parallelRead(boolean enabled) {
+<b class="nc"><i>464</i>&nbsp;        this.parallelRead = enabled;</b>
+<b class="nc"><i>465</i>&nbsp;        return this;</b>
+<i>466</i>&nbsp;    }
+<i>467</i>&nbsp;
+<i>468</i>&nbsp;    protected void cancelSpeculativeTask(boolean mayInterruptIfRunning) {
+<b class="nc"><i>469</i>&nbsp;        if (speculativeTask != null) {</b>
+<b class="nc"><i>470</i>&nbsp;            speculativeTask.cancel(mayInterruptIfRunning);</b>
+<b class="nc"><i>471</i>&nbsp;            speculativeTask = null;</b>
+<i>472</i>&nbsp;        }
+<b class="nc"><i>473</i>&nbsp;    }</b>
+<i>474</i>&nbsp;    /**
+<i>475</i>&nbsp;     * Speculative Read Logic.
+<i>476</i>&nbsp;     */
+<i>477</i>&nbsp;    @Override
+<i>478</i>&nbsp;    public ListenableFuture&lt;Boolean&gt; issueSpeculativeRequest() {
+<b class="nc"><i>479</i>&nbsp;        return clientCtx.getMainWorkerPool().submitOrdered(lh.getId(), new Callable&lt;Boolean&gt;() {</b>
+<i>480</i>&nbsp;            @Override
+<i>481</i>&nbsp;            public Boolean call() throws Exception {
+<b class="nc"><i>482</i>&nbsp;                if (!requestComplete.get() &amp;&amp; !request.isComplete()</b>
+<b class="nc"><i>483</i>&nbsp;                        &amp;&amp; (null != request.maybeSendSpeculativeRead(heardFromHostsBitSet))) {</b>
+<b class="nc"><i>484</i>&nbsp;                    if (LOG.isDebugEnabled()) {</b>
+<b class="nc"><i>485</i>&nbsp;                        LOG.debug(&quot;Send speculative ReadLAC {} for ledger {} (previousLAC: {}). Hosts heard are {}.&quot;,</b>
+<b class="nc"><i>486</i>&nbsp;                                request, lh.getId(), lastAddConfirmed, heardFromHostsBitSet);</b>
+<i>487</i>&nbsp;                    }
+<b class="nc"><i>488</i>&nbsp;                    return true;</b>
+<i>489</i>&nbsp;                }
+<b class="nc"><i>490</i>&nbsp;                return false;</b>
+<i>491</i>&nbsp;            }
+<i>492</i>&nbsp;        });
+<i>493</i>&nbsp;    }
+<i>494</i>&nbsp;
+<i>495</i>&nbsp;    public void initiate() {
+<b class="nc"><i>496</i>&nbsp;        if (parallelRead) {</b>
+<b class="nc"><i>497</i>&nbsp;            request = new ParallelReadRequest(currentEnsemble, lh.getId(), prevEntryId + 1);</b>
+<i>498</i>&nbsp;        } else {
+<b class="nc"><i>499</i>&nbsp;            request = new SequenceReadRequest(currentEnsemble, lh.getId(), prevEntryId + 1);</b>
+<i>500</i>&nbsp;        }
+<b class="nc"><i>501</i>&nbsp;        request.read();</b>
+<i>502</i>&nbsp;
+<b class="nc"><i>503</i>&nbsp;        if (!parallelRead &amp;&amp; clientCtx.getConf().readLACSpeculativeRequestPolicy.isPresent()) {</b>
+<b class="nc"><i>504</i>&nbsp;            speculativeTask = clientCtx.getConf().readLACSpeculativeRequestPolicy.get()</b>
+<b class="nc"><i>505</i>&nbsp;                .initiateSpeculativeRequest(clientCtx.getScheduler(), this);</b>
+<i>506</i>&nbsp;        }
+<b class="nc"><i>507</i>&nbsp;    }</b>
+<i>508</i>&nbsp;
+<i>509</i>&nbsp;    void sendReadTo(int bookieIndex, BookieSocketAddress to, ReadLACAndEntryRequest entry) throws InterruptedException {
+<b class="nc"><i>510</i>&nbsp;        if (LOG.isDebugEnabled()) {</b>
+<b class="nc"><i>511</i>&nbsp;            LOG.debug(&quot;Calling Read LAC and Entry with {} and long polling interval {} on Bookie {} - Parallel {}&quot;,</b>
+<b class="nc"><i>512</i>&nbsp;                    prevEntryId, timeOutInMillis, to, parallelRead);</b>
+<i>513</i>&nbsp;        }
+<b class="nc"><i>514</i>&nbsp;        clientCtx.getBookieClient().readEntryWaitForLACUpdate(to,</b>
+<b class="nc"><i>515</i>&nbsp;            lh.getId(),</b>
+<i>516</i>&nbsp;            BookieProtocol.LAST_ADD_CONFIRMED,
+<i>517</i>&nbsp;            prevEntryId,
+<i>518</i>&nbsp;            timeOutInMillis,
+<i>519</i>&nbsp;            true,
+<i>520</i>&nbsp;            this, new ReadLastConfirmedAndEntryContext(bookieIndex, to));
+<b class="nc"><i>521</i>&nbsp;        this.numResponsesPending++;</b>
+<b class="nc"><i>522</i>&nbsp;    }</b>
+<i>523</i>&nbsp;
+<i>524</i>&nbsp;    /**
+<i>525</i>&nbsp;     * Wrapper to get all recovered data from the request.
+<i>526</i>&nbsp;     */
+<i>527</i>&nbsp;    interface LastConfirmedAndEntryCallback {
+<i>528</i>&nbsp;        void readLastConfirmedAndEntryComplete(int rc, long lastAddConfirmed, LedgerEntry entry);
+<i>529</i>&nbsp;    }
+<i>530</i>&nbsp;
+<i>531</i>&nbsp;    private void submitCallback(int rc) {
+<b class="nc"><i>532</i>&nbsp;        long latencyMicros = MathUtils.elapsedMicroSec(requestTimeNano);</b>
+<i>533</i>&nbsp;        LedgerEntry entry;
+<b class="nc"><i>534</i>&nbsp;        cancelSpeculativeTask(true);</b>
+<b class="nc"><i>535</i>&nbsp;        if (BKException.Code.OK != rc) {</b>
+<b class="nc"><i>536</i>&nbsp;            clientCtx.getClientStats().getReadLacAndEntryOpLogger()</b>
+<b class="nc"><i>537</i>&nbsp;                .registerFailedEvent(latencyMicros, TimeUnit.MICROSECONDS);</b>
+<b class="nc"><i>538</i>&nbsp;            entry = null;</b>
+<i>539</i>&nbsp;        } else {
+<i>540</i>&nbsp;            // could received advanced lac, with no entry
+<b class="nc"><i>541</i>&nbsp;            clientCtx.getClientStats().getReadLacAndEntryOpLogger()</b>
+<b class="nc"><i>542</i>&nbsp;                .registerSuccessfulEvent(latencyMicros, TimeUnit.MICROSECONDS);</b>
+<b class="nc"><i>543</i>&nbsp;            if (request.entryImpl.getEntryBuffer() != null) {</b>
+<b class="nc"><i>544</i>&nbsp;                entry = new LedgerEntry(request.entryImpl);</b>
+<i>545</i>&nbsp;            } else {
+<b class="nc"><i>546</i>&nbsp;                entry = null;</b>
+<i>547</i>&nbsp;            }
+<i>548</i>&nbsp;        }
+<b class="nc"><i>549</i>&nbsp;        request.close();</b>
+<b class="nc"><i>550</i>&nbsp;        cb.readLastConfirmedAndEntryComplete(rc, lastAddConfirmed, entry);</b>
+<b class="nc"><i>551</i>&nbsp;    }</b>
+<i>552</i>&nbsp;
+<i>553</i>&nbsp;    @Override
+<i>554</i>&nbsp;    public void readEntryComplete(int rc, long ledgerId, long entryId, ByteBuf buffer, Object ctx) {
+<b class="nc"><i>555</i>&nbsp;        if (LOG.isTraceEnabled()) {</b>
+<b class="nc"><i>556</i>&nbsp;            LOG.trace(&quot;{} received response for (lid={}, eid={}) : {}&quot;,</b>
+<b class="nc"><i>557</i>&nbsp;                    getClass().getName(), ledgerId, entryId, rc);</b>
+<i>558</i>&nbsp;        }
+<b class="nc"><i>559</i>&nbsp;        ReadLastConfirmedAndEntryContext rCtx = (ReadLastConfirmedAndEntryContext) ctx;</b>
+<b class="nc"><i>560</i>&nbsp;        BookieSocketAddress bookie = rCtx.getBookieAddress();</b>
+<b class="nc"><i>561</i>&nbsp;        numResponsesPending--;</b>
+<b class="nc"><i>562</i>&nbsp;        if (BKException.Code.OK == rc) {</b>
+<b class="nc"><i>563</i>&nbsp;            if (LOG.isTraceEnabled()) {</b>
+<b class="nc"><i>564</i>&nbsp;                LOG.trace(&quot;Received lastAddConfirmed (lac={}) from bookie({}) for (lid={}).&quot;,</b>
+<b class="nc"><i>565</i>&nbsp;                        rCtx.getLastAddConfirmed(), bookie, ledgerId);</b>
+<i>566</i>&nbsp;            }
+<i>567</i>&nbsp;
+<b class="nc"><i>568</i>&nbsp;            if (rCtx.getLastAddConfirmed() &gt; lastAddConfirmed) {</b>
+<b class="nc"><i>569</i>&nbsp;                lastAddConfirmed = rCtx.getLastAddConfirmed();</b>
+<b class="nc"><i>570</i>&nbsp;                lh.updateLastConfirmed(rCtx.getLastAddConfirmed(), 0L);</b>
+<i>571</i>&nbsp;            }
+<i>572</i>&nbsp;
+<b class="nc"><i>573</i>&nbsp;            hasValidResponse = true;</b>
+<i>574</i>&nbsp;
+<b class="nc"><i>575</i>&nbsp;            if (entryId != BookieProtocol.LAST_ADD_CONFIRMED) {</b>
+<b class="nc"><i>576</i>&nbsp;                buffer.retain();</b>
+<b class="nc"><i>577</i>&nbsp;                if (!requestComplete.get() &amp;&amp; request.complete(rCtx.getBookieIndex(), bookie, buffer, entryId)) {</b>
+<i>578</i>&nbsp;                    // callback immediately
+<b class="nc"><i>579</i>&nbsp;                    if (rCtx.getLacUpdateTimestamp().isPresent()) {</b>
+<b class="nc"><i>580</i>&nbsp;                        long elapsedMicros = TimeUnit.MILLISECONDS.toMicros(System.currentTimeMillis()</b>
+<b class="nc"><i>581</i>&nbsp;                                - rCtx.getLacUpdateTimestamp().get());</b>
+<b class="nc"><i>582</i>&nbsp;                        elapsedMicros = Math.max(elapsedMicros, 0);</b>
+<b class="nc"><i>583</i>&nbsp;                        clientCtx.getClientStats().getReadLacAndEntryRespLogger()</b>
+<b class="nc"><i>584</i>&nbsp;                                .registerSuccessfulEvent(elapsedMicros, TimeUnit.MICROSECONDS);</b>
+<i>585</i>&nbsp;                    }
+<i>586</i>&nbsp;
+<i>587</i>&nbsp;                    // if the request has already completed, the buffer is not going to be used anymore, release it.
+<b class="nc"><i>588</i>&nbsp;                    if (!completeRequest()) {</b>
+<b class="nc"><i>589</i>&nbsp;                        buffer.release();</b>
+<i>590</i>&nbsp;                    }
+<b class="nc"><i>591</i>&nbsp;                    heardFromHostsBitSet.set(rCtx.getBookieIndex(), true);</b>
+<i>592</i>&nbsp;                } else {
+<b class="nc"><i>593</i>&nbsp;                    buffer.release();</b>
+<i>594</i>&nbsp;                }
+<i>595</i>&nbsp;            } else {
+<b class="nc"><i>596</i>&nbsp;                emptyResponsesFromHostsBitSet.set(rCtx.getBookieIndex(), true);</b>
+<b class="nc"><i>597</i>&nbsp;                if (lastAddConfirmed &gt; prevEntryId) {</b>
+<i>598</i>&nbsp;                    // received advanced lac
+<b class="nc"><i>599</i>&nbsp;                    completeRequest();</b>
+<b class="nc"><i>600</i>&nbsp;                } else if (emptyResponsesFromHostsBitSet.cardinality() &gt;= numEmptyResponsesAllowed) {</b>
+<b class="nc"><i>601</i>&nbsp;                    if (LOG.isDebugEnabled()) {</b>
+<b class="nc"><i>602</i>&nbsp;                        LOG.debug(&quot;Completed readLACAndEntry(lid = {}, previousEntryId = {}) &quot;</b>
+<i>603</i>&nbsp;                                + &quot;after received {} empty responses (&#39;{}&#39;).&quot;,
+<b class="nc"><i>604</i>&nbsp;                                ledgerId, prevEntryId, emptyResponsesFromHostsBitSet.cardinality(),</b>
+<i>605</i>&nbsp;                                emptyResponsesFromHostsBitSet);
+<i>606</i>&nbsp;                    }
+<b class="nc"><i>607</i>&nbsp;                    completeRequest();</b>
+<i>608</i>&nbsp;                } else {
+<b class="nc"><i>609</i>&nbsp;                    if (LOG.isDebugEnabled()) {</b>
+<b class="nc"><i>610</i>&nbsp;                        LOG.debug(&quot;Received empty response for readLACAndEntry(lid = {}, previousEntryId = {}) from&quot;</b>
+<i>611</i>&nbsp;                                        + &quot; bookie {} @ {}, reattempting reading next bookie : lac = {}&quot;,
+<b class="nc"><i>612</i>&nbsp;                                ledgerId, prevEntryId, rCtx.getBookieAddress(),</b>
+<b class="nc"><i>613</i>&nbsp;                                rCtx.getBookieAddress(), lastAddConfirmed);</b>
+<i>614</i>&nbsp;                    }
+<b class="nc"><i>615</i>&nbsp;                    request.logErrorAndReattemptRead(rCtx.getBookieIndex(), bookie, &quot;Empty Response&quot;, rc);</b>
+<i>616</i>&nbsp;                }
+<b class="nc"><i>617</i>&nbsp;                return;</b>
+<i>618</i>&nbsp;            }
+<b class="nc"><i>619</i>&nbsp;        } else if (BKException.Code.UnauthorizedAccessException == rc &amp;&amp; !requestComplete.get()) {</b>
+<b class="nc"><i>620</i>&nbsp;            submitCallback(rc);</b>
+<b class="nc"><i>621</i>&nbsp;            requestComplete.set(true);</b>
+<i>622</i>&nbsp;        } else {
+<b class="nc"><i>623</i>&nbsp;            request.logErrorAndReattemptRead(rCtx.getBookieIndex(), bookie, &quot;Error: &quot; + BKException.getMessage(rc), rc);</b>
+<b class="nc"><i>624</i>&nbsp;            return;</b>
+<i>625</i>&nbsp;        }
+<i>626</i>&nbsp;
+<b class="nc"><i>627</i>&nbsp;        if (numResponsesPending &lt;= 0) {</b>
+<b class="nc"><i>628</i>&nbsp;            completeRequest();</b>
+<i>629</i>&nbsp;        }
+<b class="nc"><i>630</i>&nbsp;    }</b>
+<i>631</i>&nbsp;
+<i>632</i>&nbsp;    private boolean completeRequest() {
+<b class="nc"><i>633</i>&nbsp;        boolean requestCompleted = requestComplete.compareAndSet(false, true);</b>
+<b class="nc"><i>634</i>&nbsp;        if (requestCompleted) {</b>
+<b class="nc"><i>635</i>&nbsp;            if (!hasValidResponse) {</b>
+<i>636</i>&nbsp;                // no success called
+<b class="nc"><i>637</i>&nbsp;                submitCallback(request.getFirstError());</b>
+<i>638</i>&nbsp;            } else {
+<i>639</i>&nbsp;                // callback
+<b class="nc"><i>640</i>&nbsp;                submitCallback(BKException.Code.OK);</b>
+<i>641</i>&nbsp;            }
+<i>642</i>&nbsp;        }
+<b class="nc"><i>643</i>&nbsp;        return requestCompleted;</b>
+<i>644</i>&nbsp;    }
+<i>645</i>&nbsp;
+<i>646</i>&nbsp;    @Override
+<i>647</i>&nbsp;    public String toString() {
+<b class="nc"><i>648</i>&nbsp;        return String.format(&quot;ReadLastConfirmedAndEntryOp(lid=%d, prevEntryId=%d])&quot;, lh.getId(), prevEntryId);</b>
+<i>649</i>&nbsp;    }
+<i>650</i>&nbsp;
+<i>651</i>&nbsp;}
+</div>
+</div>
+
+<div class="footer">
+    
+    <div style="float:right;">generated on 2021-06-28 15:57</div>
+</div>
+</body>
+</html>

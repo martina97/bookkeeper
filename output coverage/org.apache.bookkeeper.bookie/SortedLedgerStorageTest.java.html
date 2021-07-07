@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SortedLedgerStorageTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$myBookieFenceLedgerTest.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.bookie</a> &gt; <span class="el_source">SortedLedgerStorageTest.java</span></div><h1>SortedLedgerStorageTest.java</h1><pre class="source lang-java linenums">/**
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.bookie;
+
+import static org.apache.bookkeeper.bookie.BookKeeperServerStats.BOOKIE_SCOPE;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import io.netty.buffer.UnpooledByteBufAllocator;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.PrimitiveIterator.OfLong;
+import java.util.function.Consumer;
+import java.util.stream.IntStream;
+
+import org.apache.bookkeeper.bookie.CheckpointSource.Checkpoint;
+import org.apache.bookkeeper.conf.ServerConfiguration;
+import org.apache.bookkeeper.conf.TestBKConfiguration;
+import org.apache.bookkeeper.test.TestStatsProvider;
+import org.apache.bookkeeper.util.DiskChecker;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+
+/**
+ * Testing SortedLedgerStorage.
+ */
+@RunWith(Parameterized.class)
+public class SortedLedgerStorageTest {
+
+<span class="nc" id="L56">    TestStatsProvider statsProvider = new TestStatsProvider();</span>
+<span class="nc" id="L57">    ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+    LedgerDirsManager ledgerDirsManager;
+<span class="nc" id="L59">    SortedLedgerStorage sortedLedgerStorage = new SortedLedgerStorage();</span>
+
+<span class="nc" id="L61">    final long numWrites = 2000;</span>
+<span class="nc" id="L62">    final long moreNumOfWrites = 3000;</span>
+<span class="nc" id="L63">    final long entriesPerWrite = 2;</span>
+<span class="nc" id="L64">    final long numOfLedgers = 5;</span>
+
+    @Parameterized.Parameters
+    public static Iterable&lt;Boolean&gt; elplSetting() {
+<span class="nc" id="L68">        return Arrays.asList(true, false);</span>
+    }
+
+<span class="nc" id="L71">    public SortedLedgerStorageTest(boolean elplSetting) {</span>
+<span class="nc" id="L72">        conf.setEntryLogSizeLimit(2048);</span>
+<span class="nc" id="L73">        conf.setEntryLogPerLedgerEnabled(elplSetting);</span>
+<span class="nc" id="L74">    }</span>
+
+<span class="nc" id="L76">    CheckpointSource checkpointSource = new CheckpointSource() {</span>
+        @Override
+        public Checkpoint newCheckpoint() {
+<span class="nc" id="L79">            return Checkpoint.MAX;</span>
+        }
+
+        @Override
+        public void checkpointComplete(Checkpoint checkpoint, boolean compact) throws IOException {
+<span class="nc" id="L84">        }</span>
+    };
+
+<span class="nc" id="L87">    Checkpointer checkpointer = new Checkpointer() {</span>
+        @Override
+        public void startCheckpoint(Checkpoint checkpoint) {
+            // No-op
+<span class="nc" id="L91">        }</span>
+
+        @Override
+        public void start() {
+            // no-op
+<span class="nc" id="L96">        }</span>
+    };
+
+    @Before
+    public void setUp() throws Exception {
+<span class="nc" id="L101">        File tmpDir = File.createTempFile(&quot;bkTest&quot;, &quot;.dir&quot;);</span>
+<span class="nc" id="L102">        tmpDir.delete();</span>
+<span class="nc" id="L103">        tmpDir.mkdir();</span>
+<span class="nc" id="L104">        File curDir = Bookie.getCurrentDirectory(tmpDir);</span>
+<span class="nc" id="L105">        Bookie.checkDirectoryStructure(curDir);</span>
+
+<span class="nc" id="L107">        conf.setLedgerDirNames(new String[] { tmpDir.toString() });</span>
+<span class="nc" id="L108">        ledgerDirsManager = new LedgerDirsManager(conf, conf.getLedgerDirs(),</span>
+<span class="nc" id="L109">                new DiskChecker(conf.getDiskUsageThreshold(), conf.getDiskUsageWarnThreshold()));</span>
+<span class="nc" id="L110">        sortedLedgerStorage.initialize(conf, null, ledgerDirsManager, ledgerDirsManager, null, checkpointSource,</span>
+<span class="nc" id="L111">                checkpointer, statsProvider.getStatsLogger(BOOKIE_SCOPE), UnpooledByteBufAllocator.DEFAULT);</span>
+<span class="nc" id="L112">    }</span>
+
+    @Test
+    public void testGetListOfEntriesOfLedger() throws Exception {
+<span class="nc" id="L116">        long nonExistingLedgerId = 123456L;</span>
+<span class="nc" id="L117">        OfLong entriesItr = sortedLedgerStorage.getListOfEntriesOfLedger(nonExistingLedgerId);</span>
+<span class="nc" id="L118">        assertFalse(&quot;There shouldn't be any entries for this ledger&quot;, entriesItr.hasNext());</span>
+        // Insert some ledger &amp; entries in the interleaved storage
+<span class="nc bnc" id="L120" title="All 2 branches missed.">        for (long entryId = 0; entryId &lt; numWrites; entryId++) {</span>
+<span class="nc bnc" id="L121" title="All 2 branches missed.">            for (long ledgerId = 0; ledgerId &lt; numOfLedgers; ledgerId++) {</span>
+<span class="nc bnc" id="L122" title="All 2 branches missed.">                if (entryId == 0) {</span>
+<span class="nc" id="L123">                    sortedLedgerStorage.setMasterKey(ledgerId, (&quot;ledger-&quot; + ledgerId).getBytes());</span>
+<span class="nc" id="L124">                    sortedLedgerStorage.setFenced(ledgerId);</span>
+                }
+<span class="nc" id="L126">                ByteBuf entry = Unpooled.buffer(128);</span>
+<span class="nc" id="L127">                entry.writeLong(ledgerId);</span>
+<span class="nc" id="L128">                entry.writeLong(entryId * entriesPerWrite);</span>
+<span class="nc" id="L129">                entry.writeBytes((&quot;entry-&quot; + entryId).getBytes());</span>
+
+<span class="nc" id="L131">                sortedLedgerStorage.addEntry(entry);</span>
+            }
+        }
+
+<span class="nc bnc" id="L135" title="All 2 branches missed.">        for (long ledgerId = 0; ledgerId &lt; numOfLedgers; ledgerId++) {</span>
+<span class="nc" id="L136">            OfLong entriesOfLedger = sortedLedgerStorage.getListOfEntriesOfLedger(ledgerId);</span>
+<span class="nc" id="L137">            ArrayList&lt;Long&gt; arrayList = new ArrayList&lt;Long&gt;();</span>
+<span class="nc" id="L138">            Consumer&lt;Long&gt; addMethod = arrayList::add;</span>
+<span class="nc" id="L139">            entriesOfLedger.forEachRemaining(addMethod);</span>
+<span class="nc" id="L140">            assertEquals(&quot;Number of entries&quot;, numWrites, arrayList.size());</span>
+<span class="nc" id="L141">            assertTrue(&quot;Entries of Ledger&quot;, IntStream.range(0, arrayList.size()).allMatch(i -&gt; {</span>
+<span class="nc bnc" id="L142" title="All 2 branches missed.">                return arrayList.get(i).longValue() == (i * entriesPerWrite);</span>
+            }));
+        }
+
+<span class="nc" id="L146">        nonExistingLedgerId = 456789L;</span>
+<span class="nc" id="L147">        entriesItr = sortedLedgerStorage.getListOfEntriesOfLedger(nonExistingLedgerId);</span>
+<span class="nc" id="L148">        assertFalse(&quot;There shouldn't be any entry&quot;, entriesItr.hasNext());</span>
+<span class="nc" id="L149">    }</span>
+
+    @Test
+    public void testGetListOfEntriesOfLedgerAfterFlush() throws IOException {
+        // Insert some ledger &amp; entries in the interleaved storage
+<span class="nc bnc" id="L154" title="All 2 branches missed.">        for (long entryId = 0; entryId &lt; numWrites; entryId++) {</span>
+<span class="nc bnc" id="L155" title="All 2 branches missed.">            for (long ledgerId = 0; ledgerId &lt; numOfLedgers; ledgerId++) {</span>
+<span class="nc bnc" id="L156" title="All 2 branches missed.">                if (entryId == 0) {</span>
+<span class="nc" id="L157">                    sortedLedgerStorage.setMasterKey(ledgerId, (&quot;ledger-&quot; + ledgerId).getBytes());</span>
+<span class="nc" id="L158">                    sortedLedgerStorage.setFenced(ledgerId);</span>
+                }
+<span class="nc" id="L160">                ByteBuf entry = Unpooled.buffer(128);</span>
+<span class="nc" id="L161">                entry.writeLong(ledgerId);</span>
+<span class="nc" id="L162">                entry.writeLong(entryId * entriesPerWrite);</span>
+<span class="nc" id="L163">                entry.writeBytes((&quot;entry-&quot; + entryId).getBytes());</span>
+
+<span class="nc" id="L165">                sortedLedgerStorage.addEntry(entry);</span>
+            }
+        }
+
+<span class="nc" id="L169">        sortedLedgerStorage.flush();</span>
+
+        // Insert some more ledger &amp; entries in the interleaved storage
+<span class="nc bnc" id="L172" title="All 2 branches missed.">        for (long entryId = numWrites; entryId &lt; moreNumOfWrites; entryId++) {</span>
+<span class="nc bnc" id="L173" title="All 2 branches missed.">            for (long ledgerId = 0; ledgerId &lt; numOfLedgers; ledgerId++) {</span>
+<span class="nc" id="L174">                ByteBuf entry = Unpooled.buffer(128);</span>
+<span class="nc" id="L175">                entry.writeLong(ledgerId);</span>
+<span class="nc" id="L176">                entry.writeLong(entryId * entriesPerWrite);</span>
+<span class="nc" id="L177">                entry.writeBytes((&quot;entry-&quot; + entryId).getBytes());</span>
+
+<span class="nc" id="L179">                sortedLedgerStorage.addEntry(entry);</span>
+            }
+        }
+
+<span class="nc bnc" id="L183" title="All 2 branches missed.">        for (long ledgerId = 0; ledgerId &lt; numOfLedgers; ledgerId++) {</span>
+<span class="nc" id="L184">            OfLong entriesOfLedger = sortedLedgerStorage.getListOfEntriesOfLedger(ledgerId);</span>
+<span class="nc" id="L185">            ArrayList&lt;Long&gt; arrayList = new ArrayList&lt;Long&gt;();</span>
+<span class="nc" id="L186">            Consumer&lt;Long&gt; addMethod = arrayList::add;</span>
+<span class="nc" id="L187">            entriesOfLedger.forEachRemaining(addMethod);</span>
+<span class="nc" id="L188">            assertEquals(&quot;Number of entries&quot;, moreNumOfWrites, arrayList.size());</span>
+<span class="nc" id="L189">            assertTrue(&quot;Entries of Ledger&quot;, IntStream.range(0, arrayList.size()).allMatch(i -&gt; {</span>
+<span class="nc bnc" id="L190" title="All 2 branches missed.">                return arrayList.get(i).longValue() == (i * entriesPerWrite);</span>
+            }));
+        }
+<span class="nc" id="L193">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

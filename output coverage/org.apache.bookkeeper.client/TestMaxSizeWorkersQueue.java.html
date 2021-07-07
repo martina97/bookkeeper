@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TestMaxSizeWorkersQueue.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">TestMaxSizeWorkersQueue.java</span></div><h1>TestMaxSizeWorkersQueue.java</h1><pre class="source lang-java linenums">/**
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.bookkeeper.client;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import com.google.common.collect.Lists;
+
+import java.util.Enumeration;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.apache.bookkeeper.client.AsyncCallback.AddCallback;
+import org.apache.bookkeeper.client.AsyncCallback.ReadCallback;
+import org.apache.bookkeeper.client.BookKeeper.DigestType;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.junit.Test;
+
+/**
+ * Test the maximum size of a worker queue.
+ */
+public class TestMaxSizeWorkersQueue extends BookKeeperClusterTestCase {
+<span class="nc" id="L47">    DigestType digestType = DigestType.CRC32;</span>
+
+    public TestMaxSizeWorkersQueue() {
+<span class="nc" id="L50">        super(1);</span>
+
+<span class="nc" id="L52">        baseConf.setNumReadWorkerThreads(1);</span>
+<span class="nc" id="L53">        baseConf.setNumAddWorkerThreads(1);</span>
+
+        // Configure very small queue sizes
+<span class="nc" id="L56">        baseConf.setMaxPendingReadRequestPerThread(1);</span>
+<span class="nc" id="L57">        baseConf.setMaxPendingAddRequestPerThread(1);</span>
+<span class="nc" id="L58">    }</span>
+
+    @Test
+    public void testReadRejected() throws Exception {
+<span class="nc" id="L62">        LedgerHandle lh = bkc.createLedger(1, 1, digestType, new byte[0]);</span>
+<span class="nc" id="L63">        byte[] content = new byte[100];</span>
+
+<span class="nc" id="L65">        final int n = 1000;</span>
+        // Write few entries
+<span class="nc bnc" id="L67" title="All 2 branches missed.">        for (int i = 0; i &lt; n; i++) {</span>
+<span class="nc" id="L68">            lh.addEntry(content);</span>
+        }
+
+        // Read asynchronously:
+        // - 1st read must always succeed
+        // - Subsequent reads may fail, depending on timing
+        // - At least few, we expect to fail with TooManyRequestException
+<span class="nc" id="L75">        final CountDownLatch counter = new CountDownLatch(2);</span>
+
+<span class="nc" id="L77">        final AtomicInteger rcFirstReadOperation = new AtomicInteger();</span>
+
+<span class="nc" id="L79">        lh.asyncReadEntries(0, 0, new ReadCallback() {</span>
+            @Override
+            public void readComplete(int rc, LedgerHandle lh, Enumeration&lt;LedgerEntry&gt; seq, Object ctx) {
+<span class="nc" id="L82">                rcFirstReadOperation.set(rc);</span>
+<span class="nc" id="L83">                counter.countDown();</span>
+<span class="nc" id="L84">            }</span>
+        }, lh);
+
+<span class="nc" id="L87">        final AtomicInteger rcSecondReadOperation = new AtomicInteger();</span>
+
+<span class="nc" id="L89">        lh.asyncReadEntries(0, n - 1, new ReadCallback() {</span>
+            @Override
+            public void readComplete(int rc, LedgerHandle lh, Enumeration&lt;LedgerEntry&gt; seq, Object ctx) {
+<span class="nc" id="L92">                rcSecondReadOperation.set(rc);</span>
+<span class="nc" id="L93">                counter.countDown();</span>
+<span class="nc" id="L94">            }</span>
+        }, lh);
+
+<span class="nc" id="L97">        counter.await();</span>
+
+<span class="nc" id="L99">        assertEquals(BKException.Code.OK, rcFirstReadOperation.get());</span>
+<span class="nc" id="L100">        assertEquals(BKException.Code.TooManyRequestsException, rcSecondReadOperation.get());</span>
+<span class="nc" id="L101">    }</span>
+
+    @Test
+    public void testAddRejected() throws Exception {
+<span class="nc" id="L105">        LedgerHandle lh = bkc.createLedger(1, 1, digestType, new byte[0]);</span>
+<span class="nc" id="L106">        byte[] content = new byte[100];</span>
+
+<span class="nc" id="L108">        final int n = 1000;</span>
+
+        // Write asynchronously, and expect at least few writes to have failed with NotEnoughBookies,
+        // because when we get the TooManyRequestException, the client will try to form a new ensemble and that
+        // operation will fail since we only have 1 bookie available
+<span class="nc" id="L113">        final CountDownLatch counter = new CountDownLatch(n);</span>
+<span class="nc" id="L114">        final AtomicBoolean receivedTooManyRequestsException = new AtomicBoolean();</span>
+
+        // Write few entries
+<span class="nc bnc" id="L117" title="All 2 branches missed.">        for (int i = 0; i &lt; n; i++) {</span>
+<span class="nc" id="L118">            lh.asyncAddEntry(content, new AddCallback() {</span>
+                @Override
+                public void addComplete(int rc, LedgerHandle lh, long entryId, Object ctx) {
+<span class="nc bnc" id="L121" title="All 2 branches missed.">                    if (rc == BKException.Code.NotEnoughBookiesException) {</span>
+<span class="nc" id="L122">                        receivedTooManyRequestsException.set(true);</span>
+                    }
+
+<span class="nc" id="L125">                    counter.countDown();</span>
+<span class="nc" id="L126">                }</span>
+            }, null);
+        }
+
+<span class="nc" id="L130">        counter.await();</span>
+
+<span class="nc" id="L132">        assertTrue(receivedTooManyRequestsException.get());</span>
+<span class="nc" id="L133">    }</span>
+
+    @Test
+    public void testRecoveryNotRejected() throws Exception {
+<span class="nc" id="L137">        LedgerHandle lh = bkc.createLedger(1, 1, digestType, new byte[0]);</span>
+<span class="nc" id="L138">        byte[] content = new byte[100];</span>
+
+<span class="nc" id="L140">        final int numEntriesToRead = 1000;</span>
+        // Write few entries
+<span class="nc bnc" id="L142" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntriesToRead; i++) {</span>
+<span class="nc" id="L143">            lh.addEntry(content);</span>
+        }
+
+<span class="nc" id="L146">        final int numLedgersToRecover = 10;</span>
+<span class="nc" id="L147">        List&lt;Long&gt; ledgersToRecover = Lists.newArrayList();</span>
+<span class="nc bnc" id="L148" title="All 2 branches missed.">        for (int i = 0; i &lt; numLedgersToRecover; i++) {</span>
+<span class="nc" id="L149">            LedgerHandle lhr = bkc.createLedger(1, 1, digestType, new byte[0]);</span>
+<span class="nc" id="L150">            lhr.addEntry(content);</span>
+            // Leave the ledger in open state
+<span class="nc" id="L152">            ledgersToRecover.add(lhr.getId());</span>
+        }
+
+<span class="nc" id="L155">        ExecutorService executor = Executors.newCachedThreadPool();</span>
+<span class="nc" id="L156">        final CyclicBarrier barrier = new CyclicBarrier(1 + numLedgersToRecover);</span>
+
+<span class="nc" id="L158">        List&lt;Future&lt;?&gt;&gt; futures = Lists.newArrayList();</span>
+<span class="nc" id="L159">        futures.add(executor.submit(new Callable&lt;Void&gt;() {</span>
+            @Override
+            public Void call() throws Exception {
+<span class="nc" id="L162">                barrier.await();</span>
+                try {
+<span class="nc" id="L164">                    lh.readEntries(0, numEntriesToRead - 1);</span>
+<span class="nc" id="L165">                    fail(&quot;Should have thrown exception&quot;);</span>
+<span class="nc" id="L166">                } catch (Exception e) {</span>
+                    // Expected
+<span class="nc" id="L168">                }</span>
+<span class="nc" id="L169">                return null;</span>
+            }
+        }));
+
+<span class="nc bnc" id="L173" title="All 2 branches missed.">        for (long ledgerId : ledgersToRecover) {</span>
+<span class="nc" id="L174">            futures.add(executor.submit(new Callable&lt;Void&gt;() {</span>
+                @Override
+                public Void call() throws Exception {
+<span class="nc" id="L177">                    barrier.await();</span>
+
+                    // Recovery should always succeed
+<span class="nc" id="L180">                    bkc.openLedger(ledgerId, digestType, new byte[0]);</span>
+<span class="nc" id="L181">                    return null;</span>
+                }
+            }));
+<span class="nc" id="L184">        }</span>
+
+<span class="nc bnc" id="L186" title="All 2 branches missed.">        for (Future&lt;?&gt; future : futures) {</span>
+<span class="nc" id="L187">            future.get();</span>
+<span class="nc" id="L188">        }</span>
+<span class="nc" id="L189">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

@@ -1,0 +1,633 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MockBookKeeperTestCase.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">MockBookKeeperTestCase.java</span></div><h1>MockBookKeeperTestCase.java</h1><pre class="source lang-java linenums">/**
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.bookkeeper.client;
+
+import static com.google.common.base.Preconditions.checkState;
+import static org.apache.bookkeeper.client.api.BKException.Code.NoBookieAvailableException;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.anySet;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.Unpooled;
+import io.netty.buffer.UnpooledByteBufAllocator;
+
+import java.security.GeneralSecurityException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ConcurrentSkipListSet;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+import org.apache.bookkeeper.client.BKException.BKDigestMatchException;
+import org.apache.bookkeeper.client.BKException.Code;
+import org.apache.bookkeeper.client.api.CreateBuilder;
+import org.apache.bookkeeper.client.api.DeleteBuilder;
+import org.apache.bookkeeper.client.api.LedgerMetadata;
+import org.apache.bookkeeper.client.api.OpenBuilder;
+import org.apache.bookkeeper.common.util.OrderedExecutor;
+import org.apache.bookkeeper.common.util.OrderedScheduler;
+import org.apache.bookkeeper.conf.ClientConfiguration;
+import org.apache.bookkeeper.meta.LedgerIdGenerator;
+import org.apache.bookkeeper.meta.LedgerManager;
+import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.proto.BookieClient;
+import org.apache.bookkeeper.proto.BookieProtocol;
+import org.apache.bookkeeper.proto.BookkeeperInternalCallbacks;
+import org.apache.bookkeeper.proto.checksum.DigestManager;
+import org.apache.bookkeeper.stats.NullStatsLogger;
+import org.apache.bookkeeper.util.ByteBufList;
+import org.apache.bookkeeper.versioning.LongVersion;
+import org.apache.bookkeeper.versioning.Version;
+import org.apache.bookkeeper.versioning.Versioned;
+import org.junit.After;
+import org.junit.Before;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
+import org.mockito.stubbing.Stubber;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Base class for Mock-based Client testcases.
+ */
+<span class="nc" id="L86">public abstract class MockBookKeeperTestCase {</span>
+
+<span class="nc" id="L88">    private static final Logger LOG = LoggerFactory.getLogger(MockBookKeeperTestCase.class);</span>
+
+    protected OrderedScheduler scheduler;
+    protected OrderedExecutor executor;
+    protected BookKeeper bk;
+    protected BookieClient bookieClient;
+    protected LedgerManager ledgerManager;
+    protected LedgerIdGenerator ledgerIdGenerator;
+
+    private BookieWatcher bookieWatcher;
+
+    protected ConcurrentMap&lt;Long, LedgerMetadata&gt; mockLedgerMetadataRegistry;
+    protected AtomicLong mockNextLedgerId;
+    protected ConcurrentSkipListSet&lt;Long&gt; fencedLedgers;
+    protected ConcurrentMap&lt;Long, Map&lt;BookieSocketAddress, Map&lt;Long, MockEntry&gt;&gt;&gt; mockLedgerData;
+
+    private Map&lt;BookieSocketAddress, List&lt;Runnable&gt;&gt; deferredBookieForceLedgerResponses;
+    private Set&lt;BookieSocketAddress&gt; suspendedBookiesForForceLedgerAcks;
+
+    List&lt;BookieSocketAddress&gt; failedBookies;
+    Set&lt;BookieSocketAddress&gt; availableBookies;
+    private int lastIndexForBK;
+
+    private Map&lt;BookieSocketAddress, Map&lt;Long, MockEntry&gt;&gt; getMockLedgerContents(long ledgerId) {
+<span class="nc" id="L112">        return mockLedgerData.computeIfAbsent(ledgerId, (id) -&gt; new ConcurrentHashMap&lt;&gt;());</span>
+    }
+
+    private Map&lt;Long, MockEntry&gt; getMockLedgerContentsInBookie(long ledgerId, BookieSocketAddress bookieSocketAddress) {
+<span class="nc" id="L116">        return getMockLedgerContents(ledgerId).computeIfAbsent(bookieSocketAddress, addr -&gt; new ConcurrentHashMap&lt;&gt;());</span>
+    }
+
+    private MockEntry getMockLedgerEntry(long ledgerId,
+                                         BookieSocketAddress bookieSocketAddress, long entryId) throws BKException{
+<span class="nc bnc" id="L121" title="All 2 branches missed.">        if (failedBookies.contains(bookieSocketAddress)) {</span>
+<span class="nc" id="L122">            throw BKException.create(NoBookieAvailableException);</span>
+        }
+<span class="nc" id="L124">        return getMockLedgerContentsInBookie(ledgerId, bookieSocketAddress).get(entryId);</span>
+    }
+
+    private static final class MockEntry {
+
+        byte[] payload;
+        long lastAddConfirmed;
+
+<span class="nc" id="L132">        public MockEntry(byte[] payload, long lastAddConfirmed) {</span>
+<span class="nc" id="L133">            this.payload = payload;</span>
+<span class="nc" id="L134">            this.lastAddConfirmed = lastAddConfirmed;</span>
+<span class="nc" id="L135">        }</span>
+
+    }
+
+    @Before
+    public void setup() throws Exception {
+<span class="nc" id="L141">        deferredBookieForceLedgerResponses = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="nc" id="L142">        suspendedBookiesForForceLedgerAcks = Collections.synchronizedSet(new HashSet&lt;&gt;());</span>
+<span class="nc" id="L143">        mockLedgerMetadataRegistry = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="nc" id="L144">        mockLedgerData = new ConcurrentHashMap&lt;&gt;();</span>
+<span class="nc" id="L145">        mockNextLedgerId = new AtomicLong(1);</span>
+<span class="nc" id="L146">        fencedLedgers = new ConcurrentSkipListSet&lt;&gt;();</span>
+<span class="nc" id="L147">        scheduler = OrderedScheduler.newSchedulerBuilder().numThreads(4).name(&quot;bk-test&quot;).build();</span>
+<span class="nc" id="L148">        executor = OrderedExecutor.newBuilder().build();</span>
+<span class="nc" id="L149">        bookieWatcher = mock(BookieWatcher.class);</span>
+
+<span class="nc" id="L151">        bookieClient = mock(BookieClient.class);</span>
+<span class="nc" id="L152">        ledgerManager = mock(LedgerManager.class);</span>
+<span class="nc" id="L153">        ledgerIdGenerator = mock(LedgerIdGenerator.class);</span>
+
+<span class="nc" id="L155">        bk = mock(BookKeeper.class);</span>
+
+<span class="nc" id="L157">        failedBookies = new ArrayList&lt;&gt;();</span>
+<span class="nc" id="L158">        availableBookies = new HashSet&lt;&gt;();</span>
+
+<span class="nc" id="L160">        when(bk.getCloseLock()).thenReturn(new ReentrantReadWriteLock());</span>
+<span class="nc" id="L161">        when(bk.isClosed()).thenReturn(false);</span>
+<span class="nc" id="L162">        when(bk.getBookieWatcher()).thenReturn(bookieWatcher);</span>
+<span class="nc" id="L163">        when(bk.getMainWorkerPool()).thenReturn(executor);</span>
+<span class="nc" id="L164">        when(bk.getBookieClient()).thenReturn(bookieClient);</span>
+<span class="nc" id="L165">        when(bk.getScheduler()).thenReturn(scheduler);</span>
+
+<span class="nc" id="L167">        setBookKeeperConfig(new ClientConfiguration());</span>
+<span class="nc" id="L168">        when(bk.getStatsLogger()).thenReturn(NullStatsLogger.INSTANCE);</span>
+<span class="nc" id="L169">        BookKeeperClientStats clientStats = BookKeeperClientStats.newInstance(NullStatsLogger.INSTANCE);</span>
+<span class="nc" id="L170">        ClientContext clientCtx = new ClientContext() {</span>
+                @Override
+                public ClientInternalConf getConf() {
+<span class="nc" id="L173">                    return ClientInternalConf.fromConfig(bk.getConf());</span>
+                }
+
+                @Override
+                public LedgerManager getLedgerManager() {
+<span class="nc" id="L178">                    return ledgerManager;</span>
+                }
+
+                @Override
+                public BookieWatcher getBookieWatcher() {
+<span class="nc" id="L183">                    return bookieWatcher;</span>
+                }
+
+                @Override
+                public EnsemblePlacementPolicy getPlacementPolicy() {
+<span class="nc" id="L188">                    return null;</span>
+                }
+
+                @Override
+                public BookieClient getBookieClient() {
+<span class="nc" id="L193">                    return bookieClient;</span>
+                }
+
+                @Override
+                public OrderedExecutor getMainWorkerPool() {
+<span class="nc" id="L198">                    return scheduler;</span>
+                }
+
+                @Override
+                public OrderedScheduler getScheduler() {
+<span class="nc" id="L203">                    return scheduler;</span>
+                }
+
+                @Override
+                public BookKeeperClientStats getClientStats() {
+<span class="nc" id="L208">                    return clientStats;</span>
+                }
+
+                @Override
+                public boolean isClientClosed() {
+<span class="nc" id="L213">                    return bk.isClosed();</span>
+                }
+
+                @Override
+                public ByteBufAllocator getByteBufAllocator() {
+<span class="nc" id="L218">                    return UnpooledByteBufAllocator.DEFAULT;</span>
+                }
+            };
+<span class="nc" id="L221">        when(bk.getClientCtx()).thenReturn(clientCtx);</span>
+<span class="nc" id="L222">        when(bk.getLedgerManager()).thenReturn(ledgerManager);</span>
+<span class="nc" id="L223">        when(bk.getLedgerIdGenerator()).thenReturn(ledgerIdGenerator);</span>
+<span class="nc" id="L224">        when(bk.getReturnRc(anyInt())).thenAnswer(invocationOnMock -&gt; invocationOnMock.getArgument(0));</span>
+<span class="nc" id="L225">        when(bookieClient.isWritable(any(), anyLong())).thenReturn(true);</span>
+
+<span class="nc" id="L227">        setupLedgerIdGenerator();</span>
+<span class="nc" id="L228">        setupCreateLedgerMetadata();</span>
+<span class="nc" id="L229">        setupReadLedgerMetadata();</span>
+<span class="nc" id="L230">        setupWriteLedgerMetadata();</span>
+<span class="nc" id="L231">        setupRemoveLedgerMetadata();</span>
+<span class="nc" id="L232">        setupRegisterLedgerMetadataListener();</span>
+<span class="nc" id="L233">        setupBookieWatcherForNewEnsemble();</span>
+<span class="nc" id="L234">        setupBookieWatcherForEnsembleChange();</span>
+<span class="nc" id="L235">        setupBookieClientReadEntry();</span>
+<span class="nc" id="L236">        setupBookieClientAddEntry();</span>
+<span class="nc" id="L237">        setupBookieClientForceLedger();</span>
+<span class="nc" id="L238">    }</span>
+
+    protected void setBookKeeperConfig(ClientConfiguration conf) {
+<span class="nc" id="L241">        when(bk.getConf()).thenReturn(conf);</span>
+<span class="nc" id="L242">    }</span>
+
+    private DigestManager getDigestType(long ledgerId) throws GeneralSecurityException {
+<span class="nc" id="L245">        LedgerMetadata metadata = mockLedgerMetadataRegistry.get(ledgerId);</span>
+<span class="nc" id="L246">        return DigestManager.instantiate(</span>
+                ledgerId,
+<span class="nc" id="L248">                metadata.getPassword(),</span>
+<span class="nc" id="L249">                org.apache.bookkeeper.client.BookKeeper.DigestType.toProtoDigestType(</span>
+<span class="nc" id="L250">                        org.apache.bookkeeper.client.BookKeeper.DigestType.fromApiDigestType(</span>
+<span class="nc" id="L251">                                metadata.getDigestType())),</span>
+                UnpooledByteBufAllocator.DEFAULT, false);
+    }
+
+    @After
+    public void tearDown() {
+<span class="nc" id="L257">        scheduler.shutdown();</span>
+<span class="nc" id="L258">        executor.shutdown();</span>
+<span class="nc" id="L259">    }</span>
+
+    protected CreateBuilder newCreateLedgerOp() {
+<span class="nc" id="L262">        return new LedgerCreateOp.CreateBuilderImpl(bk);</span>
+    }
+
+    protected OpenBuilder newOpenLedgerOp() {
+<span class="nc" id="L266">        return new LedgerOpenOp.OpenBuilderImpl(bk);</span>
+    }
+
+    protected DeleteBuilder newDeleteLedgerOp() {
+<span class="nc" id="L270">        return new LedgerDeleteOp.DeleteBuilderImpl(bk);</span>
+    }
+
+    protected void closeBookkeeper() {
+<span class="nc" id="L274">        when(bk.isClosed()).thenReturn(true);</span>
+<span class="nc" id="L275">    }</span>
+
+    protected void killBookie(BookieSocketAddress killedBookieSocketAddress) {
+<span class="nc" id="L278">        failedBookies.add(killedBookieSocketAddress);</span>
+<span class="nc" id="L279">        availableBookies.remove(killedBookieSocketAddress);</span>
+<span class="nc" id="L280">    }</span>
+
+    protected void startKilledBookie(BookieSocketAddress killedBookieSocketAddress) {
+<span class="nc" id="L283">        checkState(failedBookies.contains(killedBookieSocketAddress));</span>
+<span class="nc bnc" id="L284" title="All 2 branches missed.">        checkState(!availableBookies.contains(killedBookieSocketAddress));</span>
+<span class="nc" id="L285">        failedBookies.remove(killedBookieSocketAddress);</span>
+<span class="nc" id="L286">        availableBookies.add(killedBookieSocketAddress);</span>
+<span class="nc" id="L287">    }</span>
+
+    protected void suspendBookieForceLedgerAcks(BookieSocketAddress address) {
+<span class="nc" id="L290">        suspendedBookiesForForceLedgerAcks.add(address);</span>
+<span class="nc" id="L291">    }</span>
+
+    protected void resumeBookieWriteAcks(BookieSocketAddress address) {
+<span class="nc" id="L294">        suspendedBookiesForForceLedgerAcks.remove(address);</span>
+<span class="nc" id="L295">        List&lt;Runnable&gt; pendingResponses = deferredBookieForceLedgerResponses.remove(address);</span>
+<span class="nc bnc" id="L296" title="All 2 branches missed.">        if (pendingResponses != null) {</span>
+<span class="nc" id="L297">            pendingResponses.forEach(Runnable::run);</span>
+        }
+<span class="nc" id="L299">    }</span>
+
+    protected BookieSocketAddress startNewBookie() {
+<span class="nc" id="L302">        BookieSocketAddress address = generateBookieSocketAddress(lastIndexForBK++);</span>
+<span class="nc" id="L303">        availableBookies.add(address);</span>
+<span class="nc" id="L304">        return address;</span>
+    }
+
+    protected BookieSocketAddress generateBookieSocketAddress(int index) {
+<span class="nc" id="L308">        return new BookieSocketAddress(&quot;localhost&quot;, 1111 + index);</span>
+    }
+
+    protected ArrayList&lt;BookieSocketAddress&gt; generateNewEnsemble(int ensembleSize) {
+<span class="nc" id="L312">        ArrayList&lt;BookieSocketAddress&gt; ensemble = new ArrayList&lt;&gt;(ensembleSize);</span>
+<span class="nc bnc" id="L313" title="All 2 branches missed.">        for (int i = 0; i &lt; ensembleSize; i++) {</span>
+<span class="nc" id="L314">            ensemble.add(generateBookieSocketAddress(i));</span>
+        }
+<span class="nc" id="L316">        availableBookies.addAll(ensemble);</span>
+<span class="nc" id="L317">        lastIndexForBK = ensembleSize;</span>
+<span class="nc" id="L318">        return ensemble;</span>
+    }
+
+    private void setupBookieWatcherForNewEnsemble() throws BKException.BKNotEnoughBookiesException {
+<span class="nc" id="L322">        when(bookieWatcher.newEnsemble(anyInt(), anyInt(), anyInt(), any()))</span>
+<span class="nc" id="L323">            .thenAnswer((Answer&lt;ArrayList&lt;BookieSocketAddress&gt;&gt;) new Answer&lt;ArrayList&lt;BookieSocketAddress&gt;&gt;() {</span>
+                @Override
+                @SuppressWarnings(&quot;unchecked&quot;)
+                public ArrayList&lt;BookieSocketAddress&gt; answer(InvocationOnMock invocation) throws Throwable {
+<span class="nc" id="L327">                    Object[] args = invocation.getArguments();</span>
+<span class="nc" id="L328">                    int ensembleSize = (Integer) args[0];</span>
+<span class="nc" id="L329">                    return generateNewEnsemble(ensembleSize);</span>
+                }
+            });
+<span class="nc" id="L332">    }</span>
+
+    private void setupBookieWatcherForEnsembleChange() throws BKException.BKNotEnoughBookiesException {
+<span class="nc" id="L335">        when(bookieWatcher.replaceBookie(anyInt(), anyInt(), anyInt(), anyMap(), anyList(), anyInt(), anySet()))</span>
+<span class="nc" id="L336">                .thenAnswer((Answer&lt;BookieSocketAddress&gt;) new Answer&lt;BookieSocketAddress&gt;() {</span>
+                    @Override
+                    @SuppressWarnings(&quot;unchecked&quot;)
+                    public BookieSocketAddress answer(InvocationOnMock invocation) throws Throwable {
+<span class="nc" id="L340">                        Object[] args = invocation.getArguments();</span>
+<span class="nc" id="L341">                        List&lt;BookieSocketAddress&gt; existingBookies = (List&lt;BookieSocketAddress&gt;) args[4];</span>
+<span class="nc" id="L342">                        Set&lt;BookieSocketAddress&gt; excludeBookies = (Set&lt;BookieSocketAddress&gt;) args[6];</span>
+<span class="nc" id="L343">                        excludeBookies.addAll(existingBookies);</span>
+<span class="nc" id="L344">                        Set&lt;BookieSocketAddress&gt; remainBookies = new HashSet&lt;BookieSocketAddress&gt;(availableBookies);</span>
+<span class="nc" id="L345">                        remainBookies.removeAll(excludeBookies);</span>
+<span class="nc bnc" id="L346" title="All 2 branches missed.">                        if (remainBookies.iterator().hasNext()) {</span>
+<span class="nc" id="L347">                            return remainBookies.iterator().next();</span>
+                        }
+<span class="nc" id="L349">                        throw BKException.create(BKException.Code.NotEnoughBookiesException);</span>
+                    }
+                });
+<span class="nc" id="L352">    }</span>
+
+    protected void registerMockEntryForRead(long ledgerId, long entryId, BookieSocketAddress bookieSocketAddress,
+        byte[] entryData, long lastAddConfirmed) {
+<span class="nc" id="L356">        getMockLedgerContentsInBookie(ledgerId, bookieSocketAddress).put(entryId, new MockEntry(entryData,</span>
+                    lastAddConfirmed));
+<span class="nc" id="L358">    }</span>
+
+    protected void registerMockLedgerMetadata(long ledgerId, LedgerMetadata ledgerMetadata) {
+<span class="nc" id="L361">        mockLedgerMetadataRegistry.put(ledgerId, ledgerMetadata);</span>
+<span class="nc" id="L362">    }</span>
+
+    protected void setNewGeneratedLedgerId(long ledgerId) {
+<span class="nc" id="L365">        mockNextLedgerId.set(ledgerId);</span>
+<span class="nc" id="L366">        setupLedgerIdGenerator();</span>
+<span class="nc" id="L367">    }</span>
+
+    protected LedgerMetadata getLedgerMetadata(long ledgerId) {
+<span class="nc" id="L370">        return mockLedgerMetadataRegistry.get(ledgerId);</span>
+    }
+
+    @SuppressWarnings(&quot;unchecked&quot;)
+    private void setupReadLedgerMetadata() {
+<span class="nc" id="L375">        doAnswer(invocation -&gt; {</span>
+<span class="nc" id="L376">            Object[] args = invocation.getArguments();</span>
+<span class="nc" id="L377">            Long ledgerId = (Long) args[0];</span>
+<span class="nc" id="L378">            CompletableFuture&lt;Versioned&lt;LedgerMetadata&gt;&gt; promise = new CompletableFuture&lt;&gt;();</span>
+<span class="nc" id="L379">            executor.executeOrdered(ledgerId, () -&gt; {</span>
+<span class="nc" id="L380">                LedgerMetadata ledgerMetadata = mockLedgerMetadataRegistry.get(ledgerId);</span>
+<span class="nc bnc" id="L381" title="All 2 branches missed.">                if (ledgerMetadata == null) {</span>
+<span class="nc" id="L382">                    promise.completeExceptionally(new BKException.BKNoSuchLedgerExistsOnMetadataServerException());</span>
+                } else {
+<span class="nc" id="L384">                    promise.complete(new Versioned&lt;&gt;(ledgerMetadata, new LongVersion(1)));</span>
+                }
+<span class="nc" id="L386">            });</span>
+<span class="nc" id="L387">            return promise;</span>
+<span class="nc" id="L388">        }).when(ledgerManager).readLedgerMetadata(anyLong());</span>
+<span class="nc" id="L389">    }</span>
+
+    @SuppressWarnings(&quot;unchecked&quot;)
+    private void setupRemoveLedgerMetadata() {
+<span class="nc" id="L393">        doAnswer(invocation -&gt; {</span>
+<span class="nc" id="L394">            Object[] args = invocation.getArguments();</span>
+<span class="nc" id="L395">            Long ledgerId = (Long) args[0];</span>
+<span class="nc" id="L396">            CompletableFuture&lt;Void&gt; promise = new CompletableFuture&lt;&gt;();</span>
+<span class="nc" id="L397">            executor.executeOrdered(ledgerId, () -&gt; {</span>
+<span class="nc bnc" id="L398" title="All 2 branches missed.">                    if (mockLedgerMetadataRegistry.remove(ledgerId) != null) {</span>
+<span class="nc" id="L399">                        promise.complete(null);</span>
+                    } else {
+<span class="nc" id="L401">                        promise.completeExceptionally(new BKException.BKNoSuchLedgerExistsOnMetadataServerException());</span>
+                    }
+<span class="nc" id="L403">                });</span>
+<span class="nc" id="L404">            return promise;</span>
+<span class="nc" id="L405">        }).when(ledgerManager).removeLedgerMetadata(anyLong(), any());</span>
+<span class="nc" id="L406">    }</span>
+
+    private void setupRegisterLedgerMetadataListener() {
+<span class="nc" id="L409">        doAnswer((Answer&lt;Void&gt;) new Answer&lt;Void&gt;() {</span>
+            @Override
+            @SuppressWarnings(&quot;unchecked&quot;)
+            public Void answer(InvocationOnMock invocation) throws Throwable {
+<span class="nc" id="L413">                return null;</span>
+            }
+<span class="nc" id="L415">        }).when(ledgerManager).registerLedgerMetadataListener(anyLong(), any());</span>
+<span class="nc" id="L416">    }</span>
+
+    @SuppressWarnings(&quot;unchecked&quot;)
+    private void setupLedgerIdGenerator() {
+<span class="nc" id="L420">        doAnswer(invocation -&gt; {</span>
+<span class="nc" id="L421">            Object[] args = invocation.getArguments();</span>
+<span class="nc" id="L422">            BookkeeperInternalCallbacks.GenericCallback cb = (BookkeeperInternalCallbacks.GenericCallback) args[0];</span>
+<span class="nc" id="L423">            cb.operationComplete(Code.OK, mockNextLedgerId.getAndIncrement());</span>
+<span class="nc" id="L424">            return null;</span>
+<span class="nc" id="L425">        }).when(ledgerIdGenerator).generateLedgerId(any());</span>
+<span class="nc" id="L426">    }</span>
+
+    @SuppressWarnings(&quot;unchecked&quot;)
+    private void setupCreateLedgerMetadata() {
+<span class="nc" id="L430">        doAnswer(invocation -&gt; {</span>
+<span class="nc" id="L431">            Object[] args = invocation.getArguments();</span>
+<span class="nc" id="L432">            Long ledgerId = (Long) args[0];</span>
+
+<span class="nc" id="L434">            CompletableFuture&lt;Versioned&lt;LedgerMetadata&gt;&gt; promise = new CompletableFuture&lt;&gt;();</span>
+<span class="nc" id="L435">            executor.executeOrdered(ledgerId, () -&gt; {</span>
+
+<span class="nc" id="L437">                    LedgerMetadata ledgerMetadata = (LedgerMetadata) args[1];</span>
+<span class="nc" id="L438">                    mockLedgerMetadataRegistry.put(ledgerId, ledgerMetadata);</span>
+<span class="nc" id="L439">                    promise.complete(new Versioned&lt;&gt;(ledgerMetadata, new LongVersion(1)));</span>
+<span class="nc" id="L440">            });</span>
+<span class="nc" id="L441">            return promise;</span>
+<span class="nc" id="L442">        }).when(ledgerManager).createLedgerMetadata(anyLong(), any());</span>
+<span class="nc" id="L443">    }</span>
+
+    @SuppressWarnings(&quot;unchecked&quot;)
+    private void setupWriteLedgerMetadata() {
+<span class="nc" id="L447">        doAnswer(invocation -&gt; {</span>
+<span class="nc" id="L448">                Object[] args = invocation.getArguments();</span>
+<span class="nc" id="L449">                Long ledgerId = (Long) args[0];</span>
+<span class="nc" id="L450">                LedgerMetadata metadata = (LedgerMetadata) args[1];</span>
+<span class="nc" id="L451">                Version currentVersion = (Version) args[2];</span>
+<span class="nc" id="L452">                CompletableFuture&lt;Versioned&lt;LedgerMetadata&gt;&gt; promise = new CompletableFuture&lt;&gt;();</span>
+<span class="nc" id="L453">                executor.executeOrdered(ledgerId, () -&gt; {</span>
+<span class="nc" id="L454">                        LedgerMetadata newMetadata = LedgerMetadataBuilder.from(metadata).build();</span>
+<span class="nc" id="L455">                        mockLedgerMetadataRegistry.put(ledgerId, newMetadata);</span>
+<span class="nc" id="L456">                        promise.complete(new Versioned&lt;&gt;(newMetadata, new LongVersion(1234)));</span>
+<span class="nc" id="L457">                    });</span>
+<span class="nc" id="L458">                return promise;</span>
+<span class="nc" id="L459">            }).when(ledgerManager).writeLedgerMetadata(anyLong(), any(), any());</span>
+<span class="nc" id="L460">    }</span>
+
+    @SuppressWarnings(&quot;unchecked&quot;)
+    protected void setupBookieClientReadEntry() {
+<span class="nc" id="L464">        final Stubber stub = doAnswer(invokation -&gt; {</span>
+<span class="nc" id="L465">            Object[] args = invokation.getArguments();</span>
+<span class="nc" id="L466">            BookieSocketAddress bookieSocketAddress = (BookieSocketAddress) args[0];</span>
+<span class="nc" id="L467">            long ledgerId = (Long) args[1];</span>
+<span class="nc" id="L468">            long entryId = (Long) args[2];</span>
+<span class="nc" id="L469">            BookkeeperInternalCallbacks.ReadEntryCallback callback =</span>
+                (BookkeeperInternalCallbacks.ReadEntryCallback) args[3];
+<span class="nc bnc" id="L471" title="All 2 branches missed.">            boolean fenced = (((Integer) args[5]) &amp; BookieProtocol.FLAG_DO_FENCING) == BookieProtocol.FLAG_DO_FENCING;</span>
+
+<span class="nc" id="L473">            executor.executeOrdered(ledgerId, () -&gt; {</span>
+<span class="nc" id="L474">                DigestManager macManager = null;</span>
+                try {
+<span class="nc" id="L476">                    macManager = getDigestType(ledgerId);</span>
+<span class="nc" id="L477">                } catch (GeneralSecurityException gse){</span>
+<span class="nc" id="L478">                    LOG.error(&quot;Initialize macManager fail&quot;, gse);</span>
+<span class="nc" id="L479">                }</span>
+<span class="nc" id="L480">                MockEntry mockEntry = null;</span>
+                try {
+<span class="nc" id="L482">                    mockEntry = getMockLedgerEntry(ledgerId, bookieSocketAddress, entryId);</span>
+<span class="nc" id="L483">                } catch (BKException bke) {</span>
+<span class="nc" id="L484">                    LOG.info(&quot;readEntryAndFenceLedger - occur BKException {}@{} at {}&quot;, entryId, ledgerId,</span>
+                            bookieSocketAddress);
+<span class="nc" id="L486">                    callback.readEntryComplete(bke.getCode(), ledgerId, entryId, null, args[5]);</span>
+<span class="nc" id="L487">                }</span>
+
+<span class="nc bnc" id="L489" title="All 2 branches missed.">                if (fenced) {</span>
+<span class="nc" id="L490">                    fencedLedgers.add(ledgerId);</span>
+                }
+
+<span class="nc bnc" id="L493" title="All 2 branches missed.">                if (mockEntry != null) {</span>
+<span class="nc" id="L494">                    LOG.info(&quot;readEntry - found mock entry {}@{} at {}&quot;, entryId, ledgerId, bookieSocketAddress);</span>
+<span class="nc" id="L495">                    ByteBufList entry = macManager.computeDigestAndPackageForSending(entryId,</span>
+                        mockEntry.lastAddConfirmed, mockEntry.payload.length,
+<span class="nc" id="L497">                        Unpooled.wrappedBuffer(mockEntry.payload));</span>
+<span class="nc" id="L498">                    callback.readEntryComplete(BKException.Code.OK, ledgerId, entryId, ByteBufList.coalesce(entry),</span>
+                            args[4]);
+<span class="nc" id="L500">                    entry.release();</span>
+<span class="nc" id="L501">                } else {</span>
+<span class="nc" id="L502">                    LOG.info(&quot;readEntry - no such mock entry {}@{} at {}&quot;, entryId, ledgerId, bookieSocketAddress);</span>
+<span class="nc" id="L503">                    callback.readEntryComplete(BKException.Code.NoSuchEntryException, ledgerId, entryId, null, args[4]);</span>
+                }
+<span class="nc" id="L505">            });</span>
+<span class="nc" id="L506">            return null;</span>
+        });
+
+<span class="nc" id="L509">        stub.when(bookieClient).readEntry(any(), anyLong(), anyLong(),</span>
+<span class="nc" id="L510">                any(BookkeeperInternalCallbacks.ReadEntryCallback.class),</span>
+<span class="nc" id="L511">                any(), anyInt());</span>
+
+<span class="nc" id="L513">        stub.when(bookieClient).readEntry(any(), anyLong(), anyLong(),</span>
+<span class="nc" id="L514">                any(BookkeeperInternalCallbacks.ReadEntryCallback.class),</span>
+<span class="nc" id="L515">                any(), anyInt(), any());</span>
+
+<span class="nc" id="L517">        stub.when(bookieClient).readEntry(any(), anyLong(), anyLong(),</span>
+<span class="nc" id="L518">                any(BookkeeperInternalCallbacks.ReadEntryCallback.class),</span>
+<span class="nc" id="L519">                any(), anyInt(), any(), anyBoolean());</span>
+<span class="nc" id="L520">    }</span>
+
+    private byte[] extractEntryPayload(long ledgerId, long entryId, ByteBufList toSend)
+            throws BKException.BKDigestMatchException {
+<span class="nc" id="L524">        ByteBuf toSendCopy = Unpooled.copiedBuffer(toSend.toArray());</span>
+<span class="nc" id="L525">        toSendCopy.resetReaderIndex();</span>
+<span class="nc" id="L526">        DigestManager macManager = null;</span>
+        try {
+<span class="nc" id="L528">            macManager = getDigestType(ledgerId);</span>
+<span class="nc" id="L529">        } catch (GeneralSecurityException gse){</span>
+<span class="nc" id="L530">            LOG.error(&quot;Initialize macManager fail&quot;, gse);</span>
+<span class="nc" id="L531">        }</span>
+<span class="nc" id="L532">        ByteBuf content = macManager.verifyDigestAndReturnData(entryId, toSendCopy);</span>
+<span class="nc" id="L533">        byte[] entry = new byte[content.readableBytes()];</span>
+<span class="nc" id="L534">        content.readBytes(entry);</span>
+<span class="nc" id="L535">        content.resetReaderIndex();</span>
+<span class="nc" id="L536">        content.release();</span>
+<span class="nc" id="L537">        return entry;</span>
+    }
+
+    @SuppressWarnings(&quot;unchecked&quot;)
+    protected void setupBookieClientAddEntry() {
+<span class="nc" id="L542">        final Stubber stub = doAnswer(invokation -&gt; {</span>
+<span class="nc" id="L543">            Object[] args = invokation.getArguments();</span>
+<span class="nc" id="L544">            BookkeeperInternalCallbacks.WriteCallback callback = (BookkeeperInternalCallbacks.WriteCallback) args[5];</span>
+<span class="nc" id="L545">            BookieSocketAddress bookieSocketAddress = (BookieSocketAddress) args[0];</span>
+<span class="nc" id="L546">            long ledgerId = (Long) args[1];</span>
+<span class="nc" id="L547">            long entryId = (Long) args[3];</span>
+<span class="nc" id="L548">            ByteBufList toSend = (ByteBufList) args[4];</span>
+<span class="nc" id="L549">            Object ctx = args[6];</span>
+<span class="nc" id="L550">            int options = (int) args[7];</span>
+<span class="nc bnc" id="L551" title="All 2 branches missed.">            boolean isRecoveryAdd =</span>
+                ((short) options &amp; BookieProtocol.FLAG_RECOVERY_ADD) == BookieProtocol.FLAG_RECOVERY_ADD;
+
+<span class="nc" id="L554">            toSend.retain();</span>
+<span class="nc" id="L555">            executor.executeOrdered(ledgerId, () -&gt; {</span>
+                byte[] entry;
+                try {
+<span class="nc" id="L558">                    entry = extractEntryPayload(ledgerId, entryId, toSend);</span>
+<span class="nc" id="L559">                } catch (BKDigestMatchException e) {</span>
+<span class="nc" id="L560">                    callback.writeComplete(Code.DigestMatchException,</span>
+                            ledgerId, entryId, bookieSocketAddress, ctx);
+<span class="nc" id="L562">                    toSend.release();</span>
+<span class="nc" id="L563">                    return;</span>
+<span class="nc" id="L564">                }</span>
+<span class="nc" id="L565">                boolean fenced = fencedLedgers.contains(ledgerId);</span>
+<span class="nc bnc" id="L566" title="All 4 branches missed.">                if (fenced &amp;&amp; !isRecoveryAdd) {</span>
+<span class="nc" id="L567">                    callback.writeComplete(BKException.Code.LedgerFencedException,</span>
+                        ledgerId, entryId, bookieSocketAddress, ctx);
+                } else {
+<span class="nc bnc" id="L570" title="All 2 branches missed.">                    if (failedBookies.contains(bookieSocketAddress)) {</span>
+<span class="nc" id="L571">                        callback.writeComplete(NoBookieAvailableException,</span>
+                                ledgerId, entryId, bookieSocketAddress, ctx);
+<span class="nc" id="L573">                        toSend.release();</span>
+<span class="nc" id="L574">                        return;</span>
+                    }
+<span class="nc bnc" id="L576" title="All 2 branches missed.">                    if (getMockLedgerContentsInBookie(ledgerId, bookieSocketAddress).isEmpty()) {</span>
+<span class="nc" id="L577">                            registerMockEntryForRead(ledgerId, BookieProtocol.LAST_ADD_CONFIRMED,</span>
+                                    bookieSocketAddress, new byte[0], BookieProtocol.INVALID_ENTRY_ID);
+                    }
+<span class="nc" id="L580">                    registerMockEntryForRead(ledgerId, entryId, bookieSocketAddress, entry, ledgerId);</span>
+<span class="nc" id="L581">                    callback.writeComplete(BKException.Code.OK,</span>
+                            ledgerId, entryId, bookieSocketAddress, ctx);
+                }
+<span class="nc" id="L584">                toSend.release();</span>
+<span class="nc" id="L585">            });</span>
+
+<span class="nc" id="L587">            return null;</span>
+        });
+
+<span class="nc" id="L590">        stub.when(bookieClient).addEntry(any(BookieSocketAddress.class),</span>
+<span class="nc" id="L591">                anyLong(), any(byte[].class),</span>
+<span class="nc" id="L592">                anyLong(), any(ByteBufList.class),</span>
+<span class="nc" id="L593">                any(BookkeeperInternalCallbacks.WriteCallback.class),</span>
+<span class="nc" id="L594">                any(), anyInt(), anyBoolean(), any(EnumSet.class));</span>
+<span class="nc" id="L595">    }</span>
+
+    @SuppressWarnings(&quot;unchecked&quot;)
+    protected void setupBookieClientForceLedger() {
+<span class="nc" id="L599">        final Stubber stub = doAnswer(invokation -&gt; {</span>
+<span class="nc" id="L600">            Object[] args = invokation.getArguments();</span>
+<span class="nc" id="L601">            BookieSocketAddress bookieSocketAddress = (BookieSocketAddress) args[0];</span>
+<span class="nc" id="L602">            long ledgerId = (Long) args[1];</span>
+<span class="nc" id="L603">            BookkeeperInternalCallbacks.ForceLedgerCallback callback =</span>
+                    (BookkeeperInternalCallbacks.ForceLedgerCallback) args[2];
+<span class="nc" id="L605">            Object ctx = args[3];</span>
+
+<span class="nc" id="L607">            Runnable activity = () -&gt; {</span>
+<span class="nc" id="L608">                executor.executeOrdered(ledgerId, () -&gt; {</span>
+<span class="nc bnc" id="L609" title="All 2 branches missed.">                    if (failedBookies.contains(bookieSocketAddress)) {</span>
+<span class="nc" id="L610">                        callback.forceLedgerComplete(NoBookieAvailableException, ledgerId, bookieSocketAddress, ctx);</span>
+<span class="nc" id="L611">                        return;</span>
+                    }
+<span class="nc" id="L613">                    callback.forceLedgerComplete(BKException.Code.OK, ledgerId, bookieSocketAddress, ctx);</span>
+<span class="nc" id="L614">                });</span>
+<span class="nc" id="L615">            };</span>
+<span class="nc bnc" id="L616" title="All 2 branches missed.">            if (suspendedBookiesForForceLedgerAcks.contains(bookieSocketAddress)) {</span>
+<span class="nc" id="L617">                List&lt;Runnable&gt; queue = deferredBookieForceLedgerResponses.computeIfAbsent(bookieSocketAddress,</span>
+<span class="nc" id="L618">                        (k) -&gt; new CopyOnWriteArrayList&lt;&gt;());</span>
+<span class="nc" id="L619">                queue.add(activity);</span>
+<span class="nc" id="L620">            } else {</span>
+<span class="nc" id="L621">                activity.run();</span>
+            }
+<span class="nc" id="L623">            return null;</span>
+        });
+
+<span class="nc" id="L626">        stub.when(bookieClient).forceLedger(any(BookieSocketAddress.class),</span>
+<span class="nc" id="L627">                anyLong(),</span>
+<span class="nc" id="L628">                any(BookkeeperInternalCallbacks.ForceLedgerCallback.class),</span>
+<span class="nc" id="L629">                any());</span>
+<span class="nc" id="L630">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

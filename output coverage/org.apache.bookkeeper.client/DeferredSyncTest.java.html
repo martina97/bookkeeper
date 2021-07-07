@@ -1,0 +1,235 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DeferredSyncTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">DeferredSyncTest.java</span></div><h1>DeferredSyncTest.java</h1><pre class="source lang-java linenums">/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.bookkeeper.client;
+
+import static org.apache.bookkeeper.common.concurrent.FutureUtils.result;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import java.util.concurrent.CompletableFuture;
+import org.apache.bookkeeper.client.api.WriteAdvHandle;
+import org.apache.bookkeeper.client.api.WriteFlag;
+import org.apache.bookkeeper.client.api.WriteHandle;
+import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.junit.Test;
+
+/**
+ * Client side tests on deferred sync write flag.
+ */
+<span class="nc" id="L38">public class DeferredSyncTest extends MockBookKeeperTestCase {</span>
+
+<span class="nc" id="L40">    static final byte[] PASSWORD = &quot;password&quot;.getBytes();</span>
+<span class="nc" id="L41">    static final ByteBuf DATA = Unpooled.wrappedBuffer(&quot;foobar&quot;.getBytes());</span>
+    static final int NUM_ENTRIES = 100;
+
+    @Test
+    public void testAddEntryLastAddConfirmedDoesNotAdvance() throws Exception {
+<span class="nc" id="L46">        try (WriteHandle wh = result(newCreateLedgerOp()</span>
+<span class="nc" id="L47">                .withEnsembleSize(3)</span>
+<span class="nc" id="L48">                .withWriteQuorumSize(3)</span>
+<span class="nc" id="L49">                .withAckQuorumSize(2)</span>
+<span class="nc" id="L50">                .withPassword(PASSWORD)</span>
+<span class="nc" id="L51">                .withWriteFlags(WriteFlag.DEFERRED_SYNC)</span>
+<span class="nc" id="L52">                .execute())) {</span>
+<span class="nc bnc" id="L53" title="All 2 branches missed.">            for (int i = 0; i &lt; NUM_ENTRIES - 1; i++) {</span>
+<span class="nc" id="L54">                result(wh.appendAsync(DATA.retainedDuplicate()));</span>
+            }
+<span class="nc" id="L56">            long lastEntryID = result(wh.appendAsync(DATA.retainedDuplicate()));</span>
+<span class="nc" id="L57">            assertEquals(NUM_ENTRIES - 1, lastEntryID);</span>
+<span class="nc" id="L58">            assertEquals(NUM_ENTRIES - 1, wh.getLastAddPushed());</span>
+<span class="nc" id="L59">            assertEquals(-1, wh.getLastAddConfirmed());</span>
+        }
+<span class="nc" id="L61">    }</span>
+
+    @Test
+    public void testAddEntryLastAddConfirmedAdvanceWithForce() throws Exception {
+<span class="nc" id="L65">        try (WriteHandle wh = result(newCreateLedgerOp()</span>
+<span class="nc" id="L66">                .withEnsembleSize(3)</span>
+<span class="nc" id="L67">                .withWriteQuorumSize(3)</span>
+<span class="nc" id="L68">                .withAckQuorumSize(2)</span>
+<span class="nc" id="L69">                .withPassword(PASSWORD)</span>
+<span class="nc" id="L70">                .withWriteFlags(WriteFlag.DEFERRED_SYNC)</span>
+<span class="nc" id="L71">                .execute())) {</span>
+<span class="nc bnc" id="L72" title="All 2 branches missed.">            for (int i = 0; i &lt; NUM_ENTRIES - 1; i++) {</span>
+<span class="nc" id="L73">                result(wh.appendAsync(DATA.retainedDuplicate()));</span>
+            }
+<span class="nc" id="L75">            long lastEntryID = result(wh.appendAsync(DATA.retainedDuplicate()));</span>
+<span class="nc" id="L76">            assertEquals(NUM_ENTRIES - 1, lastEntryID);</span>
+<span class="nc" id="L77">            assertEquals(NUM_ENTRIES - 1, wh.getLastAddPushed());</span>
+<span class="nc" id="L78">            assertEquals(-1, wh.getLastAddConfirmed());</span>
+<span class="nc" id="L79">            result(wh.force());</span>
+<span class="nc" id="L80">            assertEquals(NUM_ENTRIES - 1, wh.getLastAddConfirmed());</span>
+        }
+<span class="nc" id="L82">    }</span>
+
+    @Test
+    public void testForceOnWriteAdvHandle() throws Exception {
+<span class="nc" id="L86">        try (WriteAdvHandle wh = result(newCreateLedgerOp()</span>
+<span class="nc" id="L87">                .withEnsembleSize(3)</span>
+<span class="nc" id="L88">                .withWriteQuorumSize(3)</span>
+<span class="nc" id="L89">                .withAckQuorumSize(2)</span>
+<span class="nc" id="L90">                .withPassword(PASSWORD)</span>
+<span class="nc" id="L91">                .withWriteFlags(WriteFlag.DEFERRED_SYNC)</span>
+<span class="nc" id="L92">                .makeAdv()</span>
+<span class="nc" id="L93">                .execute())) {</span>
+<span class="nc" id="L94">            CompletableFuture&lt;Long&gt; w0 = wh.writeAsync(0, DATA.retainedDuplicate());</span>
+<span class="nc" id="L95">            CompletableFuture&lt;Long&gt; w2 = wh.writeAsync(2, DATA.retainedDuplicate());</span>
+<span class="nc" id="L96">            CompletableFuture&lt;Long&gt; w3 = wh.writeAsync(3, DATA.retainedDuplicate());</span>
+<span class="nc" id="L97">            result(w0);</span>
+<span class="nc" id="L98">            result(wh.force());</span>
+<span class="nc" id="L99">            assertEquals(0, wh.getLastAddConfirmed());</span>
+<span class="nc" id="L100">            CompletableFuture&lt;Long&gt; w1 = wh.writeAsync(1, DATA.retainedDuplicate());</span>
+<span class="nc" id="L101">            result(w3);</span>
+<span class="nc" id="L102">            assertTrue(w1.isDone());</span>
+<span class="nc" id="L103">            assertTrue(w2.isDone());</span>
+<span class="nc" id="L104">            CompletableFuture&lt;Long&gt; w5 = wh.writeAsync(5, DATA.retainedDuplicate());</span>
+<span class="nc" id="L105">            result(wh.force());</span>
+<span class="nc" id="L106">            assertEquals(3, wh.getLastAddConfirmed());</span>
+<span class="nc" id="L107">            wh.writeAsync(4, DATA.retainedDuplicate());</span>
+<span class="nc" id="L108">            result(w5);</span>
+<span class="nc" id="L109">            result(wh.force());</span>
+<span class="nc" id="L110">            assertEquals(5, wh.getLastAddConfirmed());</span>
+        }
+<span class="nc" id="L112">    }</span>
+
+    @Test
+    public void testForceRequiresFullEnsemble() throws Exception {
+<span class="nc" id="L116">        try (WriteHandle wh = result(newCreateLedgerOp()</span>
+<span class="nc" id="L117">                .withEnsembleSize(3)</span>
+<span class="nc" id="L118">                .withWriteQuorumSize(2)</span>
+<span class="nc" id="L119">                .withAckQuorumSize(2)</span>
+<span class="nc" id="L120">                .withPassword(PASSWORD)</span>
+<span class="nc" id="L121">                .withWriteFlags(WriteFlag.DEFERRED_SYNC)</span>
+<span class="nc" id="L122">                .execute())) {</span>
+<span class="nc bnc" id="L123" title="All 2 branches missed.">            for (int i = 0; i &lt; NUM_ENTRIES - 1; i++) {</span>
+<span class="nc" id="L124">                result(wh.appendAsync(DATA.retainedDuplicate()));</span>
+            }
+<span class="nc" id="L126">            long lastEntryID = result(wh.appendAsync(DATA.retainedDuplicate()));</span>
+<span class="nc" id="L127">            assertEquals(NUM_ENTRIES - 1, lastEntryID);</span>
+<span class="nc" id="L128">            assertEquals(NUM_ENTRIES - 1, wh.getLastAddPushed());</span>
+<span class="nc" id="L129">            assertEquals(-1, wh.getLastAddConfirmed());</span>
+
+<span class="nc" id="L131">            BookieSocketAddress bookieAddress = wh.getLedgerMetadata().getEnsembleAt(wh.getLastAddPushed()).get(0);</span>
+<span class="nc" id="L132">            killBookie(bookieAddress);</span>
+
+            // write should succeed (we still have 2 bookies out of 3)
+<span class="nc" id="L135">            result(wh.appendAsync(DATA.retainedDuplicate()));</span>
+
+            // force cannot go, it must be acknowledged by all of the bookies in the ensamble
+            try {
+<span class="nc" id="L139">                result(wh.force());</span>
+<span class="nc" id="L140">            } catch (BKException.BKBookieException failed) {</span>
+<span class="nc" id="L141">            }</span>
+            // bookie comes up again, force must succeed
+<span class="nc" id="L143">            startKilledBookie(bookieAddress);</span>
+<span class="nc" id="L144">            result(wh.force());</span>
+        }
+<span class="nc" id="L146">    }</span>
+
+    @Test
+    public void testForceWillAdvanceLacOnlyUpToLastAcknoledgedWrite() throws Exception {
+<span class="nc" id="L150">        try (WriteHandle wh = result(newCreateLedgerOp()</span>
+<span class="nc" id="L151">                .withEnsembleSize(3)</span>
+<span class="nc" id="L152">                .withWriteQuorumSize(3)</span>
+<span class="nc" id="L153">                .withAckQuorumSize(3)</span>
+<span class="nc" id="L154">                .withPassword(PASSWORD)</span>
+<span class="nc" id="L155">                .withWriteFlags(WriteFlag.DEFERRED_SYNC)</span>
+<span class="nc" id="L156">                .execute())) {</span>
+<span class="nc bnc" id="L157" title="All 2 branches missed.">            for (int i = 0; i &lt; NUM_ENTRIES - 1; i++) {</span>
+<span class="nc" id="L158">                result(wh.appendAsync(DATA.retainedDuplicate()));</span>
+            }
+<span class="nc" id="L160">            long lastEntryIdBeforeSuspend = result(wh.appendAsync(DATA.retainedDuplicate()));</span>
+<span class="nc" id="L161">            assertEquals(NUM_ENTRIES - 1, lastEntryIdBeforeSuspend);</span>
+<span class="nc" id="L162">            assertEquals(-1, wh.getLastAddConfirmed());</span>
+
+            // one bookie will stop sending acks for forceLedger
+<span class="nc" id="L165">            BookieSocketAddress bookieAddress = wh.getLedgerMetadata().getEnsembleAt(wh.getLastAddPushed()).get(0);</span>
+<span class="nc" id="L166">            suspendBookieForceLedgerAcks(bookieAddress);</span>
+
+            // start and complete a force, lastAddConfirmed cannot be &quot;lastAddPushedAfterSuspendedWrite&quot;
+            // because the write has not yet been acknowledged by AckQuorumSize Bookies
+<span class="nc" id="L170">            CompletableFuture&lt;?&gt; forceResult = wh.force();</span>
+<span class="nc" id="L171">            assertEquals(-1, wh.getLastAddConfirmed());</span>
+
+            // send an entry and receive ack
+<span class="nc" id="L174">            long lastEntry = wh.append(DATA.retainedDuplicate());</span>
+
+            // receive the ack for forceLedger
+<span class="nc" id="L177">            resumeBookieWriteAcks(bookieAddress);</span>
+<span class="nc" id="L178">            result(forceResult);</span>
+
+            // now LastAddConfirmed will be equals to the last confirmed entry
+            // before force() started
+<span class="nc" id="L182">            assertEquals(lastEntryIdBeforeSuspend, wh.getLastAddConfirmed());</span>
+
+<span class="nc" id="L184">            result(wh.force());</span>
+<span class="nc" id="L185">            assertEquals(lastEntry, wh.getLastAddConfirmed());</span>
+        }
+<span class="nc" id="L187">    }</span>
+
+    @Test
+    public void testForbiddenEnsembleChange() throws Exception {
+<span class="nc" id="L191">        try (WriteHandle wh = result(newCreateLedgerOp()</span>
+<span class="nc" id="L192">                .withEnsembleSize(1)</span>
+<span class="nc" id="L193">                .withWriteQuorumSize(1)</span>
+<span class="nc" id="L194">                .withAckQuorumSize(1)</span>
+<span class="nc" id="L195">                .withPassword(PASSWORD)</span>
+<span class="nc" id="L196">                .withWriteFlags(WriteFlag.DEFERRED_SYNC)</span>
+<span class="nc" id="L197">                .execute())) {</span>
+<span class="nc bnc" id="L198" title="All 2 branches missed.">            for (int i = 0; i &lt; NUM_ENTRIES - 1; i++) {</span>
+<span class="nc" id="L199">                wh.append(DATA.retainedDuplicate());</span>
+            }
+
+<span class="nc" id="L202">            assertEquals(1, availableBookies.size());</span>
+            // kill the only bookie in the ensamble
+<span class="nc" id="L204">            killBookie(wh.getLedgerMetadata().getEnsembleAt(wh.getLastAddPushed()).get(0));</span>
+<span class="nc" id="L205">            assertEquals(0, availableBookies.size());</span>
+<span class="nc" id="L206">            startNewBookie();</span>
+<span class="nc" id="L207">            assertEquals(1, availableBookies.size());</span>
+
+            try {
+                // we cannot switch to the new bookie with DEFERRED_SYNC
+<span class="nc" id="L211">                wh.append(DATA.retainedDuplicate());</span>
+<span class="nc" id="L212">                fail(&quot;since ensemble change is disable we cannot be able to write any more&quot;);</span>
+<span class="nc" id="L213">            } catch (BKException.BKWriteException ex) {</span>
+                // expected
+<span class="nc" id="L215">            }</span>
+<span class="nc" id="L216">            LedgerHandle lh = (LedgerHandle) wh;</span>
+<span class="nc" id="L217">            assertFalse(lh.hasDelayedWriteFailedBookies());</span>
+        }
+<span class="nc" id="L219">    }</span>
+
+    @Test(expected = BKException.BKLedgerClosedException.class)
+    public void testCannotIssueForceOnClosedLedgerHandle() throws Exception {
+<span class="nc" id="L223">        WriteHandle wh = result(newCreateLedgerOp()</span>
+<span class="nc" id="L224">                .withEnsembleSize(1)</span>
+<span class="nc" id="L225">                .withWriteQuorumSize(1)</span>
+<span class="nc" id="L226">                .withAckQuorumSize(1)</span>
+<span class="nc" id="L227">                .withPassword(PASSWORD)</span>
+<span class="nc" id="L228">                .withWriteFlags(WriteFlag.DEFERRED_SYNC)</span>
+<span class="nc" id="L229">                .execute());</span>
+<span class="nc" id="L230">        wh.close();</span>
+<span class="nc" id="L231">        result(wh.force());</span>
+<span class="nc" id="L232">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

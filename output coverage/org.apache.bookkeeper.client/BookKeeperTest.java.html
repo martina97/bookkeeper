@@ -1,0 +1,1116 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>BookKeeperTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">BookKeeperTest.java</span></div><h1>BookKeeperTest.java</h1><pre class="source lang-java linenums">/*
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.client;
+
+import static org.apache.bookkeeper.client.BookKeeperClientStats.WRITE_DELAYED_DUE_TO_NOT_ENOUGH_FAULT_DOMAINS;
+import static org.apache.bookkeeper.client.BookKeeperClientStats.WRITE_TIMED_OUT_DUE_TO_NOT_ENOUGH_FAULT_DOMAINS;
+import static org.apache.bookkeeper.common.concurrent.FutureUtils.result;
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import io.netty.util.IllegalReferenceCountException;
+
+import java.io.IOException;
+import java.net.UnknownHostException;
+import java.util.Collections;
+import java.util.Enumeration;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+
+import org.apache.bookkeeper.client.AsyncCallback.AddCallback;
+import org.apache.bookkeeper.client.AsyncCallback.ReadCallback;
+import org.apache.bookkeeper.client.BKException.BKBookieHandleNotAvailableException;
+import org.apache.bookkeeper.client.BKException.BKIllegalOpException;
+import org.apache.bookkeeper.client.BookKeeper.DigestType;
+import org.apache.bookkeeper.client.api.WriteFlag;
+import org.apache.bookkeeper.client.api.WriteHandle;
+import org.apache.bookkeeper.conf.ClientConfiguration;
+import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.proto.BookieServer;
+import org.apache.bookkeeper.stats.NullStatsLogger;
+import org.apache.bookkeeper.stats.StatsLogger;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.apache.bookkeeper.test.TestStatsProvider;
+import org.apache.bookkeeper.zookeeper.BoundExponentialBackoffRetryPolicy;
+import org.apache.bookkeeper.zookeeper.ZooKeeperClient;
+import org.apache.bookkeeper.zookeeper.ZooKeeperWatcherBase;
+import org.apache.zookeeper.AsyncCallback.StringCallback;
+import org.apache.zookeeper.CreateMode;
+import org.apache.zookeeper.KeeperException;
+import org.apache.zookeeper.KeeperException.ConnectionLossException;
+import org.apache.zookeeper.WatchedEvent;
+import org.apache.zookeeper.Watcher;
+import org.apache.zookeeper.Watcher.Event.EventType;
+import org.apache.zookeeper.Watcher.Event.KeeperState;
+import org.apache.zookeeper.ZooKeeper;
+import org.apache.zookeeper.ZooKeeper.States;
+import org.apache.zookeeper.data.ACL;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Tests of the main BookKeeper client.
+ */
+public class BookKeeperTest extends BookKeeperClusterTestCase {
+<span class="nc" id="L83">    private static final Logger LOG = LoggerFactory.getLogger(BookKeeperTest.class);</span>
+    private static final long INVALID_LEDGERID = -1L;
+    private final DigestType digestType;
+
+    public BookKeeperTest() {
+<span class="nc" id="L88">        super(4);</span>
+<span class="nc" id="L89">        this.digestType = DigestType.CRC32;</span>
+<span class="nc" id="L90">    }</span>
+
+    @Test
+    public void testConstructionZkDelay() throws Exception {
+<span class="nc" id="L94">        ClientConfiguration conf = new ClientConfiguration();</span>
+<span class="nc" id="L95">        conf.setMetadataServiceUri(zkUtil.getMetadataServiceUri())</span>
+<span class="nc" id="L96">            .setZkTimeout(20000);</span>
+
+<span class="nc" id="L98">        CountDownLatch l = new CountDownLatch(1);</span>
+<span class="nc" id="L99">        zkUtil.sleepCluster(200, TimeUnit.MILLISECONDS, l);</span>
+<span class="nc" id="L100">        l.await();</span>
+
+<span class="nc" id="L102">        BookKeeper bkc = new BookKeeper(conf);</span>
+<span class="nc" id="L103">        bkc.createLedger(digestType, &quot;testPasswd&quot;.getBytes()).close();</span>
+<span class="nc" id="L104">        bkc.close();</span>
+<span class="nc" id="L105">    }</span>
+
+    @Test
+    public void testConstructionNotConnectedExplicitZk() throws Exception {
+<span class="nc" id="L109">        ClientConfiguration conf = new ClientConfiguration();</span>
+<span class="nc" id="L110">        conf.setMetadataServiceUri(zkUtil.getMetadataServiceUri())</span>
+<span class="nc" id="L111">            .setZkTimeout(20000);</span>
+
+<span class="nc" id="L113">        CountDownLatch l = new CountDownLatch(1);</span>
+<span class="nc" id="L114">        zkUtil.sleepCluster(200, TimeUnit.MILLISECONDS, l);</span>
+<span class="nc" id="L115">        l.await();</span>
+
+<span class="nc" id="L117">        ZooKeeper zk = new ZooKeeper(</span>
+<span class="nc" id="L118">            zkUtil.getZooKeeperConnectString(),</span>
+            50,
+<span class="nc" id="L120">            event -&gt; {});</span>
+<span class="nc" id="L121">        assertFalse(&quot;ZK shouldn't have connected yet&quot;, zk.getState().isConnected());</span>
+        try {
+<span class="nc" id="L123">            BookKeeper bkc = new BookKeeper(conf, zk);</span>
+<span class="nc" id="L124">            fail(&quot;Shouldn't be able to construct with unconnected zk&quot;);</span>
+<span class="nc" id="L125">        } catch (IOException cle) {</span>
+            // correct behaviour
+<span class="nc" id="L127">            assertTrue(cle.getCause() instanceof ConnectionLossException);</span>
+<span class="nc" id="L128">        }</span>
+<span class="nc" id="L129">    }</span>
+
+    /**
+     * Test that bookkeeper is not able to open ledgers if
+     * it provides the wrong password or wrong digest.
+     */
+    @Test
+    public void testBookkeeperDigestPasswordWithAutoDetection() throws Exception {
+<span class="nc" id="L137">        testBookkeeperDigestPassword(true);</span>
+<span class="nc" id="L138">    }</span>
+
+    @Test
+    public void testBookkeeperDigestPasswordWithoutAutoDetection() throws Exception {
+<span class="nc" id="L142">        testBookkeeperDigestPassword(false);</span>
+<span class="nc" id="L143">    }</span>
+
+    void testBookkeeperDigestPassword(boolean autodetection) throws Exception {
+<span class="nc" id="L146">        ClientConfiguration conf = new ClientConfiguration();</span>
+<span class="nc" id="L147">        conf.setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+<span class="nc" id="L148">        conf.setEnableDigestTypeAutodetection(autodetection);</span>
+<span class="nc" id="L149">        BookKeeper bkc = new BookKeeper(conf);</span>
+
+<span class="nc" id="L151">        DigestType digestCorrect = digestType;</span>
+<span class="nc" id="L152">        byte[] passwdCorrect = &quot;AAAAAAA&quot;.getBytes();</span>
+<span class="nc bnc" id="L153" title="All 2 branches missed.">        DigestType digestBad = digestType == DigestType.MAC ? DigestType.CRC32 : DigestType.MAC;</span>
+<span class="nc" id="L154">        byte[] passwdBad = &quot;BBBBBBB&quot;.getBytes();</span>
+
+
+<span class="nc" id="L157">        LedgerHandle lh = null;</span>
+        try {
+<span class="nc" id="L159">            lh = bkc.createLedger(digestCorrect, passwdCorrect);</span>
+<span class="nc" id="L160">            long id = lh.getId();</span>
+<span class="nc bnc" id="L161" title="All 2 branches missed.">            for (int i = 0; i &lt; 100; i++) {</span>
+<span class="nc" id="L162">                lh.addEntry(&quot;foobar&quot;.getBytes());</span>
+            }
+<span class="nc" id="L164">            lh.close();</span>
+
+            // try open with bad passwd
+            try {
+<span class="nc" id="L168">                bkc.openLedger(id, digestCorrect, passwdBad);</span>
+<span class="nc" id="L169">                fail(&quot;Shouldn't be able to open with bad passwd&quot;);</span>
+<span class="nc" id="L170">            } catch (BKException.BKUnauthorizedAccessException bke) {</span>
+                // correct behaviour
+<span class="nc" id="L172">            }</span>
+
+            // try open with bad digest
+            try {
+<span class="nc" id="L176">                bkc.openLedger(id, digestBad, passwdCorrect);</span>
+<span class="nc bnc" id="L177" title="All 2 branches missed.">                if (!autodetection) {</span>
+<span class="nc" id="L178">                    fail(&quot;Shouldn't be able to open with bad digest&quot;);</span>
+                }
+<span class="nc" id="L180">            } catch (BKException.BKDigestMatchException bke) {</span>
+                // correct behaviour
+<span class="nc bnc" id="L182" title="All 2 branches missed.">                if (autodetection) {</span>
+<span class="nc" id="L183">                    fail(&quot;Should not throw digest match exception if `autodetection` is enabled&quot;);</span>
+                }
+<span class="nc" id="L185">            }</span>
+
+            // try open with both bad
+            try {
+<span class="nc" id="L189">                bkc.openLedger(id, digestBad, passwdBad);</span>
+<span class="nc" id="L190">                fail(&quot;Shouldn't be able to open with bad passwd and digest&quot;);</span>
+<span class="nc" id="L191">            } catch (BKException.BKUnauthorizedAccessException bke) {</span>
+                // correct behaviour
+<span class="nc" id="L193">            }</span>
+
+            // try open with both correct
+<span class="nc" id="L196">            bkc.openLedger(id, digestCorrect, passwdCorrect).close();</span>
+        } finally {
+<span class="nc bnc" id="L198" title="All 2 branches missed.">            if (lh != null) {</span>
+<span class="nc" id="L199">                lh.close();</span>
+            }
+<span class="nc" id="L201">            bkc.close();</span>
+        }
+<span class="nc" id="L203">    }</span>
+
+    /**
+     * Tests that when trying to use a closed BK client object we get
+     * a callback error and not an InterruptedException.
+     * @throws Exception
+     */
+    @Test
+    public void testAsyncReadWithError() throws Exception {
+<span class="nc" id="L212">        LedgerHandle lh = bkc.createLedger(3, 3, DigestType.CRC32, &quot;testPasswd&quot;.getBytes());</span>
+<span class="nc" id="L213">        bkc.close();</span>
+
+<span class="nc" id="L215">        final AtomicInteger result = new AtomicInteger(0);</span>
+<span class="nc" id="L216">        final CountDownLatch counter = new CountDownLatch(1);</span>
+
+        // Try to write, we shoud get and error callback but not an exception
+<span class="nc" id="L219">        lh.asyncAddEntry(&quot;test&quot;.getBytes(), new AddCallback() {</span>
+            public void addComplete(int rc, LedgerHandle lh, long entryId, Object ctx) {
+<span class="nc" id="L221">                result.set(rc);</span>
+<span class="nc" id="L222">                counter.countDown();</span>
+<span class="nc" id="L223">            }</span>
+        }, null);
+
+<span class="nc" id="L226">        counter.await();</span>
+
+<span class="nc bnc" id="L228" title="All 2 branches missed.">        assertTrue(result.get() != 0);</span>
+<span class="nc" id="L229">    }</span>
+
+    /**
+     * Test that bookkeeper will close cleanly if close is issued
+     * while another operation is in progress.
+     */
+    @Test
+    public void testCloseDuringOp() throws Exception {
+<span class="nc" id="L237">        ClientConfiguration conf = new ClientConfiguration();</span>
+<span class="nc" id="L238">        conf.setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+<span class="nc bnc" id="L239" title="All 2 branches missed.">        for (int i = 0; i &lt; 10; i++) {</span>
+<span class="nc" id="L240">            final BookKeeper client = new BookKeeper(conf);</span>
+<span class="nc" id="L241">            final CountDownLatch l = new CountDownLatch(1);</span>
+<span class="nc" id="L242">            final AtomicBoolean success = new AtomicBoolean(false);</span>
+<span class="nc" id="L243">            Thread t = new Thread() {</span>
+                    public void run() {
+                        try {
+<span class="nc" id="L246">                            LedgerHandle lh = client.createLedger(3, 3, digestType, &quot;testPasswd&quot;.getBytes());</span>
+<span class="nc" id="L247">                            startNewBookie();</span>
+<span class="nc" id="L248">                            killBookie(0);</span>
+<span class="nc" id="L249">                            lh.asyncAddEntry(&quot;test&quot;.getBytes(), new AddCallback() {</span>
+                                    @Override
+                                    public void addComplete(int rc, LedgerHandle lh, long entryId, Object ctx) {
+                                        // noop, we don't care if this completes
+<span class="nc" id="L253">                                    }</span>
+                                }, null);
+<span class="nc" id="L255">                            client.close();</span>
+<span class="nc" id="L256">                            success.set(true);</span>
+<span class="nc" id="L257">                            l.countDown();</span>
+<span class="nc" id="L258">                        } catch (Exception e) {</span>
+<span class="nc" id="L259">                            LOG.error(&quot;Error running test&quot;, e);</span>
+<span class="nc" id="L260">                            success.set(false);</span>
+<span class="nc" id="L261">                            l.countDown();</span>
+<span class="nc" id="L262">                        }</span>
+<span class="nc" id="L263">                    }</span>
+                };
+<span class="nc" id="L265">            t.start();</span>
+<span class="nc" id="L266">            assertTrue(&quot;Close never completed&quot;, l.await(10, TimeUnit.SECONDS));</span>
+<span class="nc" id="L267">            assertTrue(&quot;Close was not successful&quot;, success.get());</span>
+        }
+<span class="nc" id="L269">    }</span>
+
+    @Test
+    public void testIsClosed() throws Exception {
+<span class="nc" id="L273">        ClientConfiguration conf = new ClientConfiguration();</span>
+<span class="nc" id="L274">        conf.setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+
+<span class="nc" id="L276">        BookKeeper bkc = new BookKeeper(conf);</span>
+<span class="nc" id="L277">        LedgerHandle lh = bkc.createLedger(digestType, &quot;testPasswd&quot;.getBytes());</span>
+<span class="nc" id="L278">        Long lId = lh.getId();</span>
+
+<span class="nc" id="L280">        lh.addEntry(&quot;000&quot;.getBytes());</span>
+<span class="nc" id="L281">        boolean result = bkc.isClosed(lId);</span>
+<span class="nc bnc" id="L282" title="All 2 branches missed.">        assertTrue(&quot;Ledger shouldn't be flagged as closed!&quot;, !result);</span>
+
+<span class="nc" id="L284">        lh.close();</span>
+<span class="nc" id="L285">        result = bkc.isClosed(lId);</span>
+<span class="nc" id="L286">        assertTrue(&quot;Ledger should be flagged as closed!&quot;, result);</span>
+
+<span class="nc" id="L288">        bkc.close();</span>
+<span class="nc" id="L289">    }</span>
+
+    @Test
+    public void testReadFailureCallback() throws Exception {
+<span class="nc" id="L293">        ClientConfiguration conf = new ClientConfiguration();</span>
+<span class="nc" id="L294">        conf.setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+
+<span class="nc" id="L296">        BookKeeper bkc = new BookKeeper(conf);</span>
+<span class="nc" id="L297">        LedgerHandle lh = bkc.createLedger(digestType, &quot;testPasswd&quot;.getBytes());</span>
+
+<span class="nc" id="L299">        final int numEntries = 10;</span>
+<span class="nc bnc" id="L300" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L301">            lh.addEntry((&quot;entry-&quot; + i).getBytes());</span>
+        }
+
+<span class="nc" id="L304">        stopBKCluster();</span>
+
+        try {
+<span class="nc" id="L307">            lh.readEntries(0, numEntries - 1);</span>
+<span class="nc" id="L308">            fail(&quot;Read operation should have failed&quot;);</span>
+<span class="nc" id="L309">        } catch (BKBookieHandleNotAvailableException e) {</span>
+            // expected
+<span class="nc" id="L311">        }</span>
+
+<span class="nc" id="L313">        final CountDownLatch counter = new CountDownLatch(1);</span>
+<span class="nc" id="L314">        final AtomicInteger receivedResponses = new AtomicInteger(0);</span>
+<span class="nc" id="L315">        final AtomicInteger returnCode = new AtomicInteger();</span>
+<span class="nc" id="L316">        lh.asyncReadEntries(0, numEntries - 1, new ReadCallback() {</span>
+            @Override
+            public void readComplete(int rc, LedgerHandle lh, Enumeration&lt;LedgerEntry&gt; seq, Object ctx) {
+<span class="nc" id="L319">                returnCode.set(rc);</span>
+<span class="nc" id="L320">                receivedResponses.incrementAndGet();</span>
+<span class="nc" id="L321">                counter.countDown();</span>
+<span class="nc" id="L322">            }</span>
+        }, null);
+
+<span class="nc" id="L325">        counter.await();</span>
+
+        // Wait extra time to ensure no extra responses received
+<span class="nc" id="L328">        Thread.sleep(1000);</span>
+
+<span class="nc" id="L330">        assertEquals(1, receivedResponses.get());</span>
+<span class="nc" id="L331">        assertEquals(BKException.Code.BookieHandleNotAvailableException, returnCode.get());</span>
+
+<span class="nc" id="L333">        bkc.close();</span>
+<span class="nc" id="L334">    }</span>
+
+    @Test
+    public void testAutoCloseableBookKeeper() throws Exception {
+<span class="nc" id="L338">        ClientConfiguration conf = new ClientConfiguration();</span>
+<span class="nc" id="L339">        conf.setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+        BookKeeper bkc2;
+<span class="nc" id="L341">        try (BookKeeper bkc = new BookKeeper(conf)) {</span>
+<span class="nc" id="L342">            bkc2 = bkc;</span>
+            long ledgerId;
+<span class="nc" id="L344">            try (LedgerHandle lh = bkc.createLedger(digestType, &quot;testPasswd&quot;.getBytes())) {</span>
+<span class="nc" id="L345">                ledgerId = lh.getId();</span>
+<span class="nc bnc" id="L346" title="All 2 branches missed.">                for (int i = 0; i &lt; 100; i++) {</span>
+<span class="nc" id="L347">                    lh.addEntry(&quot;foobar&quot;.getBytes());</span>
+                }
+            }
+<span class="nc" id="L350">            assertTrue(&quot;Ledger should be closed!&quot;, bkc.isClosed(ledgerId));</span>
+        }
+<span class="nc" id="L352">        assertTrue(&quot;BookKeeper should be closed!&quot;, bkc2.closed);</span>
+<span class="nc" id="L353">    }</span>
+
+    @Test
+    public void testReadAfterLastAddConfirmed() throws Exception {
+
+<span class="nc" id="L358">        ClientConfiguration clientConfiguration = new ClientConfiguration();</span>
+<span class="nc" id="L359">        clientConfiguration.setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+
+<span class="nc" id="L361">        try (BookKeeper bkWriter = new BookKeeper(clientConfiguration)) {</span>
+<span class="nc" id="L362">            LedgerHandle writeLh = bkWriter.createLedger(digestType, &quot;testPasswd&quot;.getBytes());</span>
+<span class="nc" id="L363">            long ledgerId = writeLh.getId();</span>
+<span class="nc" id="L364">            int numOfEntries = 5;</span>
+<span class="nc bnc" id="L365" title="All 2 branches missed.">            for (int i = 0; i &lt; numOfEntries; i++) {</span>
+<span class="nc" id="L366">                writeLh.addEntry((&quot;foobar&quot; + i).getBytes());</span>
+            }
+
+<span class="nc" id="L369">            try (BookKeeper bkReader = new BookKeeper(clientConfiguration);</span>
+<span class="nc" id="L370">                LedgerHandle rlh = bkReader.openLedgerNoRecovery(ledgerId, digestType, &quot;testPasswd&quot;.getBytes())) {</span>
+<span class="nc" id="L371">                assertTrue(</span>
+<span class="nc" id="L372">                    &quot;Expected LAC of rlh: &quot; + (numOfEntries - 2) + &quot; actual LAC of rlh: &quot; + rlh.getLastAddConfirmed(),</span>
+<span class="nc bnc" id="L373" title="All 2 branches missed.">                    (rlh.getLastAddConfirmed() == (numOfEntries - 2)));</span>
+
+<span class="nc" id="L375">                assertFalse(writeLh.isClosed());</span>
+
+                // with readUnconfirmedEntries we are able to read all of the entries
+<span class="nc" id="L378">                Enumeration&lt;LedgerEntry&gt; entries = rlh.readUnconfirmedEntries(0, numOfEntries - 1);</span>
+<span class="nc" id="L379">                int entryId = 0;</span>
+<span class="nc bnc" id="L380" title="All 2 branches missed.">                while (entries.hasMoreElements()) {</span>
+<span class="nc" id="L381">                    LedgerEntry entry = entries.nextElement();</span>
+<span class="nc" id="L382">                    String entryString = new String(entry.getEntry());</span>
+<span class="nc" id="L383">                    assertTrue(&quot;Expected entry String: &quot; + (&quot;foobar&quot; + entryId)</span>
+                        + &quot; actual entry String: &quot; + entryString,
+<span class="nc" id="L385">                        entryString.equals(&quot;foobar&quot; + entryId));</span>
+<span class="nc" id="L386">                    entryId++;</span>
+<span class="nc" id="L387">                }</span>
+            }
+
+<span class="nc" id="L390">            try (BookKeeper bkReader = new BookKeeper(clientConfiguration);</span>
+<span class="nc" id="L391">                LedgerHandle rlh = bkReader.openLedgerNoRecovery(ledgerId, digestType, &quot;testPasswd&quot;.getBytes())) {</span>
+<span class="nc" id="L392">                assertTrue(</span>
+<span class="nc" id="L393">                    &quot;Expected LAC of rlh: &quot; + (numOfEntries - 2) + &quot; actual LAC of rlh: &quot; + rlh.getLastAddConfirmed(),</span>
+<span class="nc bnc" id="L394" title="All 2 branches missed.">                    (rlh.getLastAddConfirmed() == (numOfEntries - 2)));</span>
+
+<span class="nc" id="L396">                assertFalse(writeLh.isClosed());</span>
+
+                // without readUnconfirmedEntries we are not able to read all of the entries
+                try {
+<span class="nc" id="L400">                    rlh.readEntries(0, numOfEntries - 1);</span>
+<span class="nc" id="L401">                    fail(&quot;shoud not be able to read up to &quot; + (numOfEntries - 1) + &quot; with readEntries&quot;);</span>
+<span class="nc" id="L402">                } catch (BKException.BKReadException expected) {</span>
+<span class="nc" id="L403">                }</span>
+
+                // read all entries within the 0..LastAddConfirmed range with readEntries
+<span class="nc" id="L406">                assertEquals(rlh.getLastAddConfirmed() + 1,</span>
+<span class="nc" id="L407">                    Collections.list(rlh.readEntries(0, rlh.getLastAddConfirmed())).size());</span>
+
+                // assert local LAC does not change after reads
+<span class="nc" id="L410">                assertTrue(</span>
+<span class="nc" id="L411">                    &quot;Expected LAC of rlh: &quot; + (numOfEntries - 2) + &quot; actual LAC of rlh: &quot; + rlh.getLastAddConfirmed(),</span>
+<span class="nc bnc" id="L412" title="All 2 branches missed.">                    (rlh.getLastAddConfirmed() == (numOfEntries - 2)));</span>
+
+                // read all entries within the 0..LastAddConfirmed range with readUnconfirmedEntries
+<span class="nc" id="L415">                assertEquals(rlh.getLastAddConfirmed() + 1,</span>
+<span class="nc" id="L416">                    Collections.list(rlh.readUnconfirmedEntries(0, rlh.getLastAddConfirmed())).size());</span>
+
+                // assert local LAC does not change after reads
+<span class="nc" id="L419">                assertTrue(</span>
+<span class="nc" id="L420">                    &quot;Expected LAC of rlh: &quot; + (numOfEntries - 2) + &quot; actual LAC of rlh: &quot; + rlh.getLastAddConfirmed(),</span>
+<span class="nc bnc" id="L421" title="All 2 branches missed.">                    (rlh.getLastAddConfirmed() == (numOfEntries - 2)));</span>
+
+                // read all entries within the LastAddConfirmed..numOfEntries - 1 range with readUnconfirmedEntries
+<span class="nc" id="L424">                assertEquals(numOfEntries - rlh.getLastAddConfirmed(),</span>
+<span class="nc" id="L425">                    Collections.list(rlh.readUnconfirmedEntries(rlh.getLastAddConfirmed(), numOfEntries - 1)).size());</span>
+
+                // assert local LAC does not change after reads
+<span class="nc" id="L428">                assertTrue(</span>
+<span class="nc" id="L429">                    &quot;Expected LAC of rlh: &quot; + (numOfEntries - 2) + &quot; actual LAC of rlh: &quot; + rlh.getLastAddConfirmed(),</span>
+<span class="nc bnc" id="L430" title="All 2 branches missed.">                    (rlh.getLastAddConfirmed() == (numOfEntries - 2)));</span>
+
+                try {
+                    // read all entries within the LastAddConfirmed..numOfEntries range  with readUnconfirmedEntries
+                    // this is an error, we are going outside the range of existing entries
+<span class="nc" id="L435">                    rlh.readUnconfirmedEntries(rlh.getLastAddConfirmed(), numOfEntries);</span>
+<span class="nc" id="L436">                    fail(&quot;the read tried to access data for unexisting entry id &quot; + numOfEntries);</span>
+<span class="nc" id="L437">                } catch (BKException.BKNoSuchEntryException expected) {</span>
+                    // expecting a BKNoSuchEntryException, as the entry does not exist on bookies
+<span class="nc" id="L439">                }</span>
+
+                try {
+                    // read all entries within the LastAddConfirmed..numOfEntries range with readEntries
+                    // this is an error, we are going outside the range of existing entries
+<span class="nc" id="L444">                    rlh.readEntries(rlh.getLastAddConfirmed(), numOfEntries);</span>
+<span class="nc" id="L445">                    fail(&quot;the read tries to access data for unexisting entry id &quot; + numOfEntries);</span>
+<span class="nc" id="L446">                } catch (BKException.BKReadException expected) {</span>
+                    // expecting a BKReadException, as the client rejected the request to access entries
+                    // after local LastAddConfirmed
+<span class="nc" id="L449">                }</span>
+
+            }
+
+            // ensure that after restarting every bookie entries are not lost
+            // even entries after the LastAddConfirmed
+<span class="nc" id="L455">            restartBookies();</span>
+
+<span class="nc" id="L457">            try (BookKeeper bkReader = new BookKeeper(clientConfiguration);</span>
+<span class="nc" id="L458">                LedgerHandle rlh = bkReader.openLedgerNoRecovery(ledgerId, digestType, &quot;testPasswd&quot;.getBytes())) {</span>
+<span class="nc" id="L459">                assertTrue(</span>
+<span class="nc" id="L460">                    &quot;Expected LAC of rlh: &quot; + (numOfEntries - 2) + &quot; actual LAC of rlh: &quot; + rlh.getLastAddConfirmed(),</span>
+<span class="nc bnc" id="L461" title="All 2 branches missed.">                    (rlh.getLastAddConfirmed() == (numOfEntries - 2)));</span>
+
+<span class="nc" id="L463">                assertFalse(writeLh.isClosed());</span>
+
+                // with readUnconfirmedEntries we are able to read all of the entries
+<span class="nc" id="L466">                Enumeration&lt;LedgerEntry&gt; entries = rlh.readUnconfirmedEntries(0, numOfEntries - 1);</span>
+<span class="nc" id="L467">                int entryId = 0;</span>
+<span class="nc bnc" id="L468" title="All 2 branches missed.">                while (entries.hasMoreElements()) {</span>
+<span class="nc" id="L469">                    LedgerEntry entry = entries.nextElement();</span>
+<span class="nc" id="L470">                    String entryString = new String(entry.getEntry());</span>
+<span class="nc" id="L471">                    assertTrue(&quot;Expected entry String: &quot; + (&quot;foobar&quot; + entryId)</span>
+                        + &quot; actual entry String: &quot; + entryString,
+<span class="nc" id="L473">                        entryString.equals(&quot;foobar&quot; + entryId));</span>
+<span class="nc" id="L474">                    entryId++;</span>
+<span class="nc" id="L475">                }</span>
+            }
+
+<span class="nc" id="L478">            try (BookKeeper bkReader = new BookKeeper(clientConfiguration);</span>
+<span class="nc" id="L479">                LedgerHandle rlh = bkReader.openLedgerNoRecovery(ledgerId, digestType, &quot;testPasswd&quot;.getBytes())) {</span>
+<span class="nc" id="L480">                assertTrue(</span>
+<span class="nc" id="L481">                    &quot;Expected LAC of rlh: &quot; + (numOfEntries - 2) + &quot; actual LAC of rlh: &quot; + rlh.getLastAddConfirmed(),</span>
+<span class="nc bnc" id="L482" title="All 2 branches missed.">                    (rlh.getLastAddConfirmed() == (numOfEntries - 2)));</span>
+
+<span class="nc" id="L484">                assertFalse(writeLh.isClosed());</span>
+
+                // without readUnconfirmedEntries we are not able to read all of the entries
+                try {
+<span class="nc" id="L488">                    rlh.readEntries(0, numOfEntries - 1);</span>
+<span class="nc" id="L489">                    fail(&quot;shoud not be able to read up to &quot; + (numOfEntries - 1) + &quot; with readEntries&quot;);</span>
+<span class="nc" id="L490">                } catch (BKException.BKReadException expected) {</span>
+<span class="nc" id="L491">                }</span>
+
+                // read all entries within the 0..LastAddConfirmed range with readEntries
+<span class="nc" id="L494">                assertEquals(rlh.getLastAddConfirmed() + 1,</span>
+<span class="nc" id="L495">                    Collections.list(rlh.readEntries(0, rlh.getLastAddConfirmed())).size());</span>
+
+                // assert local LAC does not change after reads
+<span class="nc" id="L498">                assertTrue(</span>
+<span class="nc" id="L499">                    &quot;Expected LAC of rlh: &quot; + (numOfEntries - 2) + &quot; actual LAC of rlh: &quot; + rlh.getLastAddConfirmed(),</span>
+<span class="nc bnc" id="L500" title="All 2 branches missed.">                    (rlh.getLastAddConfirmed() == (numOfEntries - 2)));</span>
+
+                // read all entries within the 0..LastAddConfirmed range with readUnconfirmedEntries
+<span class="nc" id="L503">                assertEquals(rlh.getLastAddConfirmed() + 1,</span>
+<span class="nc" id="L504">                    Collections.list(rlh.readUnconfirmedEntries(0, rlh.getLastAddConfirmed())).size());</span>
+
+                // assert local LAC does not change after reads
+<span class="nc" id="L507">                assertTrue(</span>
+<span class="nc" id="L508">                    &quot;Expected LAC of rlh: &quot; + (numOfEntries - 2) + &quot; actual LAC of rlh: &quot; + rlh.getLastAddConfirmed(),</span>
+<span class="nc bnc" id="L509" title="All 2 branches missed.">                    (rlh.getLastAddConfirmed() == (numOfEntries - 2)));</span>
+
+                // read all entries within the LastAddConfirmed..numOfEntries - 1 range with readUnconfirmedEntries
+<span class="nc" id="L512">                assertEquals(numOfEntries - rlh.getLastAddConfirmed(),</span>
+<span class="nc" id="L513">                    Collections.list(rlh.readUnconfirmedEntries(rlh.getLastAddConfirmed(), numOfEntries - 1)).size());</span>
+
+                // assert local LAC does not change after reads
+<span class="nc" id="L516">                assertTrue(</span>
+<span class="nc" id="L517">                    &quot;Expected LAC of rlh: &quot; + (numOfEntries - 2) + &quot; actual LAC of rlh: &quot; + rlh.getLastAddConfirmed(),</span>
+<span class="nc bnc" id="L518" title="All 2 branches missed.">                    (rlh.getLastAddConfirmed() == (numOfEntries - 2)));</span>
+
+                try {
+                    // read all entries within the LastAddConfirmed..numOfEntries range  with readUnconfirmedEntries
+                    // this is an error, we are going outside the range of existing entries
+<span class="nc" id="L523">                    rlh.readUnconfirmedEntries(rlh.getLastAddConfirmed(), numOfEntries);</span>
+<span class="nc" id="L524">                    fail(&quot;the read tried to access data for unexisting entry id &quot; + numOfEntries);</span>
+<span class="nc" id="L525">                } catch (BKException.BKNoSuchEntryException expected) {</span>
+                    // expecting a BKNoSuchEntryException, as the entry does not exist on bookies
+<span class="nc" id="L527">                }</span>
+
+                try {
+                    // read all entries within the LastAddConfirmed..numOfEntries range with readEntries
+                    // this is an error, we are going outside the range of existing entries
+<span class="nc" id="L532">                    rlh.readEntries(rlh.getLastAddConfirmed(), numOfEntries);</span>
+<span class="nc" id="L533">                    fail(&quot;the read tries to access data for unexisting entry id &quot; + numOfEntries);</span>
+<span class="nc" id="L534">                } catch (BKException.BKReadException expected) {</span>
+                    // expecting a BKReadException, as the client rejected the request to access entries
+                    // after local LastAddConfirmed
+<span class="nc" id="L537">                }</span>
+
+            }
+
+            // open ledger with fencing, this will repair the ledger and make the last entry readable
+<span class="nc" id="L542">            try (BookKeeper bkReader = new BookKeeper(clientConfiguration);</span>
+<span class="nc" id="L543">                LedgerHandle rlh = bkReader.openLedger(ledgerId, digestType, &quot;testPasswd&quot;.getBytes())) {</span>
+<span class="nc" id="L544">                assertTrue(</span>
+<span class="nc" id="L545">                    &quot;Expected LAC of rlh: &quot; + (numOfEntries - 1) + &quot; actual LAC of rlh: &quot; + rlh.getLastAddConfirmed(),</span>
+<span class="nc bnc" id="L546" title="All 2 branches missed.">                    (rlh.getLastAddConfirmed() == (numOfEntries - 1)));</span>
+
+<span class="nc" id="L548">                assertFalse(writeLh.isClosed());</span>
+
+                // without readUnconfirmedEntries we are not able to read all of the entries
+<span class="nc" id="L551">                Enumeration&lt;LedgerEntry&gt; entries = rlh.readEntries(0, numOfEntries - 1);</span>
+<span class="nc" id="L552">                int entryId = 0;</span>
+<span class="nc bnc" id="L553" title="All 2 branches missed.">                while (entries.hasMoreElements()) {</span>
+<span class="nc" id="L554">                    LedgerEntry entry = entries.nextElement();</span>
+<span class="nc" id="L555">                    String entryString = new String(entry.getEntry());</span>
+<span class="nc" id="L556">                    assertTrue(&quot;Expected entry String: &quot; + (&quot;foobar&quot; + entryId)</span>
+                        + &quot; actual entry String: &quot; + entryString,
+<span class="nc" id="L558">                        entryString.equals(&quot;foobar&quot; + entryId));</span>
+<span class="nc" id="L559">                    entryId++;</span>
+<span class="nc" id="L560">                }</span>
+            }
+
+            // should still be able to close as long as recovery closed the ledger
+            // with the same last entryId and length as in the write handle.
+<span class="nc" id="L565">            writeLh.close();</span>
+        }
+<span class="nc" id="L567">    }</span>
+
+    @Test
+    public void testReadWriteWithV2WireProtocol() throws Exception {
+<span class="nc" id="L571">        ClientConfiguration conf = new ClientConfiguration().setUseV2WireProtocol(true);</span>
+<span class="nc" id="L572">        conf.setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+<span class="nc" id="L573">        int numEntries = 100;</span>
+<span class="nc" id="L574">        byte[] data = &quot;foobar&quot;.getBytes();</span>
+<span class="nc" id="L575">        try (BookKeeper bkc = new BookKeeper(conf)) {</span>
+
+            // basic read/write
+            {
+                long ledgerId;
+<span class="nc" id="L580">                try (LedgerHandle lh = bkc.createLedger(digestType, &quot;testPasswd&quot;.getBytes())) {</span>
+<span class="nc" id="L581">                    ledgerId = lh.getId();</span>
+<span class="nc bnc" id="L582" title="All 2 branches missed.">                    for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L583">                        lh.addEntry(data);</span>
+                    }
+                }
+<span class="nc" id="L586">                try (LedgerHandle lh = bkc.openLedger(ledgerId, digestType, &quot;testPasswd&quot;.getBytes())) {</span>
+<span class="nc" id="L587">                    assertEquals(numEntries - 1, lh.readLastConfirmed());</span>
+<span class="nc" id="L588">                    for (Enumeration&lt;LedgerEntry&gt; readEntries = lh.readEntries(0, numEntries - 1);</span>
+<span class="nc bnc" id="L589" title="All 2 branches missed.">                        readEntries.hasMoreElements();) {</span>
+<span class="nc" id="L590">                        LedgerEntry entry = readEntries.nextElement();</span>
+<span class="nc" id="L591">                        assertArrayEquals(data, entry.getEntry());</span>
+<span class="nc" id="L592">                    }</span>
+                }
+            }
+
+            // basic fencing
+            {
+                long ledgerId;
+<span class="nc" id="L599">                try (LedgerHandle lh2 = bkc.createLedger(digestType, &quot;testPasswd&quot;.getBytes())) {</span>
+<span class="nc" id="L600">                    ledgerId = lh2.getId();</span>
+<span class="nc" id="L601">                    lh2.addEntry(data);</span>
+<span class="nc" id="L602">                    try (LedgerHandle lh2Fence = bkc.openLedger(ledgerId, digestType, &quot;testPasswd&quot;.getBytes())) {</span>
+<span class="nc bnc" id="L603" title="All 4 branches missed.">                    }</span>
+                    try {
+<span class="nc" id="L605">                        lh2.addEntry(data);</span>
+<span class="nc" id="L606">                        fail(&quot;ledger should be fenced&quot;);</span>
+<span class="nc" id="L607">                    } catch (BKException.BKLedgerFencedException ex){</span>
+<span class="nc" id="L608">                    }</span>
+                }
+            }
+        }
+<span class="nc" id="L612">    }</span>
+
+    @SuppressWarnings(&quot;deprecation&quot;)
+    @Test
+    public void testReadEntryReleaseByteBufs() throws Exception {
+<span class="nc" id="L617">        ClientConfiguration confWriter = new ClientConfiguration();</span>
+<span class="nc" id="L618">        confWriter.setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+<span class="nc" id="L619">        int numEntries = 10;</span>
+<span class="nc" id="L620">        byte[] data = &quot;foobar&quot;.getBytes();</span>
+        long ledgerId;
+<span class="nc" id="L622">        try (BookKeeper bkc = new BookKeeper(confWriter)) {</span>
+<span class="nc" id="L623">            try (LedgerHandle lh = bkc.createLedger(digestType, &quot;testPasswd&quot;.getBytes())) {</span>
+<span class="nc" id="L624">                ledgerId = lh.getId();</span>
+<span class="nc bnc" id="L625" title="All 2 branches missed.">                for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L626">                    lh.addEntry(data);</span>
+                }
+            }
+        }
+
+        // v2 protocol, using pooled buffers
+<span class="nc" id="L632">        ClientConfiguration confReader1 = new ClientConfiguration()</span>
+<span class="nc" id="L633">            .setUseV2WireProtocol(true)</span>
+<span class="nc" id="L634">            .setNettyUsePooledBuffers(true)</span>
+<span class="nc" id="L635">            .setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+
+<span class="nc" id="L637">        try (BookKeeper bkc = new BookKeeper(confReader1)) {</span>
+<span class="nc" id="L638">            try (LedgerHandle lh = bkc.openLedger(ledgerId, digestType, &quot;testPasswd&quot;.getBytes())) {</span>
+<span class="nc" id="L639">                assertEquals(numEntries - 1, lh.readLastConfirmed());</span>
+<span class="nc" id="L640">                for (Enumeration&lt;LedgerEntry&gt; readEntries = lh.readEntries(0, numEntries - 1);</span>
+<span class="nc bnc" id="L641" title="All 2 branches missed.">                    readEntries.hasMoreElements();) {</span>
+<span class="nc" id="L642">                    LedgerEntry entry = readEntries.nextElement();</span>
+                    try {
+<span class="nc" id="L644">                        entry.data.release();</span>
+<span class="nc" id="L645">                    } catch (IllegalReferenceCountException ok) {</span>
+<span class="nc" id="L646">                        fail(&quot;ByteBuf already released&quot;);</span>
+<span class="nc" id="L647">                    }</span>
+<span class="nc" id="L648">                }</span>
+            }
+        }
+
+        // v2 protocol, not using pooled buffers
+<span class="nc" id="L653">        ClientConfiguration confReader2 = new ClientConfiguration()</span>
+<span class="nc" id="L654">            .setUseV2WireProtocol(true)</span>
+<span class="nc" id="L655">            .setNettyUsePooledBuffers(false);</span>
+<span class="nc" id="L656">        confReader2.setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+
+<span class="nc" id="L658">        try (BookKeeper bkc = new BookKeeper(confReader2)) {</span>
+<span class="nc" id="L659">            try (LedgerHandle lh = bkc.openLedger(ledgerId, digestType, &quot;testPasswd&quot;.getBytes())) {</span>
+<span class="nc" id="L660">                assertEquals(numEntries - 1, lh.readLastConfirmed());</span>
+<span class="nc" id="L661">                for (Enumeration&lt;LedgerEntry&gt; readEntries = lh.readEntries(0, numEntries - 1);</span>
+<span class="nc bnc" id="L662" title="All 2 branches missed.">                    readEntries.hasMoreElements();) {</span>
+<span class="nc" id="L663">                    LedgerEntry entry = readEntries.nextElement();</span>
+                    try {
+<span class="nc" id="L665">                        entry.data.release();</span>
+<span class="nc" id="L666">                    } catch (IllegalReferenceCountException e) {</span>
+<span class="nc" id="L667">                        fail(&quot;ByteBuf already released&quot;);</span>
+<span class="nc" id="L668">                    }</span>
+<span class="nc" id="L669">                }</span>
+            }
+        }
+
+        // v3 protocol, not using pooled buffers
+<span class="nc" id="L674">        ClientConfiguration confReader3 = new ClientConfiguration()</span>
+<span class="nc" id="L675">            .setUseV2WireProtocol(false)</span>
+<span class="nc" id="L676">            .setNettyUsePooledBuffers(false)</span>
+<span class="nc" id="L677">            .setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+<span class="nc" id="L678">        try (BookKeeper bkc = new BookKeeper(confReader3)) {</span>
+<span class="nc" id="L679">            try (LedgerHandle lh = bkc.openLedger(ledgerId, digestType, &quot;testPasswd&quot;.getBytes())) {</span>
+<span class="nc" id="L680">                assertEquals(numEntries - 1, lh.readLastConfirmed());</span>
+<span class="nc" id="L681">                for (Enumeration&lt;LedgerEntry&gt; readEntries = lh.readEntries(0, numEntries - 1);</span>
+<span class="nc bnc" id="L682" title="All 2 branches missed.">                    readEntries.hasMoreElements();) {</span>
+<span class="nc" id="L683">                    LedgerEntry entry = readEntries.nextElement();</span>
+<span class="nc" id="L684">                    assertTrue(&quot;Can't release entry &quot; + entry.getEntryId() + &quot;: ref = &quot; + entry.data.refCnt(),</span>
+<span class="nc" id="L685">                        entry.data.release());</span>
+                    try {
+<span class="nc" id="L687">                        assertFalse(entry.data.release());</span>
+<span class="nc" id="L688">                        fail(&quot;ByteBuf already released&quot;);</span>
+<span class="nc" id="L689">                    } catch (IllegalReferenceCountException ok) {</span>
+<span class="nc" id="L690">                    }</span>
+<span class="nc" id="L691">                }</span>
+            }
+        }
+
+        // v3 protocol, using pooled buffers
+        // v3 protocol from 4.5 always &quot;wraps&quot; buffers returned by protobuf
+<span class="nc" id="L697">        ClientConfiguration confReader4 = new ClientConfiguration()</span>
+<span class="nc" id="L698">            .setUseV2WireProtocol(false)</span>
+<span class="nc" id="L699">            .setNettyUsePooledBuffers(true)</span>
+<span class="nc" id="L700">            .setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+
+<span class="nc" id="L702">        try (BookKeeper bkc = new BookKeeper(confReader4)) {</span>
+<span class="nc" id="L703">            try (LedgerHandle lh = bkc.openLedger(ledgerId, digestType, &quot;testPasswd&quot;.getBytes())) {</span>
+<span class="nc" id="L704">                assertEquals(numEntries - 1, lh.readLastConfirmed());</span>
+<span class="nc" id="L705">                for (Enumeration&lt;LedgerEntry&gt; readEntries = lh.readEntries(0, numEntries - 1);</span>
+<span class="nc bnc" id="L706" title="All 2 branches missed.">                    readEntries.hasMoreElements();) {</span>
+<span class="nc" id="L707">                    LedgerEntry entry = readEntries.nextElement();</span>
+                    // ButeBufs not reference counter
+<span class="nc" id="L709">                    assertTrue(&quot;Can't release entry &quot; + entry.getEntryId() + &quot;: ref = &quot; + entry.data.refCnt(),</span>
+<span class="nc" id="L710">                        entry.data.release());</span>
+                    try {
+<span class="nc" id="L712">                        assertFalse(entry.data.release());</span>
+<span class="nc" id="L713">                        fail(&quot;ByteBuf already released&quot;);</span>
+<span class="nc" id="L714">                    } catch (IllegalReferenceCountException ok) {</span>
+<span class="nc" id="L715">                    }</span>
+<span class="nc" id="L716">                }</span>
+            }
+        }
+
+        // cannot read twice an entry
+<span class="nc" id="L721">        ClientConfiguration confReader5 = new ClientConfiguration();</span>
+<span class="nc" id="L722">        confReader5.setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+<span class="nc" id="L723">        try (BookKeeper bkc = new BookKeeper(confReader5)) {</span>
+<span class="nc" id="L724">            try (LedgerHandle lh = bkc.openLedger(ledgerId, digestType, &quot;testPasswd&quot;.getBytes())) {</span>
+<span class="nc" id="L725">                assertEquals(numEntries - 1, lh.readLastConfirmed());</span>
+<span class="nc" id="L726">                for (Enumeration&lt;LedgerEntry&gt; readEntries = lh.readEntries(0, numEntries - 1);</span>
+<span class="nc bnc" id="L727" title="All 2 branches missed.">                    readEntries.hasMoreElements();) {</span>
+<span class="nc" id="L728">                    LedgerEntry entry = readEntries.nextElement();</span>
+<span class="nc" id="L729">                    entry.getEntry();</span>
+                    try {
+<span class="nc" id="L731">                        entry.getEntry();</span>
+<span class="nc" id="L732">                        fail(&quot;entry data accessed twice&quot;);</span>
+<span class="nc" id="L733">                    } catch (IllegalStateException ok){</span>
+<span class="nc" id="L734">                    }</span>
+                    try {
+<span class="nc" id="L736">                        entry.getEntryInputStream();</span>
+<span class="nc" id="L737">                        fail(&quot;entry data accessed twice&quot;);</span>
+<span class="nc" id="L738">                    } catch (IllegalStateException ok){</span>
+<span class="nc" id="L739">                    }</span>
+<span class="nc" id="L740">                }</span>
+            }
+        }
+<span class="nc" id="L743">    }</span>
+
+    /**
+     * Tests that issuing multiple reads for the same entry at the same time works as expected.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testDoubleRead() throws Exception {
+<span class="nc" id="L752">        LedgerHandle lh = bkc.createLedger(digestType, &quot;&quot;.getBytes());</span>
+
+<span class="nc" id="L754">        lh.addEntry(&quot;test&quot;.getBytes());</span>
+
+        // Read the same entry more times asynchronously
+<span class="nc" id="L757">        final int n = 10;</span>
+<span class="nc" id="L758">        final CountDownLatch latch = new CountDownLatch(n);</span>
+<span class="nc bnc" id="L759" title="All 2 branches missed.">        for (int i = 0; i &lt; n; i++) {</span>
+<span class="nc" id="L760">            lh.asyncReadEntries(0, 0, new ReadCallback() {</span>
+                public void readComplete(int rc, LedgerHandle lh,
+                                         Enumeration&lt;LedgerEntry&gt; seq, Object ctx) {
+<span class="nc bnc" id="L763" title="All 2 branches missed.">                    if (rc == BKException.Code.OK) {</span>
+<span class="nc" id="L764">                        latch.countDown();</span>
+                    } else {
+<span class="nc" id="L766">                        fail(&quot;Read fail&quot;);</span>
+                    }
+<span class="nc" id="L768">                }</span>
+            }, null);
+        }
+
+<span class="nc" id="L772">        latch.await();</span>
+<span class="nc" id="L773">    }</span>
+
+    /**
+     * Tests that issuing multiple reads for the same entry at the same time works as expected.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testDoubleReadWithV2Protocol() throws Exception {
+<span class="nc" id="L782">        ClientConfiguration conf = new ClientConfiguration(baseClientConf);</span>
+<span class="nc" id="L783">        conf.setUseV2WireProtocol(true);</span>
+<span class="nc" id="L784">        BookKeeperTestClient bkc = new BookKeeperTestClient(conf);</span>
+<span class="nc" id="L785">        LedgerHandle lh = bkc.createLedger(digestType, &quot;&quot;.getBytes());</span>
+
+<span class="nc" id="L787">        lh.addEntry(&quot;test&quot;.getBytes());</span>
+
+        // Read the same entry more times asynchronously
+<span class="nc" id="L790">        final int n = 10;</span>
+<span class="nc" id="L791">        final CountDownLatch latch = new CountDownLatch(n);</span>
+<span class="nc bnc" id="L792" title="All 2 branches missed.">        for (int i = 0; i &lt; n; i++) {</span>
+<span class="nc" id="L793">            lh.asyncReadEntries(0, 0, new ReadCallback() {</span>
+                public void readComplete(int rc, LedgerHandle lh,
+                                         Enumeration&lt;LedgerEntry&gt; seq, Object ctx) {
+<span class="nc bnc" id="L796" title="All 2 branches missed.">                    if (rc == BKException.Code.OK) {</span>
+<span class="nc" id="L797">                        latch.countDown();</span>
+                    } else {
+<span class="nc" id="L799">                        fail(&quot;Read fail&quot;);</span>
+                    }
+<span class="nc" id="L801">                }</span>
+            }, null);
+        }
+
+<span class="nc" id="L805">        latch.await();</span>
+<span class="nc" id="L806">        bkc.close();</span>
+<span class="nc" id="L807">    }</span>
+
+    @Test(expected = BKIllegalOpException.class)
+    public void testCannotUseWriteFlagsOnV2Protocol() throws Exception {
+<span class="nc" id="L811">        ClientConfiguration conf = new ClientConfiguration(baseClientConf);</span>
+<span class="nc" id="L812">        conf.setUseV2WireProtocol(true);</span>
+<span class="nc" id="L813">        try (BookKeeperTestClient bkc = new BookKeeperTestClient(conf)) {</span>
+<span class="nc" id="L814">            try (WriteHandle wh = result(bkc.newCreateLedgerOp()</span>
+<span class="nc" id="L815">                    .withEnsembleSize(3)</span>
+<span class="nc" id="L816">                    .withWriteQuorumSize(3)</span>
+<span class="nc" id="L817">                    .withAckQuorumSize(2)</span>
+<span class="nc" id="L818">                    .withPassword(&quot;&quot;.getBytes())</span>
+<span class="nc" id="L819">                    .withWriteFlags(WriteFlag.DEFERRED_SYNC)</span>
+<span class="nc" id="L820">                    .execute())) {</span>
+<span class="nc" id="L821">               result(wh.appendAsync(&quot;test&quot;.getBytes()));</span>
+            }
+        }
+<span class="nc" id="L824">    }</span>
+
+    @Test(expected = BKIllegalOpException.class)
+    public void testCannotUseForceOnV2Protocol() throws Exception {
+<span class="nc" id="L828">        ClientConfiguration conf = new ClientConfiguration(baseClientConf);</span>
+<span class="nc" id="L829">        conf.setUseV2WireProtocol(true);</span>
+<span class="nc" id="L830">        try (BookKeeperTestClient bkc = new BookKeeperTestClient(conf)) {</span>
+<span class="nc" id="L831">            try (WriteHandle wh = result(bkc.newCreateLedgerOp()</span>
+<span class="nc" id="L832">                    .withEnsembleSize(3)</span>
+<span class="nc" id="L833">                    .withWriteQuorumSize(3)</span>
+<span class="nc" id="L834">                    .withAckQuorumSize(2)</span>
+<span class="nc" id="L835">                    .withPassword(&quot;&quot;.getBytes())</span>
+<span class="nc" id="L836">                    .withWriteFlags(WriteFlag.NONE)</span>
+<span class="nc" id="L837">                    .execute())) {</span>
+<span class="nc" id="L838">               result(wh.appendAsync(&quot;&quot;.getBytes()));</span>
+<span class="nc" id="L839">               result(wh.force());</span>
+            }
+        }
+<span class="nc" id="L842">    }</span>
+
+    class MockZooKeeperClient extends ZooKeeperClient {
+        class MockZooKeeper extends ZooKeeper {
+            public MockZooKeeper(String connectString, int sessionTimeout, Watcher watcher, boolean canBeReadOnly)
+<span class="nc" id="L847">                    throws IOException {</span>
+<span class="nc" id="L848">                super(connectString, sessionTimeout, watcher, canBeReadOnly);</span>
+<span class="nc" id="L849">            }</span>
+
+            @Override
+            public void create(final String path, byte[] data, List&lt;ACL&gt; acl, CreateMode createMode, StringCallback cb,
+                    Object ctx) {
+<span class="nc" id="L854">                StringCallback injectedCallback = new StringCallback() {</span>
+                    @Override
+                    public void processResult(int rc, String path, Object ctx, String name) {
+                        /**
+                         * if ledgerIdToInjectFailure matches with the path of
+                         * the node, then throw CONNECTIONLOSS error and then
+                         * reset it to INVALID_LEDGERID.
+                         */
+<span class="nc bnc" id="L862" title="All 2 branches missed.">                        if (path.contains(ledgerIdToInjectFailure.toString())) {</span>
+<span class="nc" id="L863">                            ledgerIdToInjectFailure.set(INVALID_LEDGERID);</span>
+<span class="nc" id="L864">                            cb.processResult(KeeperException.Code.CONNECTIONLOSS.intValue(), path, ctx, name);</span>
+                        } else {
+<span class="nc" id="L866">                            cb.processResult(rc, path, ctx, name);</span>
+                        }
+<span class="nc" id="L868">                    }</span>
+                };
+<span class="nc" id="L870">                super.create(path, data, acl, createMode, injectedCallback, ctx);</span>
+<span class="nc" id="L871">            }</span>
+        }
+
+        private final String connectString;
+        private final int sessionTimeoutMs;
+        private final ZooKeeperWatcherBase watcherManager;
+        private final AtomicLong ledgerIdToInjectFailure;
+
+        MockZooKeeperClient(String connectString, int sessionTimeoutMs, ZooKeeperWatcherBase watcher,
+<span class="nc" id="L880">                AtomicLong ledgerIdToInjectFailure) throws IOException {</span>
+            /*
+             * in OperationalRetryPolicy maxRetries is &gt; 0. So in case of any
+             * RecoverableException scenario, it will retry.
+             */
+<span class="nc" id="L885">            super(connectString, sessionTimeoutMs, watcher,</span>
+                    new BoundExponentialBackoffRetryPolicy(sessionTimeoutMs, sessionTimeoutMs, Integer.MAX_VALUE),
+                    new BoundExponentialBackoffRetryPolicy(sessionTimeoutMs, sessionTimeoutMs, 3),
+                    NullStatsLogger.INSTANCE, 1, 0, false);
+<span class="nc" id="L889">            this.connectString = connectString;</span>
+<span class="nc" id="L890">            this.sessionTimeoutMs = sessionTimeoutMs;</span>
+<span class="nc" id="L891">            this.watcherManager = watcher;</span>
+<span class="nc" id="L892">            this.ledgerIdToInjectFailure = ledgerIdToInjectFailure;</span>
+<span class="nc" id="L893">        }</span>
+
+        @Override
+        protected ZooKeeper createZooKeeper() throws IOException {
+<span class="nc" id="L897">            return new MockZooKeeper(this.connectString, this.sessionTimeoutMs, this.watcherManager, false);</span>
+        }
+    }
+
+    @Test
+    public void testZKConnectionLossForLedgerCreation() throws Exception {
+<span class="nc" id="L903">        int zkSessionTimeOut = 10000;</span>
+<span class="nc" id="L904">        AtomicLong ledgerIdToInjectFailure = new AtomicLong(INVALID_LEDGERID);</span>
+<span class="nc" id="L905">        ZooKeeperWatcherBase zooKeeperWatcherBase = new ZooKeeperWatcherBase(zkSessionTimeOut,</span>
+                NullStatsLogger.INSTANCE);
+<span class="nc" id="L907">        MockZooKeeperClient zkFaultInjectionWrapper = new MockZooKeeperClient(zkUtil.getZooKeeperConnectString(),</span>
+                zkSessionTimeOut, zooKeeperWatcherBase, ledgerIdToInjectFailure);
+<span class="nc" id="L909">        zkFaultInjectionWrapper.waitForConnection();</span>
+<span class="nc" id="L910">        assertEquals(&quot;zkFaultInjectionWrapper should be in connected state&quot;, States.CONNECTED,</span>
+<span class="nc" id="L911">                zkFaultInjectionWrapper.getState());</span>
+<span class="nc" id="L912">        BookKeeper bk = new BookKeeper(baseClientConf, zkFaultInjectionWrapper);</span>
+<span class="nc" id="L913">        long oldZkInstanceSessionId = zkFaultInjectionWrapper.getSessionId();</span>
+<span class="nc" id="L914">        long ledgerId = 567L;</span>
+<span class="nc" id="L915">        LedgerHandle lh = bk.createLedgerAdv(ledgerId, 1, 1, 1, DigestType.CRC32, &quot;&quot;.getBytes(), null);</span>
+<span class="nc" id="L916">        lh.close();</span>
+
+        /*
+         * trigger Expired event so that MockZooKeeperClient would run
+         * 'clientCreator' and create new zk handle. In this case it would
+         * create MockZooKeeper.
+         */
+<span class="nc" id="L923">        zooKeeperWatcherBase.process(new WatchedEvent(EventType.None, KeeperState.Expired, &quot;&quot;));</span>
+<span class="nc" id="L924">        zkFaultInjectionWrapper.waitForConnection();</span>
+<span class="nc bnc" id="L925" title="All 2 branches missed.">        for (int i = 0; i &lt; 10; i++) {</span>
+<span class="nc bnc" id="L926" title="All 2 branches missed.">            if (zkFaultInjectionWrapper.getState() == States.CONNECTED) {</span>
+<span class="nc" id="L927">                break;</span>
+            }
+<span class="nc" id="L929">            Thread.sleep(200);</span>
+        }
+<span class="nc" id="L931">        assertEquals(&quot;zkFaultInjectionWrapper should be in connected state&quot;, States.CONNECTED,</span>
+<span class="nc" id="L932">                zkFaultInjectionWrapper.getState());</span>
+<span class="nc" id="L933">        assertNotEquals(&quot;Session Id of old and new ZK instance should be different&quot;, oldZkInstanceSessionId,</span>
+<span class="nc" id="L934">                zkFaultInjectionWrapper.getSessionId());</span>
+<span class="nc" id="L935">        ledgerId++;</span>
+<span class="nc" id="L936">        ledgerIdToInjectFailure.set(ledgerId);</span>
+        /**
+         * ledgerIdToInjectFailure is set to 'ledgerId', so zookeeper.create
+         * would return CONNECTIONLOSS error for the first time and when it is
+         * retried, as expected it would return NODEEXISTS error.
+         *
+         * AbstractZkLedgerManager.createLedgerMetadata should deal with this
+         * scenario appropriately.
+         */
+<span class="nc" id="L945">        lh = bk.createLedgerAdv(ledgerId, 1, 1, 1, DigestType.CRC32, &quot;&quot;.getBytes(), null);</span>
+<span class="nc" id="L946">        lh.close();</span>
+<span class="nc" id="L947">        assertEquals(&quot;injectZnodeCreationNoNodeFailure should have been reset it to INVALID_LEDGERID&quot;, INVALID_LEDGERID,</span>
+<span class="nc" id="L948">                ledgerIdToInjectFailure.get());</span>
+<span class="nc" id="L949">        lh = bk.openLedger(ledgerId, DigestType.CRC32, &quot;&quot;.getBytes());</span>
+<span class="nc" id="L950">        lh.close();</span>
+<span class="nc" id="L951">        ledgerId++;</span>
+<span class="nc" id="L952">        lh = bk.createLedgerAdv(ledgerId, 1, 1, 1, DigestType.CRC32, &quot;&quot;.getBytes(), null);</span>
+<span class="nc" id="L953">        lh.close();</span>
+<span class="nc" id="L954">        bk.close();</span>
+<span class="nc" id="L955">    }</span>
+
+    @Test
+    public void testLedgerDeletionIdempotency() throws Exception {
+<span class="nc" id="L959">        BookKeeper bk = new BookKeeper(baseClientConf);</span>
+<span class="nc" id="L960">        long ledgerId = 789L;</span>
+<span class="nc" id="L961">        LedgerHandle lh = bk.createLedgerAdv(ledgerId, 1, 1, 1, DigestType.CRC32, &quot;&quot;.getBytes(), null);</span>
+<span class="nc" id="L962">        lh.close();</span>
+<span class="nc" id="L963">        bk.deleteLedger(ledgerId);</span>
+<span class="nc" id="L964">        bk.deleteLedger(ledgerId);</span>
+<span class="nc" id="L965">        bk.close();</span>
+<span class="nc" id="L966">    }</span>
+
+    /**
+     * Mock of RackawareEnsemblePlacementPolicy. Overrides areAckedBookiesAdheringToPlacementPolicy to only return true
+     * when ackedBookies consists of writeQuorumSizeToUseForTesting bookies.
+     */
+<span class="nc" id="L972">    public static class MockRackawareEnsemblePlacementPolicy extends RackawareEnsemblePlacementPolicy {</span>
+        private int writeQuorumSizeToUseForTesting;
+        private CountDownLatch conditionFirstInvocationLatch;
+
+        void setWriteQuorumSizeToUseForTesting(int writeQuorumSizeToUseForTesting) {
+<span class="nc" id="L977">            this.writeQuorumSizeToUseForTesting = writeQuorumSizeToUseForTesting;</span>
+<span class="nc" id="L978">        }</span>
+
+        void setConditionFirstInvocationLatch(CountDownLatch conditionFirstInvocationLatch) {
+<span class="nc" id="L981">            this.conditionFirstInvocationLatch = conditionFirstInvocationLatch;</span>
+<span class="nc" id="L982">        }</span>
+
+        @Override
+        public boolean areAckedBookiesAdheringToPlacementPolicy(Set&lt;BookieSocketAddress&gt; ackedBookies,
+                                                                int writeQuorumSize,
+                                                                int ackQuorumSize) {
+<span class="nc" id="L988">            conditionFirstInvocationLatch.countDown();</span>
+<span class="nc bnc" id="L989" title="All 2 branches missed.">            return ackedBookies.size() == writeQuorumSizeToUseForTesting;</span>
+        }
+    }
+
+    /**
+     * Test to verify that PendingAddOp waits for success condition from areAckedBookiesAdheringToPlacementPolicy
+     * before returning success to client. Also tests working of WRITE_DELAYED_DUE_TO_NOT_ENOUGH_FAULT_DOMAINS and
+     * WRITE_TIMED_OUT_DUE_TO_NOT_ENOUGH_FAULT_DOMAINS counters.
+     */
+    @Test
+    public void testEnforceMinNumFaultDomainsForWrite() throws Exception {
+<span class="nc" id="L1000">        byte[] data = &quot;foobar&quot;.getBytes();</span>
+<span class="nc" id="L1001">        byte[] password = &quot;testPasswd&quot;.getBytes();</span>
+
+<span class="nc" id="L1003">        startNewBookie();</span>
+<span class="nc" id="L1004">        startNewBookie();</span>
+
+<span class="nc" id="L1006">        ClientConfiguration conf = new ClientConfiguration();</span>
+<span class="nc" id="L1007">        conf.setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+<span class="nc" id="L1008">        conf.setEnsemblePlacementPolicy(MockRackawareEnsemblePlacementPolicy.class);</span>
+
+<span class="nc" id="L1010">        conf.setAddEntryTimeout(2);</span>
+<span class="nc" id="L1011">        conf.setAddEntryQuorumTimeout(4);</span>
+<span class="nc" id="L1012">        conf.setEnforceMinNumFaultDomainsForWrite(true);</span>
+
+<span class="nc" id="L1014">        TestStatsProvider statsProvider = new TestStatsProvider();</span>
+
+        // Abnormal values for testing to prevent timeouts
+<span class="nc" id="L1017">        BookKeeperTestClient bk = new BookKeeperTestClient(conf, statsProvider);</span>
+<span class="nc" id="L1018">        StatsLogger statsLogger = bk.getStatsLogger();</span>
+
+<span class="nc" id="L1020">        int ensembleSize = 3;</span>
+<span class="nc" id="L1021">        int writeQuorumSize = 3;</span>
+<span class="nc" id="L1022">        int ackQuorumSize = 2;</span>
+
+<span class="nc" id="L1024">        CountDownLatch countDownLatch = new CountDownLatch(1);</span>
+<span class="nc" id="L1025">        MockRackawareEnsemblePlacementPolicy currPlacementPolicy =</span>
+<span class="nc" id="L1026">                (MockRackawareEnsemblePlacementPolicy) bk.getPlacementPolicy();</span>
+<span class="nc" id="L1027">        currPlacementPolicy.setConditionFirstInvocationLatch(countDownLatch);</span>
+<span class="nc" id="L1028">        currPlacementPolicy.setWriteQuorumSizeToUseForTesting(writeQuorumSize);</span>
+
+        BookieSocketAddress bookieToSleep;
+
+<span class="nc" id="L1032">        try (LedgerHandle lh = bk.createLedger(ensembleSize, writeQuorumSize, ackQuorumSize, digestType, password)) {</span>
+<span class="nc" id="L1033">            CountDownLatch sleepLatchCase1 = new CountDownLatch(1);</span>
+<span class="nc" id="L1034">            CountDownLatch sleepLatchCase2 = new CountDownLatch(1);</span>
+
+            // Put all non ensemble bookies to sleep
+<span class="nc" id="L1037">            LOG.info(&quot;Putting all non ensemble bookies to sleep.&quot;);</span>
+<span class="nc bnc" id="L1038" title="All 2 branches missed.">            for (BookieServer bookieServer : bs) {</span>
+                try {
+<span class="nc bnc" id="L1040" title="All 2 branches missed.">                    if (!lh.getCurrentEnsemble().contains(bookieServer.getLocalAddress())) {</span>
+<span class="nc" id="L1041">                        sleepBookie(bookieServer.getLocalAddress(), sleepLatchCase2);</span>
+                    }
+<span class="nc" id="L1043">                } catch (UnknownHostException ignored) {}</span>
+<span class="nc" id="L1044">            }</span>
+
+<span class="nc" id="L1046">            Thread writeToLedger = new Thread(() -&gt; {</span>
+                try {
+<span class="nc" id="L1048">                    LOG.info(&quot;Initiating write for entry&quot;);</span>
+<span class="nc" id="L1049">                    long entryId = lh.addEntry(data);</span>
+<span class="nc" id="L1050">                    LOG.info(&quot;Wrote entry with entryId = {}&quot;, entryId);</span>
+<span class="nc" id="L1051">                } catch (InterruptedException | BKException ignored) {</span>
+<span class="nc" id="L1052">                }</span>
+<span class="nc" id="L1053">            });</span>
+
+<span class="nc" id="L1055">            bookieToSleep = lh.getCurrentEnsemble().get(0);</span>
+
+<span class="nc" id="L1057">            LOG.info(&quot;Putting picked bookie to sleep&quot;);</span>
+<span class="nc" id="L1058">            sleepBookie(bookieToSleep, sleepLatchCase1);</span>
+
+<span class="nc" id="L1060">            assertEquals(statsLogger</span>
+<span class="nc" id="L1061">                           .getCounter(WRITE_DELAYED_DUE_TO_NOT_ENOUGH_FAULT_DOMAINS)</span>
+<span class="nc" id="L1062">                           .get()</span>
+<span class="nc" id="L1063">                           .longValue(), 0);</span>
+
+            // Trying to write entry
+<span class="nc" id="L1066">            writeToLedger.start();</span>
+
+            // Waiting and checking to make sure that write has not succeeded
+<span class="nc" id="L1069">            countDownLatch.await(conf.getAddEntryTimeout(), TimeUnit.SECONDS);</span>
+<span class="nc" id="L1070">            assertEquals(&quot;Write succeeded but should not have&quot;, -1, lh.lastAddConfirmed);</span>
+
+            // Wake the bookie
+<span class="nc" id="L1073">            sleepLatchCase1.countDown();</span>
+
+            // Waiting and checking to make sure that write has succeeded
+<span class="nc" id="L1076">            writeToLedger.join(conf.getAddEntryTimeout() * 1000);</span>
+<span class="nc" id="L1077">            assertEquals(&quot;Write did not succeed but should have&quot;, 0, lh.lastAddConfirmed);</span>
+
+<span class="nc" id="L1079">            assertEquals(statsLogger</span>
+<span class="nc" id="L1080">                           .getCounter(WRITE_DELAYED_DUE_TO_NOT_ENOUGH_FAULT_DOMAINS)</span>
+<span class="nc" id="L1081">                           .get()</span>
+<span class="nc" id="L1082">                           .longValue(), 1);</span>
+
+            // AddEntry thread for second scenario
+<span class="nc" id="L1085">            Thread writeToLedger2 = new Thread(() -&gt; {</span>
+                try {
+<span class="nc" id="L1087">                    LOG.info(&quot;Initiating write for entry&quot;);</span>
+<span class="nc" id="L1088">                    long entryId = lh.addEntry(data);</span>
+<span class="nc" id="L1089">                    LOG.info(&quot;Wrote entry with entryId = {}&quot;, entryId);</span>
+<span class="nc" id="L1090">                } catch (InterruptedException | BKException ignored) {</span>
+<span class="nc" id="L1091">                }</span>
+<span class="nc" id="L1092">            });</span>
+
+<span class="nc" id="L1094">            bookieToSleep = lh.getCurrentEnsemble().get(1);</span>
+
+<span class="nc" id="L1096">            LOG.info(&quot;Putting picked bookie to sleep&quot;);</span>
+<span class="nc" id="L1097">            sleepBookie(bookieToSleep, sleepLatchCase2);</span>
+
+            // Trying to write entry
+<span class="nc" id="L1100">            writeToLedger2.start();</span>
+
+            // Waiting and checking to make sure that write has failed
+<span class="nc" id="L1103">            writeToLedger2.join((conf.getAddEntryQuorumTimeout() + 2) * 1000);</span>
+<span class="nc" id="L1104">            assertEquals(&quot;Write succeeded but should not have&quot;, 0, lh.lastAddConfirmed);</span>
+
+<span class="nc" id="L1106">            sleepLatchCase2.countDown();</span>
+
+<span class="nc" id="L1108">            assertEquals(statsLogger.getCounter(WRITE_DELAYED_DUE_TO_NOT_ENOUGH_FAULT_DOMAINS).get().longValue(),</span>
+                         2);
+
+<span class="nc" id="L1111">            assertEquals(statsLogger.getCounter(WRITE_TIMED_OUT_DUE_TO_NOT_ENOUGH_FAULT_DOMAINS).get().longValue(),</span>
+                         1);
+        }
+<span class="nc" id="L1114">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

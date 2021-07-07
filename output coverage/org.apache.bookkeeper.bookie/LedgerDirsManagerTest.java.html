@@ -1,0 +1,543 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>LedgerDirsManagerTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$myBookieFenceLedgerTest.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.bookie</a> &gt; <span class="el_source">LedgerDirsManagerTest.java</span></div><h1>LedgerDirsManagerTest.java</h1><pre class="source lang-java linenums">/**
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.bookie;
+
+import static org.hamcrest.Matchers.equalTo;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThat;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.any;
+
+import java.io.File;
+import java.io.IOException;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import org.apache.bookkeeper.bookie.LedgerDirsManager.LedgerDirsListener;
+import org.apache.bookkeeper.bookie.LedgerDirsManager.NoWritableLedgerDirException;
+import org.apache.bookkeeper.common.testing.executors.MockExecutorController;
+import org.apache.bookkeeper.conf.ServerConfiguration;
+import org.apache.bookkeeper.conf.TestBKConfiguration;
+import org.apache.bookkeeper.stats.Gauge;
+import org.apache.bookkeeper.test.TestStatsProvider;
+import org.apache.bookkeeper.util.DiskChecker;
+import org.apache.bookkeeper.util.IOUtils;
+import org.apache.commons.io.FileUtils;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.powermock.api.mockito.PowerMockito;
+import org.powermock.core.classloader.annotations.PrepareForTest;
+import org.powermock.modules.junit4.PowerMockRunner;
+
+/**
+ * Test LedgerDirsManager.
+ */
+@RunWith(PowerMockRunner.class)
+@PrepareForTest(LedgerDirsMonitor.class)
+<span class="nc" id="L64">public class LedgerDirsManagerTest {</span>
+
+    ServerConfiguration conf;
+    File curDir;
+    LedgerDirsManager dirsManager;
+    LedgerDirsMonitor ledgerMonitor;
+    MockDiskChecker mockDiskChecker;
+    private TestStatsProvider statsProvider;
+    private TestStatsProvider.TestStatsLogger statsLogger;
+<span class="nc" id="L73">    int diskCheckInterval = 1000;</span>
+<span class="nc" id="L74">    float threshold = 0.5f;</span>
+<span class="nc" id="L75">    float warnThreshold = 0.5f;</span>
+
+<span class="nc" id="L77">    final List&lt;File&gt; tempDirs = new ArrayList&lt;File&gt;();</span>
+
+    // Thread used by monitor
+    ScheduledExecutorService executor;
+    MockExecutorController executorController;
+
+    File createTempDir(String prefix, String suffix) throws IOException {
+<span class="nc" id="L84">        File dir = IOUtils.createTempDir(prefix, suffix);</span>
+<span class="nc" id="L85">        tempDirs.add(dir);</span>
+<span class="nc" id="L86">        return dir;</span>
+    }
+
+    @Before
+    public void setUp() throws Exception {
+<span class="nc" id="L91">        PowerMockito.mockStatic(Executors.class);</span>
+
+<span class="nc" id="L93">        File tmpDir = createTempDir(&quot;bkTest&quot;, &quot;.dir&quot;);</span>
+<span class="nc" id="L94">        curDir = Bookie.getCurrentDirectory(tmpDir);</span>
+<span class="nc" id="L95">        Bookie.checkDirectoryStructure(curDir);</span>
+
+<span class="nc" id="L97">        conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L98">        conf.setLedgerDirNames(new String[] { tmpDir.toString() });</span>
+<span class="nc" id="L99">        conf.setDiskLowWaterMarkUsageThreshold(conf.getDiskUsageThreshold());</span>
+<span class="nc" id="L100">        conf.setDiskCheckInterval(diskCheckInterval);</span>
+<span class="nc" id="L101">        conf.setIsForceGCAllowWhenNoSpace(true);</span>
+<span class="nc" id="L102">        conf.setMinUsableSizeForEntryLogCreation(Long.MIN_VALUE);</span>
+
+<span class="nc" id="L104">        executor = PowerMockito.mock(ScheduledExecutorService.class);</span>
+<span class="nc" id="L105">        executorController = new MockExecutorController()</span>
+<span class="nc" id="L106">            .controlScheduleAtFixedRate(executor, 10);</span>
+<span class="nc" id="L107">        PowerMockito.when(Executors.newSingleThreadScheduledExecutor(any()))</span>
+<span class="nc" id="L108">            .thenReturn(executor);</span>
+
+<span class="nc" id="L110">        mockDiskChecker = new MockDiskChecker(threshold, warnThreshold);</span>
+<span class="nc" id="L111">        statsProvider = new TestStatsProvider();</span>
+<span class="nc" id="L112">        statsLogger = statsProvider.getStatsLogger(&quot;test&quot;);</span>
+<span class="nc" id="L113">        dirsManager = new LedgerDirsManager(conf, conf.getLedgerDirs(),</span>
+<span class="nc" id="L114">                new DiskChecker(conf.getDiskUsageThreshold(), conf.getDiskUsageWarnThreshold()), statsLogger);</span>
+<span class="nc" id="L115">        ledgerMonitor = new LedgerDirsMonitor(conf,</span>
+<span class="nc" id="L116">                mockDiskChecker, Collections.singletonList(dirsManager));</span>
+<span class="nc" id="L117">        ledgerMonitor.init();</span>
+<span class="nc" id="L118">    }</span>
+
+    @After
+    public void tearDown() throws Exception {
+<span class="nc" id="L122">        ledgerMonitor.shutdown();</span>
+<span class="nc bnc" id="L123" title="All 2 branches missed.">        for (File dir : tempDirs) {</span>
+<span class="nc" id="L124">            FileUtils.deleteDirectory(dir);</span>
+<span class="nc" id="L125">        }</span>
+<span class="nc" id="L126">        tempDirs.clear();</span>
+<span class="nc" id="L127">    }</span>
+
+    @Test
+    public void testGetWritableDir() throws Exception {
+        try {
+<span class="nc" id="L132">            List&lt;File&gt; writeDirs = dirsManager.getWritableLedgerDirs();</span>
+<span class="nc bnc" id="L133" title="All 2 branches missed.">            assertTrue(&quot;Must have a writable ledgerDir&quot;, writeDirs.size() &gt; 0);</span>
+<span class="nc" id="L134">        } catch (NoWritableLedgerDirException nwlde) {</span>
+<span class="nc" id="L135">            fail(&quot;We should have a writable ledgerDir&quot;);</span>
+<span class="nc" id="L136">        }</span>
+<span class="nc" id="L137">    }</span>
+
+    @Test
+    public void testPickWritableDirExclusive() throws Exception {
+        try {
+<span class="nc" id="L142">            dirsManager.pickRandomWritableDir(curDir);</span>
+<span class="nc" id="L143">            fail(&quot;Should not reach here due to there is no writable ledger dir.&quot;);</span>
+<span class="nc" id="L144">        } catch (NoWritableLedgerDirException nwlde) {</span>
+            // expected to fail with no writable ledger dir
+<span class="nc" id="L146">            assertTrue(true);</span>
+<span class="nc" id="L147">        }</span>
+<span class="nc" id="L148">    }</span>
+
+    @Test
+    public void testNoWritableDir() throws Exception {
+        try {
+<span class="nc" id="L153">            dirsManager.addToFilledDirs(curDir);</span>
+<span class="nc" id="L154">            dirsManager.pickRandomWritableDir();</span>
+<span class="nc" id="L155">            fail(&quot;Should not reach here due to there is no writable ledger dir.&quot;);</span>
+<span class="nc" id="L156">        } catch (NoWritableLedgerDirException nwlde) {</span>
+            // expected to fail with no writable ledger dir
+<span class="nc" id="L158">            assertEquals(&quot;Should got NoWritableLedgerDirException w/ 'All ledger directories are non writable'.&quot;,</span>
+<span class="nc" id="L159">                         &quot;All ledger directories are non writable&quot;, nwlde.getMessage());</span>
+<span class="nc" id="L160">        }</span>
+<span class="nc" id="L161">    }</span>
+
+    @Test
+    public void testGetWritableDirForLog() throws Exception {
+        List&lt;File&gt; writeDirs;
+        try {
+<span class="nc" id="L167">            dirsManager.addToFilledDirs(curDir);</span>
+<span class="nc" id="L168">            dirsManager.getWritableLedgerDirs();</span>
+<span class="nc" id="L169">            fail(&quot;Should not reach here due to there is no writable ledger dir.&quot;);</span>
+<span class="nc" id="L170">        } catch (NoWritableLedgerDirException nwlde) {</span>
+            // expected to fail with no writable ledger dir
+            // Now make sure we can get one for log
+            try {
+<span class="nc" id="L174">                writeDirs = dirsManager.getWritableLedgerDirsForNewLog();</span>
+<span class="nc bnc" id="L175" title="All 2 branches missed.">                assertTrue(&quot;Must have a writable ledgerDir&quot;, writeDirs.size() &gt; 0);</span>
+<span class="nc" id="L176">            } catch (NoWritableLedgerDirException e) {</span>
+<span class="nc" id="L177">                fail(&quot;We should have a writeble ledgerDir&quot;);</span>
+<span class="nc" id="L178">            }</span>
+<span class="nc" id="L179">        }</span>
+<span class="nc" id="L180">    }</span>
+
+    @Test
+    public void testGetWritableDirForLogNoEnoughDiskSpace() throws Exception {
+<span class="nc" id="L184">        conf.setMinUsableSizeForEntryLogCreation(curDir.getUsableSpace() + 1024);</span>
+<span class="nc" id="L185">        dirsManager = new LedgerDirsManager(conf, conf.getLedgerDirs(),</span>
+<span class="nc" id="L186">            new DiskChecker(conf.getDiskUsageThreshold(), conf.getDiskUsageWarnThreshold()), statsLogger);</span>
+        try {
+<span class="nc" id="L188">            dirsManager.addToFilledDirs(curDir);</span>
+<span class="nc" id="L189">            dirsManager.getWritableLedgerDirs();</span>
+<span class="nc" id="L190">            fail(&quot;Should not reach here due to there is no writable ledger dir.&quot;);</span>
+<span class="nc" id="L191">        } catch (NoWritableLedgerDirException nwlde) {</span>
+            // expected to fail with no writable ledger dir
+            // Now make sure we can get one for log
+            try {
+<span class="nc" id="L195">                dirsManager.getWritableLedgerDirsForNewLog();</span>
+<span class="nc" id="L196">                fail(&quot;Should not reach here due to there is no enough disk space left&quot;);</span>
+<span class="nc" id="L197">            } catch (NoWritableLedgerDirException e) {</span>
+                // expected.
+<span class="nc" id="L199">            }</span>
+<span class="nc" id="L200">        }</span>
+<span class="nc" id="L201">    }</span>
+
+    @Test
+    public void testLedgerDirsMonitorDuringTransition() throws Exception {
+<span class="nc" id="L205">        testLedgerDirsMonitorDuringTransition(true);</span>
+<span class="nc" id="L206">    }</span>
+
+    @Test
+    public void testHighPriorityWritesDisallowedDuringTransition() throws Exception {
+<span class="nc" id="L210">        testLedgerDirsMonitorDuringTransition(false);</span>
+<span class="nc" id="L211">    }</span>
+
+    private void testLedgerDirsMonitorDuringTransition(boolean highPriorityWritesAllowed) throws Exception {
+<span class="nc bnc" id="L214" title="All 2 branches missed.">        if (!highPriorityWritesAllowed) {</span>
+<span class="nc" id="L215">            ledgerMonitor.shutdown();</span>
+<span class="nc" id="L216">            conf.setMinUsableSizeForHighPriorityWrites(curDir.getUsableSpace() + 1024);</span>
+<span class="nc" id="L217">            dirsManager = new LedgerDirsManager(conf, conf.getLedgerDirs(),</span>
+<span class="nc" id="L218">                new DiskChecker(conf.getDiskUsageThreshold(), conf.getDiskUsageWarnThreshold()), statsLogger);</span>
+<span class="nc" id="L219">            ledgerMonitor = new LedgerDirsMonitor(conf, mockDiskChecker, Collections.singletonList(dirsManager));</span>
+<span class="nc" id="L220">            ledgerMonitor.init();</span>
+        }
+
+<span class="nc" id="L223">        MockLedgerDirsListener mockLedgerDirsListener = new MockLedgerDirsListener();</span>
+<span class="nc" id="L224">        dirsManager.addLedgerDirsListener(mockLedgerDirsListener);</span>
+<span class="nc" id="L225">        ledgerMonitor.start();</span>
+
+<span class="nc" id="L227">        assertFalse(mockLedgerDirsListener.readOnly);</span>
+<span class="nc" id="L228">        assertTrue(mockLedgerDirsListener.highPriorityWritesAllowed);</span>
+
+<span class="nc" id="L230">        mockDiskChecker.setUsage(threshold + 0.05f);</span>
+<span class="nc" id="L231">        executorController.advance(Duration.ofMillis(diskCheckInterval));</span>
+
+<span class="nc" id="L233">        assertTrue(mockLedgerDirsListener.readOnly);</span>
+<span class="nc" id="L234">        assertEquals(highPriorityWritesAllowed, mockLedgerDirsListener.highPriorityWritesAllowed);</span>
+
+<span class="nc" id="L236">        mockDiskChecker.setUsage(threshold - 0.05f);</span>
+<span class="nc" id="L237">        executorController.advance(Duration.ofMillis(diskCheckInterval));</span>
+
+<span class="nc" id="L239">        assertFalse(mockLedgerDirsListener.readOnly);</span>
+<span class="nc" id="L240">        assertTrue(mockLedgerDirsListener.highPriorityWritesAllowed);</span>
+<span class="nc" id="L241">    }</span>
+
+    @Test
+    public void testLedgerDirsMonitorHandlingLowWaterMark() throws Exception {
+<span class="nc" id="L245">        ledgerMonitor.shutdown();</span>
+
+<span class="nc" id="L247">        final float warn = 0.90f;</span>
+<span class="nc" id="L248">        final float nospace = 0.98f;</span>
+<span class="nc" id="L249">        final float lwm = (warn + nospace) / 2;</span>
+<span class="nc" id="L250">        final float lwm2warn = (warn + lwm) / 2;</span>
+<span class="nc" id="L251">        final float lwm2nospace = (lwm + nospace) / 2;</span>
+<span class="nc" id="L252">        final float nospaceExceeded = nospace + 0.005f;</span>
+
+<span class="nc" id="L254">        conf.setDiskUsageThreshold(nospace);</span>
+<span class="nc" id="L255">        conf.setDiskLowWaterMarkUsageThreshold(lwm);</span>
+<span class="nc" id="L256">        conf.setDiskUsageWarnThreshold(warn);</span>
+
+<span class="nc" id="L258">        mockDiskChecker = new MockDiskChecker(nospace, warnThreshold);</span>
+<span class="nc" id="L259">        dirsManager = new LedgerDirsManager(conf, conf.getLedgerDirs(),</span>
+<span class="nc" id="L260">                new DiskChecker(conf.getDiskUsageThreshold(), conf.getDiskUsageWarnThreshold()));</span>
+<span class="nc" id="L261">        ledgerMonitor = new LedgerDirsMonitor(conf, mockDiskChecker, Collections.singletonList(dirsManager));</span>
+<span class="nc" id="L262">        ledgerMonitor.init();</span>
+<span class="nc" id="L263">        final MockLedgerDirsListener mockLedgerDirsListener = new MockLedgerDirsListener();</span>
+<span class="nc" id="L264">        dirsManager.addLedgerDirsListener(mockLedgerDirsListener);</span>
+<span class="nc" id="L265">        ledgerMonitor.start();</span>
+
+<span class="nc" id="L267">        executorController.advance(Duration.ofMillis(diskCheckInterval));</span>
+<span class="nc" id="L268">        assertFalse(mockLedgerDirsListener.readOnly);</span>
+
+        // go above LWM but below threshold
+        // should still be writable
+<span class="nc" id="L272">        mockDiskChecker.setUsage(lwm2nospace);</span>
+<span class="nc" id="L273">        executorController.advance(Duration.ofMillis(diskCheckInterval));</span>
+<span class="nc" id="L274">        assertFalse(mockLedgerDirsListener.readOnly);</span>
+
+        // exceed the threshold, should go to readonly
+<span class="nc" id="L277">        mockDiskChecker.setUsage(nospaceExceeded);</span>
+<span class="nc" id="L278">        executorController.advance(Duration.ofMillis(diskCheckInterval));</span>
+<span class="nc" id="L279">        assertTrue(mockLedgerDirsListener.readOnly);</span>
+
+        // drop below threshold but above LWM
+        // should stay read-only
+<span class="nc" id="L283">        mockDiskChecker.setUsage(lwm2nospace);</span>
+<span class="nc" id="L284">        executorController.advance(Duration.ofMillis(diskCheckInterval));</span>
+<span class="nc" id="L285">        assertTrue(mockLedgerDirsListener.readOnly);</span>
+
+        // drop below LWM
+        // should become writable
+<span class="nc" id="L289">        mockDiskChecker.setUsage(lwm2warn);</span>
+<span class="nc" id="L290">        executorController.advance(Duration.ofMillis(diskCheckInterval));</span>
+<span class="nc" id="L291">        assertFalse(mockLedgerDirsListener.readOnly);</span>
+
+        // go above LWM but below threshold
+        // should still be writable
+<span class="nc" id="L295">        mockDiskChecker.setUsage(lwm2nospace);</span>
+<span class="nc" id="L296">        executorController.advance(Duration.ofMillis(diskCheckInterval));</span>
+<span class="nc" id="L297">        assertFalse(mockLedgerDirsListener.readOnly);</span>
+<span class="nc" id="L298">    }</span>
+
+    @Test
+    public void testLedgerDirsMonitorHandlingWithMultipleLedgerDirectories() throws Exception {
+<span class="nc" id="L302">        ledgerMonitor.shutdown();</span>
+
+<span class="nc" id="L304">        final float nospace = 0.90f;</span>
+<span class="nc" id="L305">        final float lwm = 0.80f;</span>
+        HashMap&lt;File, Float&gt; usageMap;
+
+<span class="nc" id="L308">        File tmpDir1 = createTempDir(&quot;bkTest&quot;, &quot;.dir&quot;);</span>
+<span class="nc" id="L309">        File curDir1 = Bookie.getCurrentDirectory(tmpDir1);</span>
+<span class="nc" id="L310">        Bookie.checkDirectoryStructure(curDir1);</span>
+
+<span class="nc" id="L312">        File tmpDir2 = createTempDir(&quot;bkTest&quot;, &quot;.dir&quot;);</span>
+<span class="nc" id="L313">        File curDir2 = Bookie.getCurrentDirectory(tmpDir2);</span>
+<span class="nc" id="L314">        Bookie.checkDirectoryStructure(curDir2);</span>
+
+<span class="nc" id="L316">        conf.setDiskUsageThreshold(nospace);</span>
+<span class="nc" id="L317">        conf.setDiskLowWaterMarkUsageThreshold(lwm);</span>
+<span class="nc" id="L318">        conf.setDiskUsageWarnThreshold(nospace);</span>
+<span class="nc" id="L319">        conf.setLedgerDirNames(new String[] { tmpDir1.toString(), tmpDir2.toString() });</span>
+
+<span class="nc" id="L321">        mockDiskChecker = new MockDiskChecker(nospace, warnThreshold);</span>
+<span class="nc" id="L322">        dirsManager = new LedgerDirsManager(conf, conf.getLedgerDirs(),</span>
+<span class="nc" id="L323">                new DiskChecker(conf.getDiskUsageThreshold(), conf.getDiskUsageWarnThreshold()),</span>
+                statsLogger);
+<span class="nc" id="L325">        ledgerMonitor = new LedgerDirsMonitor(conf, mockDiskChecker, Collections.singletonList(dirsManager));</span>
+<span class="nc" id="L326">        usageMap = new HashMap&lt;File, Float&gt;();</span>
+<span class="nc" id="L327">        usageMap.put(curDir1, 0.1f);</span>
+<span class="nc" id="L328">        usageMap.put(curDir2, 0.1f);</span>
+<span class="nc" id="L329">        mockDiskChecker.setUsageMap(usageMap);</span>
+<span class="nc" id="L330">        ledgerMonitor.init();</span>
+<span class="nc" id="L331">        final MockLedgerDirsListener mockLedgerDirsListener = new MockLedgerDirsListener();</span>
+<span class="nc" id="L332">        dirsManager.addLedgerDirsListener(mockLedgerDirsListener);</span>
+<span class="nc" id="L333">        ledgerMonitor.start();</span>
+
+<span class="nc" id="L335">        Thread.sleep((diskCheckInterval * 2) + 100);</span>
+<span class="nc" id="L336">        assertFalse(mockLedgerDirsListener.readOnly);</span>
+
+        // go above LWM but below threshold
+        // should still be writable
+<span class="nc" id="L340">        setUsageAndThenVerify(curDir1, lwm + 0.05f, curDir2, lwm + 0.05f, mockDiskChecker, mockLedgerDirsListener,</span>
+                false);
+
+        // one dir usagespace above storagethreshold, another dir below storagethreshold
+        // should still be writable
+<span class="nc" id="L345">        setUsageAndThenVerify(curDir1, nospace + 0.02f, curDir2, nospace - 0.05f, mockDiskChecker,</span>
+                mockLedgerDirsListener, false);
+
+        // should remain readonly
+<span class="nc" id="L349">        setUsageAndThenVerify(curDir1, nospace + 0.05f, curDir2, nospace + 0.02f, mockDiskChecker,</span>
+                mockLedgerDirsListener, true);
+
+        // bring the disk usages to less than the threshold,
+        // but more than the LWM.
+        // should still be readonly
+<span class="nc" id="L355">        setUsageAndThenVerify(curDir1, nospace - 0.05f, curDir2, nospace - 0.05f, mockDiskChecker,</span>
+                mockLedgerDirsListener, true);
+
+        // bring one dir diskusage to less than lwm,
+        // the other dir to be more than lwm, but the
+        // overall diskusage to be more than lwm
+        // should still be readonly
+<span class="nc" id="L362">        setUsageAndThenVerify(curDir1, lwm - 0.03f, curDir2, lwm + 0.07f, mockDiskChecker, mockLedgerDirsListener,</span>
+                true);
+
+        // bring one dir diskusage to much less than lwm,
+        // the other dir to be more than storage threahold, but the
+        // overall diskusage is less than lwm
+        // should goto readwrite
+<span class="nc" id="L369">        setUsageAndThenVerify(curDir1, lwm - 0.17f, curDir2, nospace + 0.03f, mockDiskChecker, mockLedgerDirsListener,</span>
+                false);
+<span class="nc" id="L371">        assertEquals(&quot;Only one LedgerDir should be writable&quot;, 1, dirsManager.getWritableLedgerDirs().size());</span>
+
+        // bring both the dirs below lwm
+        // should still be readwrite
+<span class="nc" id="L375">        setUsageAndThenVerify(curDir1, lwm - 0.03f, curDir2, lwm - 0.02f, mockDiskChecker, mockLedgerDirsListener,</span>
+                false);
+<span class="nc" id="L377">        assertEquals(&quot;Both the LedgerDirs should be writable&quot;, 2, dirsManager.getWritableLedgerDirs().size());</span>
+
+        // bring both the dirs above lwm but &lt; threshold
+        // should still be readwrite
+<span class="nc" id="L381">        setUsageAndThenVerify(curDir1, lwm + 0.02f, curDir2, lwm + 0.08f, mockDiskChecker, mockLedgerDirsListener,</span>
+                false);
+<span class="nc" id="L383">    }</span>
+
+    @Test
+    public void testLedgerDirsMonitorStartReadOnly() throws Exception {
+<span class="nc" id="L387">        ledgerMonitor.shutdown();</span>
+
+<span class="nc" id="L389">        final float nospace = 0.90f;</span>
+<span class="nc" id="L390">        final float lwm = 0.80f;</span>
+
+<span class="nc" id="L392">        File tmpDir1 = createTempDir(&quot;bkTest&quot;, &quot;.dir&quot;);</span>
+<span class="nc" id="L393">        File curDir1 = Bookie.getCurrentDirectory(tmpDir1);</span>
+<span class="nc" id="L394">        Bookie.checkDirectoryStructure(curDir1);</span>
+
+<span class="nc" id="L396">        File tmpDir2 = createTempDir(&quot;bkTest&quot;, &quot;.dir&quot;);</span>
+<span class="nc" id="L397">        File curDir2 = Bookie.getCurrentDirectory(tmpDir2);</span>
+<span class="nc" id="L398">        Bookie.checkDirectoryStructure(curDir2);</span>
+
+<span class="nc" id="L400">        conf.setDiskUsageThreshold(nospace);</span>
+<span class="nc" id="L401">        conf.setDiskLowWaterMarkUsageThreshold(lwm);</span>
+<span class="nc" id="L402">        conf.setDiskUsageWarnThreshold(nospace);</span>
+<span class="nc" id="L403">        conf.setLedgerDirNames(new String[] { tmpDir1.toString(), tmpDir2.toString() });</span>
+
+        // Both disks are out of space at the start.
+<span class="nc" id="L406">        HashMap&lt;File, Float&gt; usageMap = new HashMap&lt;&gt;();</span>
+<span class="nc" id="L407">        usageMap.put(curDir1, nospace + 0.05f);</span>
+<span class="nc" id="L408">        usageMap.put(curDir2, nospace + 0.05f);</span>
+
+<span class="nc" id="L410">        mockDiskChecker = new MockDiskChecker(nospace, warnThreshold);</span>
+<span class="nc" id="L411">        mockDiskChecker.setUsageMap(usageMap);</span>
+<span class="nc" id="L412">        dirsManager = new LedgerDirsManager(conf, conf.getLedgerDirs(),</span>
+<span class="nc" id="L413">                new DiskChecker(conf.getDiskUsageThreshold(), conf.getDiskUsageWarnThreshold()),</span>
+                statsLogger);
+
+<span class="nc" id="L416">        ledgerMonitor = new LedgerDirsMonitor(conf, mockDiskChecker, Collections.singletonList(dirsManager));</span>
+        try {
+<span class="nc" id="L418">            ledgerMonitor.init();</span>
+<span class="nc" id="L419">            fail(&quot;NoWritableLedgerDirException expected&quot;);</span>
+<span class="nc" id="L420">        } catch (NoWritableLedgerDirException exception) {</span>
+            // ok
+<span class="nc" id="L422">        }</span>
+<span class="nc" id="L423">        final MockLedgerDirsListener mockLedgerDirsListener = new MockLedgerDirsListener();</span>
+<span class="nc" id="L424">        dirsManager.addLedgerDirsListener(mockLedgerDirsListener);</span>
+<span class="nc" id="L425">        ledgerMonitor.start();</span>
+
+<span class="nc" id="L427">        Thread.sleep((diskCheckInterval * 2) + 100);</span>
+<span class="nc" id="L428">        verifyUsage(curDir1, nospace + 0.05f, curDir2, nospace + 0.05f, mockLedgerDirsListener, true);</span>
+<span class="nc" id="L429">    }</span>
+
+    private void setUsageAndThenVerify(File dir1, float dir1Usage, File dir2, float dir2Usage,
+            MockDiskChecker mockDiskChecker, MockLedgerDirsListener mockLedgerDirsListener, boolean verifyReadOnly)
+            throws InterruptedException {
+<span class="nc" id="L434">        HashMap&lt;File, Float&gt; usageMap = new HashMap&lt;File, Float&gt;();</span>
+<span class="nc" id="L435">        usageMap.put(dir1, dir1Usage);</span>
+<span class="nc" id="L436">        usageMap.put(dir2, dir2Usage);</span>
+<span class="nc" id="L437">        mockDiskChecker.setUsageMap(usageMap);</span>
+<span class="nc" id="L438">        verifyUsage(dir1, dir1Usage, dir2, dir2Usage, mockLedgerDirsListener, verifyReadOnly);</span>
+<span class="nc" id="L439">    }</span>
+
+    private void verifyUsage(File dir1, float dir1Usage, File dir2, float dir2Usage,
+                             MockLedgerDirsListener mockLedgerDirsListener, boolean verifyReadOnly) {
+<span class="nc" id="L443">        executorController.advance(Duration.ofMillis(diskCheckInterval));</span>
+
+<span class="nc" id="L445">        float sample1 = getGauge(dir1.getParent()).getSample().floatValue();</span>
+<span class="nc" id="L446">        float sample2 = getGauge(dir2.getParent()).getSample().floatValue();</span>
+
+<span class="nc" id="L448">        assertEquals(mockLedgerDirsListener.readOnly, verifyReadOnly);</span>
+<span class="nc" id="L449">        assertThat(sample1, equalTo(dir1Usage * 100f));</span>
+<span class="nc" id="L450">        assertThat(sample2, equalTo(dir2Usage * 100f));</span>
+<span class="nc" id="L451">    }</span>
+
+    private Gauge&lt;? extends Number&gt; getGauge(String path) {
+<span class="nc" id="L454">        String gaugeName = String.format(&quot;test.dir_%s_usage&quot;, path.replace('/', '_'));</span>
+<span class="nc" id="L455">        return statsProvider.getGauge(gaugeName);</span>
+    }
+
+    private class MockDiskChecker extends DiskChecker {
+
+        private volatile float used;
+<span class="nc" id="L461">        private volatile Map&lt;File, Float&gt; usageMap = null;</span>
+
+<span class="nc" id="L463">        public MockDiskChecker(float threshold, float warnThreshold) {</span>
+<span class="nc" id="L464">            super(threshold, warnThreshold);</span>
+<span class="nc" id="L465">            used = 0f;</span>
+<span class="nc" id="L466">        }</span>
+
+        @Override
+        public float checkDir(File dir) throws DiskErrorException, DiskOutOfSpaceException, DiskWarnThresholdException {
+<span class="nc" id="L470">            float dirUsage = getDirUsage(dir);</span>
+
+<span class="nc bnc" id="L472" title="All 2 branches missed.">            if (dirUsage &gt; getDiskUsageThreshold()) {</span>
+<span class="nc" id="L473">                throw new DiskOutOfSpaceException(&quot;&quot;, dirUsage);</span>
+            }
+<span class="nc bnc" id="L475" title="All 2 branches missed.">            if (dirUsage &gt; getDiskUsageWarnThreshold()) {</span>
+<span class="nc" id="L476">                throw new DiskWarnThresholdException(&quot;&quot;, dirUsage);</span>
+            }
+<span class="nc" id="L478">            return dirUsage;</span>
+        }
+
+        @Override
+        public float getTotalDiskUsage(List&lt;File&gt; dirs) {
+<span class="nc" id="L483">            float accumulatedDiskUsage = 0f;</span>
+<span class="nc bnc" id="L484" title="All 2 branches missed.">            for (File dir : dirs) {</span>
+<span class="nc" id="L485">                accumulatedDiskUsage += getDirUsage(dir);</span>
+<span class="nc" id="L486">            }</span>
+<span class="nc" id="L487">            return (accumulatedDiskUsage / dirs.size());</span>
+        }
+
+        public float getDirUsage(File dir) {
+            float dirUsage;
+<span class="nc bnc" id="L492" title="All 4 branches missed.">            if ((usageMap == null) || (!usageMap.containsKey(dir))) {</span>
+<span class="nc" id="L493">                dirUsage = used;</span>
+            } else {
+<span class="nc" id="L495">                dirUsage = usageMap.get(dir);</span>
+            }
+<span class="nc" id="L497">            return dirUsage;</span>
+        }
+
+        public void setUsage(float usage) {
+<span class="nc" id="L501">            this.used = usage;</span>
+<span class="nc" id="L502">        }</span>
+
+        public void setUsageMap(Map&lt;File, Float&gt; usageMap) {
+<span class="nc" id="L505">            this.usageMap = usageMap;</span>
+<span class="nc" id="L506">        }</span>
+    }
+
+    private class MockLedgerDirsListener implements LedgerDirsListener {
+
+        public volatile boolean highPriorityWritesAllowed;
+        public volatile boolean readOnly;
+
+<span class="nc" id="L514">        public MockLedgerDirsListener() {</span>
+<span class="nc" id="L515">            reset();</span>
+<span class="nc" id="L516">        }</span>
+
+        @Override
+        public void diskWritable(File disk) {
+<span class="nc" id="L520">            readOnly = false;</span>
+<span class="nc" id="L521">            highPriorityWritesAllowed = true;</span>
+<span class="nc" id="L522">        }</span>
+
+        @Override
+        public void diskJustWritable(File disk) {
+<span class="nc" id="L526">            readOnly = false;</span>
+<span class="nc" id="L527">            highPriorityWritesAllowed = true;</span>
+<span class="nc" id="L528">        }</span>
+
+        @Override
+        public void allDisksFull(boolean highPriorityWritesAllowed) {
+<span class="nc" id="L532">            this.readOnly = true;</span>
+<span class="nc" id="L533">            this.highPriorityWritesAllowed = highPriorityWritesAllowed;</span>
+<span class="nc" id="L534">        }</span>
+
+        public void reset() {
+<span class="nc" id="L537">            readOnly = false;</span>
+<span class="nc" id="L538">            highPriorityWritesAllowed = true;</span>
+<span class="nc" id="L539">        }</span>
+
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

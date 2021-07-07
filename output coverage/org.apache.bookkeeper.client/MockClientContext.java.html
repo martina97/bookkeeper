@@ -1,0 +1,223 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MockClientContext.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">MockClientContext.java</span></div><h1>MockClientContext.java</h1><pre class="source lang-java linenums">/*
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.client;
+
+import static com.google.common.base.Preconditions.checkState;
+
+import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.UnpooledByteBufAllocator;
+
+import java.util.function.BooleanSupplier;
+
+import org.apache.bookkeeper.common.util.OrderedExecutor;
+import org.apache.bookkeeper.common.util.OrderedScheduler;
+import org.apache.bookkeeper.conf.ClientConfiguration;
+import org.apache.bookkeeper.discover.MockRegistrationClient;
+import org.apache.bookkeeper.meta.LedgerManager;
+import org.apache.bookkeeper.meta.MockLedgerManager;
+import org.apache.bookkeeper.proto.BookieClient;
+import org.apache.bookkeeper.proto.MockBookieClient;
+import org.apache.bookkeeper.stats.NullStatsLogger;
+import org.mockito.Mockito;
+
+/**
+ * Mock client context to allow testing client functionality with no external dependencies.
+ * The client context can be created with defaults, copied from another context or constructed from scratch.
+ */
+<span class="nc" id="L45">public class MockClientContext implements ClientContext {</span>
+    private ClientInternalConf internalConf;
+    private LedgerManager ledgerManager;
+    private BookieWatcher bookieWatcher;
+    private EnsemblePlacementPolicy placementPolicy;
+    private BookieClient bookieClient;
+    private OrderedExecutor mainWorkerPool;
+    private OrderedScheduler scheduler;
+    private BookKeeperClientStats clientStats;
+    private BooleanSupplier isClientClosed;
+    private MockRegistrationClient regClient;
+    private ByteBufAllocator allocator;
+
+    static MockClientContext create() throws Exception {
+<span class="nc" id="L59">        ClientConfiguration conf = new ClientConfiguration();</span>
+<span class="nc" id="L60">        OrderedScheduler scheduler = OrderedScheduler.newSchedulerBuilder().name(&quot;mock-executor&quot;).numThreads(1).build();</span>
+<span class="nc" id="L61">        MockRegistrationClient regClient = new MockRegistrationClient();</span>
+<span class="nc" id="L62">        EnsemblePlacementPolicy placementPolicy = new DefaultEnsemblePlacementPolicy();</span>
+<span class="nc" id="L63">        BookieWatcherImpl bookieWatcherImpl = new BookieWatcherImpl(conf, placementPolicy,</span>
+                                                                    regClient, NullStatsLogger.INSTANCE);
+<span class="nc" id="L65">        bookieWatcherImpl.initialBlockingBookieRead();</span>
+
+<span class="nc" id="L67">        return new MockClientContext()</span>
+<span class="nc" id="L68">            .setConf(ClientInternalConf.fromConfig(conf))</span>
+<span class="nc" id="L69">            .setLedgerManager(new MockLedgerManager())</span>
+<span class="nc" id="L70">            .setBookieWatcher(bookieWatcherImpl)</span>
+<span class="nc" id="L71">            .setPlacementPolicy(placementPolicy)</span>
+<span class="nc" id="L72">            .setRegistrationClient(regClient)</span>
+<span class="nc" id="L73">            .setBookieClient(new MockBookieClient(scheduler))</span>
+<span class="nc" id="L74">            .setByteBufAllocator(UnpooledByteBufAllocator.DEFAULT)</span>
+<span class="nc" id="L75">            .setMainWorkerPool(scheduler)</span>
+<span class="nc" id="L76">            .setScheduler(scheduler)</span>
+<span class="nc" id="L77">            .setClientStats(BookKeeperClientStats.newInstance(NullStatsLogger.INSTANCE))</span>
+<span class="nc" id="L78">            .setIsClientClosed(() -&gt; false);</span>
+    }
+
+    static MockClientContext copyOf(ClientContext other) {
+<span class="nc" id="L82">        return new MockClientContext()</span>
+<span class="nc" id="L83">            .setConf(other.getConf())</span>
+<span class="nc" id="L84">            .setLedgerManager(other.getLedgerManager())</span>
+<span class="nc" id="L85">            .setBookieWatcher(other.getBookieWatcher())</span>
+<span class="nc" id="L86">            .setPlacementPolicy(other.getPlacementPolicy())</span>
+<span class="nc" id="L87">            .setBookieClient(other.getBookieClient())</span>
+<span class="nc" id="L88">            .setMainWorkerPool(other.getMainWorkerPool())</span>
+<span class="nc" id="L89">            .setScheduler(other.getScheduler())</span>
+<span class="nc" id="L90">            .setClientStats(other.getClientStats())</span>
+<span class="nc" id="L91">            .setByteBufAllocator(other.getByteBufAllocator())</span>
+<span class="nc" id="L92">            .setIsClientClosed(other::isClientClosed);</span>
+    }
+
+    public MockRegistrationClient getMockRegistrationClient() {
+<span class="nc bnc" id="L96" title="All 2 branches missed.">        checkState(regClient != null);</span>
+<span class="nc" id="L97">        return regClient;</span>
+    }
+
+    public MockLedgerManager getMockLedgerManager() {
+<span class="nc" id="L101">        checkState(ledgerManager instanceof MockLedgerManager);</span>
+<span class="nc" id="L102">        return (MockLedgerManager) ledgerManager;</span>
+    }
+
+    public MockBookieClient getMockBookieClient() {
+<span class="nc" id="L106">        checkState(bookieClient instanceof MockBookieClient);</span>
+<span class="nc" id="L107">        return (MockBookieClient) bookieClient;</span>
+    }
+
+    public MockClientContext setConf(ClientInternalConf internalConf) {
+<span class="nc" id="L111">        this.internalConf = maybeSpy(internalConf);</span>
+<span class="nc" id="L112">        return this;</span>
+    }
+
+    public MockClientContext setLedgerManager(LedgerManager ledgerManager) {
+<span class="nc" id="L116">        this.ledgerManager = maybeSpy(ledgerManager);</span>
+<span class="nc" id="L117">        return this;</span>
+    }
+
+    public MockClientContext setBookieWatcher(BookieWatcher bookieWatcher) {
+<span class="nc" id="L121">        this.bookieWatcher = maybeSpy(bookieWatcher);</span>
+<span class="nc" id="L122">        return this;</span>
+    }
+
+    public MockClientContext setPlacementPolicy(EnsemblePlacementPolicy placementPolicy) {
+<span class="nc" id="L126">        this.placementPolicy = maybeSpy(placementPolicy);</span>
+<span class="nc" id="L127">        return this;</span>
+    }
+
+    public MockClientContext setBookieClient(BookieClient bookieClient) {
+<span class="nc" id="L131">        this.bookieClient = maybeSpy(bookieClient);</span>
+<span class="nc" id="L132">        return this;</span>
+    }
+
+    public MockClientContext setMainWorkerPool(OrderedExecutor mainWorkerPool) {
+<span class="nc" id="L136">        this.mainWorkerPool = maybeSpy(mainWorkerPool);</span>
+<span class="nc" id="L137">        return this;</span>
+    }
+
+    public MockClientContext setScheduler(OrderedScheduler scheduler) {
+<span class="nc" id="L141">        this.scheduler = maybeSpy(scheduler);</span>
+<span class="nc" id="L142">        return this;</span>
+    }
+
+    public MockClientContext setClientStats(BookKeeperClientStats clientStats) {
+<span class="nc" id="L146">        this.clientStats = clientStats;</span>
+<span class="nc" id="L147">        return this;</span>
+    }
+
+    public MockClientContext setIsClientClosed(BooleanSupplier isClientClosed) {
+<span class="nc" id="L151">        this.isClientClosed = isClientClosed;</span>
+<span class="nc" id="L152">        return this;</span>
+    }
+
+    public MockClientContext setRegistrationClient(MockRegistrationClient regClient) {
+<span class="nc" id="L156">        this.regClient = maybeSpy(regClient);</span>
+<span class="nc" id="L157">        return this;</span>
+    }
+
+    public MockClientContext setByteBufAllocator(ByteBufAllocator allocator) {
+<span class="nc" id="L161">        this.allocator = allocator;</span>
+<span class="nc" id="L162">        return this;</span>
+    }
+
+    private static &lt;T&gt; T maybeSpy(T orig) {
+<span class="nc bnc" id="L166" title="All 2 branches missed.">        if (Mockito.mockingDetails(orig).isSpy()) {</span>
+<span class="nc" id="L167">            return orig;</span>
+        } else {
+<span class="nc" id="L169">            return Mockito.spy(orig);</span>
+        }
+    }
+
+    @Override
+    public ClientInternalConf getConf() {
+<span class="nc" id="L175">        return this.internalConf;</span>
+    }
+
+    @Override
+    public LedgerManager getLedgerManager() {
+<span class="nc" id="L180">        return this.ledgerManager;</span>
+    }
+
+    @Override
+    public BookieWatcher getBookieWatcher() {
+<span class="nc" id="L185">        return this.bookieWatcher;</span>
+    }
+
+    @Override
+    public EnsemblePlacementPolicy getPlacementPolicy() {
+<span class="nc" id="L190">        return this.placementPolicy;</span>
+    }
+
+    @Override
+    public BookieClient getBookieClient() {
+<span class="nc" id="L195">        return this.bookieClient;</span>
+    }
+
+    @Override
+    public OrderedExecutor getMainWorkerPool() {
+<span class="nc" id="L200">        return this.mainWorkerPool;</span>
+    }
+
+    @Override
+    public OrderedScheduler getScheduler() {
+<span class="nc" id="L205">        return this.scheduler;</span>
+    }
+
+    @Override
+    public BookKeeperClientStats getClientStats() {
+<span class="nc" id="L210">        return clientStats;</span>
+    }
+
+    @Override
+    public boolean isClientClosed() {
+<span class="nc" id="L215">        return isClientClosed.getAsBoolean();</span>
+    }
+
+    @Override
+    public ByteBufAllocator getByteBufAllocator() {
+<span class="nc" id="L220">        return allocator;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

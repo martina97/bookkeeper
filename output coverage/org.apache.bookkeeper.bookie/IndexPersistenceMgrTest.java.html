@@ -1,0 +1,424 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>IndexPersistenceMgrTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$myBookieFenceLedgerTest.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.bookie</a> &gt; <span class="el_source">IndexPersistenceMgrTest.java</span></div><h1>IndexPersistenceMgrTest.java</h1><pre class="source lang-java linenums">/*
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.bookie;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufUtil;
+import io.netty.buffer.UnpooledByteBufAllocator;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.security.GeneralSecurityException;
+import java.util.Arrays;
+import java.util.Collections;
+
+import org.apache.bookkeeper.bookie.FileInfoBackingCache.CachedFileInfo;
+import org.apache.bookkeeper.client.BookKeeper;
+import org.apache.bookkeeper.common.util.Watcher;
+import org.apache.bookkeeper.conf.ServerConfiguration;
+import org.apache.bookkeeper.proto.checksum.DigestManager;
+import org.apache.bookkeeper.stats.NullStatsLogger;
+import org.apache.bookkeeper.util.DiskChecker;
+import org.apache.bookkeeper.util.SnapshotMap;
+import org.apache.commons.io.FileUtils;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+
+/**
+ * Test cases for IndexPersistenceMgr.
+ */
+<span class="nc" id="L59">public class IndexPersistenceMgrTest {</span>
+
+    ServerConfiguration conf;
+    File journalDir, ledgerDir;
+    LedgerDirsManager ledgerDirsManager;
+    LedgerDirsMonitor ledgerMonitor;
+
+    @Before
+    public void setUp() throws Exception {
+<span class="nc" id="L68">        journalDir = File.createTempFile(&quot;IndexPersistenceMgr&quot;, &quot;Journal&quot;);</span>
+<span class="nc" id="L69">        journalDir.delete();</span>
+<span class="nc" id="L70">        journalDir.mkdir();</span>
+<span class="nc" id="L71">        ledgerDir = File.createTempFile(&quot;IndexPersistenceMgr&quot;, &quot;Ledger&quot;);</span>
+<span class="nc" id="L72">        ledgerDir.delete();</span>
+<span class="nc" id="L73">        ledgerDir.mkdir();</span>
+        // Create current directories
+<span class="nc" id="L75">        Bookie.getCurrentDirectory(journalDir).mkdir();</span>
+<span class="nc" id="L76">        Bookie.getCurrentDirectory(ledgerDir).mkdir();</span>
+
+<span class="nc" id="L78">        conf = new ServerConfiguration();</span>
+<span class="nc" id="L79">        conf.setMetadataServiceUri(null);</span>
+<span class="nc" id="L80">        conf.setJournalDirName(journalDir.getPath());</span>
+<span class="nc" id="L81">        conf.setLedgerDirNames(new String[] { ledgerDir.getPath() });</span>
+
+<span class="nc" id="L83">        ledgerDirsManager = new LedgerDirsManager(conf, conf.getLedgerDirs(),</span>
+<span class="nc" id="L84">                new DiskChecker(conf.getDiskUsageThreshold(), conf.getDiskUsageWarnThreshold()));</span>
+<span class="nc" id="L85">        ledgerMonitor = new LedgerDirsMonitor(conf,</span>
+<span class="nc" id="L86">                new DiskChecker(conf.getDiskUsageThreshold(), conf.getDiskUsageWarnThreshold()),</span>
+<span class="nc" id="L87">                Collections.singletonList(ledgerDirsManager));</span>
+<span class="nc" id="L88">        ledgerMonitor.init();</span>
+<span class="nc" id="L89">    }</span>
+
+    @After
+    public void tearDown() throws Exception {
+<span class="nc" id="L93">        ledgerMonitor.shutdown();</span>
+<span class="nc" id="L94">        FileUtils.deleteDirectory(journalDir);</span>
+<span class="nc" id="L95">        FileUtils.deleteDirectory(ledgerDir);</span>
+<span class="nc" id="L96">    }</span>
+
+    private IndexPersistenceMgr createIndexPersistenceManager(int openFileLimit) throws Exception {
+<span class="nc" id="L99">        ServerConfiguration newConf = new ServerConfiguration();</span>
+<span class="nc" id="L100">        newConf.addConfiguration(conf);</span>
+<span class="nc" id="L101">        newConf.setOpenFileLimit(openFileLimit);</span>
+
+<span class="nc" id="L103">        return new IndexPersistenceMgr(</span>
+<span class="nc" id="L104">                newConf.getPageSize(), newConf.getPageSize() / LedgerEntryPage.getIndexEntrySize(),</span>
+                newConf, new SnapshotMap&lt;Long, Boolean&gt;(), ledgerDirsManager, NullStatsLogger.INSTANCE);
+    }
+
+    private static void getNumFileInfos(IndexPersistenceMgr indexPersistenceMgr,
+                                        int numFiles, byte[] masterKey) throws Exception {
+<span class="nc bnc" id="L110" title="All 2 branches missed.">        for (int i = 0; i &lt; numFiles; i++) {</span>
+<span class="nc" id="L111">            indexPersistenceMgr.getFileInfo((long) i, masterKey);</span>
+        }
+<span class="nc" id="L113">    }</span>
+
+    @Test
+    public void testEvictFileInfoWhenUnderlyingFileExists() throws Exception {
+<span class="nc" id="L117">        evictFileInfoTest(true);</span>
+<span class="nc" id="L118">    }</span>
+
+    @Test
+    public void testEvictFileInfoWhenUnderlyingFileDoesntExist() throws Exception {
+<span class="nc" id="L122">        evictFileInfoTest(false);</span>
+<span class="nc" id="L123">    }</span>
+
+    private void evictFileInfoTest(boolean createFile) throws Exception {
+<span class="nc" id="L126">        IndexPersistenceMgr indexPersistenceMgr = createIndexPersistenceManager(2);</span>
+        try {
+<span class="nc" id="L128">            long lid = 99999L;</span>
+<span class="nc" id="L129">            byte[] masterKey = &quot;evict-file-info&quot;.getBytes(UTF_8);</span>
+            // get file info and make sure the file created
+<span class="nc" id="L131">            FileInfo fi = indexPersistenceMgr.getFileInfo(lid, masterKey);</span>
+<span class="nc bnc" id="L132" title="All 2 branches missed.">            if (createFile) {</span>
+<span class="nc" id="L133">                fi.checkOpen(true);</span>
+            }
+<span class="nc" id="L135">            fi.setFenced();</span>
+
+            // fill up the cache to evict file infos
+<span class="nc" id="L138">            getNumFileInfos(indexPersistenceMgr, 10, masterKey);</span>
+
+            // get the file info again, state should have been flushed
+<span class="nc" id="L141">            fi = indexPersistenceMgr.getFileInfo(lid, masterKey);</span>
+<span class="nc" id="L142">            assertTrue(&quot;Fence bit should be persisted&quot;, fi.isFenced());</span>
+        } finally {
+<span class="nc" id="L144">            indexPersistenceMgr.close();</span>
+        }
+<span class="nc" id="L146">    }</span>
+
+<span class="nc" id="L148">    final long lid = 1L;</span>
+<span class="nc" id="L149">    final byte[] masterKey = &quot;write&quot;.getBytes();</span>
+
+    @Test
+    public void testGetFileInfoReadBeforeWrite() throws Exception {
+<span class="nc" id="L153">        IndexPersistenceMgr indexPersistenceMgr = null;</span>
+        try {
+<span class="nc" id="L155">            indexPersistenceMgr = createIndexPersistenceManager(1);</span>
+            // get the file info for read
+            try {
+<span class="nc" id="L158">                indexPersistenceMgr.getFileInfo(lid, null);</span>
+<span class="nc" id="L159">                fail(&quot;Should fail get file info for reading if the file doesn't exist&quot;);</span>
+<span class="nc" id="L160">            } catch (Bookie.NoLedgerException nle) {</span>
+                // exepcted
+<span class="nc" id="L162">            }</span>
+<span class="nc" id="L163">            assertEquals(0, indexPersistenceMgr.writeFileInfoCache.size());</span>
+<span class="nc" id="L164">            assertEquals(0, indexPersistenceMgr.readFileInfoCache.size());</span>
+
+<span class="nc" id="L166">            CachedFileInfo writeFileInfo = indexPersistenceMgr.getFileInfo(lid, masterKey);</span>
+<span class="nc" id="L167">            assertEquals(2, writeFileInfo.getRefCount());</span>
+<span class="nc" id="L168">            assertEquals(1, indexPersistenceMgr.writeFileInfoCache.size());</span>
+<span class="nc" id="L169">            assertEquals(0, indexPersistenceMgr.readFileInfoCache.size());</span>
+<span class="nc" id="L170">            writeFileInfo.release();</span>
+<span class="nc" id="L171">            assertEquals(1, writeFileInfo.getRefCount());</span>
+        } finally {
+<span class="nc bnc" id="L173" title="All 2 branches missed.">            if (null != indexPersistenceMgr) {</span>
+<span class="nc" id="L174">                indexPersistenceMgr.close();</span>
+            }
+        }
+<span class="nc" id="L177">    }</span>
+
+    @Test
+    public void testGetFileInfoWriteBeforeRead() throws Exception {
+<span class="nc" id="L181">        IndexPersistenceMgr indexPersistenceMgr = null;</span>
+        try {
+<span class="nc" id="L183">            indexPersistenceMgr = createIndexPersistenceManager(1);</span>
+
+<span class="nc" id="L185">            CachedFileInfo writeFileInfo = indexPersistenceMgr.getFileInfo(lid, masterKey);</span>
+<span class="nc" id="L186">            assertEquals(2, writeFileInfo.getRefCount());</span>
+<span class="nc" id="L187">            assertEquals(1, indexPersistenceMgr.writeFileInfoCache.size());</span>
+<span class="nc" id="L188">            assertEquals(0, indexPersistenceMgr.readFileInfoCache.size());</span>
+<span class="nc" id="L189">            writeFileInfo.release();</span>
+
+<span class="nc" id="L191">            CachedFileInfo readFileInfo = indexPersistenceMgr.getFileInfo(lid, null);</span>
+<span class="nc" id="L192">            assertEquals(3, readFileInfo.getRefCount());</span>
+<span class="nc" id="L193">            assertEquals(1, indexPersistenceMgr.writeFileInfoCache.size());</span>
+<span class="nc" id="L194">            assertEquals(1, indexPersistenceMgr.readFileInfoCache.size());</span>
+<span class="nc" id="L195">            readFileInfo.release();</span>
+<span class="nc" id="L196">            assertEquals(2, writeFileInfo.getRefCount());</span>
+<span class="nc" id="L197">            assertEquals(2, readFileInfo.getRefCount());</span>
+        } finally {
+<span class="nc bnc" id="L199" title="All 2 branches missed.">            if (null != indexPersistenceMgr) {</span>
+<span class="nc" id="L200">                indexPersistenceMgr.close();</span>
+            }
+        }
+<span class="nc" id="L203">    }</span>
+
+    @Test
+    public void testReadFileInfoCacheEviction() throws Exception {
+<span class="nc" id="L207">        IndexPersistenceMgr indexPersistenceMgr = null;</span>
+        try {
+<span class="nc" id="L209">            indexPersistenceMgr = createIndexPersistenceManager(1);</span>
+<span class="nc bnc" id="L210" title="All 2 branches missed.">            for (int i = 0; i &lt; 3; i++) {</span>
+<span class="nc" id="L211">                CachedFileInfo fileInfo = indexPersistenceMgr.getFileInfo(lid + i, masterKey);</span>
+                // We need to make sure index file is created, otherwise the test case can be flaky
+<span class="nc" id="L213">                fileInfo.checkOpen(true);</span>
+<span class="nc" id="L214">                fileInfo.release();</span>
+
+                // load into read cache also
+<span class="nc" id="L217">                indexPersistenceMgr.getFileInfo(lid + i, null).release();</span>
+            }
+
+<span class="nc" id="L220">            indexPersistenceMgr.getFileInfo(lid, masterKey);</span>
+<span class="nc" id="L221">            assertEquals(1, indexPersistenceMgr.writeFileInfoCache.size());</span>
+<span class="nc" id="L222">            assertEquals(2, indexPersistenceMgr.readFileInfoCache.size());</span>
+
+            // trigger file info eviction on read file info cache
+<span class="nc bnc" id="L225" title="All 2 branches missed.">            for (int i = 1; i &lt;= 2; i++) {</span>
+<span class="nc" id="L226">                indexPersistenceMgr.getFileInfo(lid + i, null);</span>
+            }
+<span class="nc" id="L228">            assertEquals(1, indexPersistenceMgr.writeFileInfoCache.size());</span>
+<span class="nc" id="L229">            assertEquals(2, indexPersistenceMgr.readFileInfoCache.size());</span>
+
+<span class="nc" id="L231">            CachedFileInfo fileInfo = indexPersistenceMgr.writeFileInfoCache.asMap().get(lid);</span>
+<span class="nc" id="L232">            assertNotNull(fileInfo);</span>
+<span class="nc" id="L233">            assertEquals(2, fileInfo.getRefCount());</span>
+<span class="nc" id="L234">            fileInfo = indexPersistenceMgr.writeFileInfoCache.asMap().get(lid + 1);</span>
+<span class="nc" id="L235">            assertNull(fileInfo);</span>
+<span class="nc" id="L236">            fileInfo = indexPersistenceMgr.writeFileInfoCache.asMap().get(lid + 2);</span>
+<span class="nc" id="L237">            assertNull(fileInfo);</span>
+<span class="nc" id="L238">            fileInfo = indexPersistenceMgr.readFileInfoCache.asMap().get(lid);</span>
+<span class="nc" id="L239">            assertNull(fileInfo);</span>
+<span class="nc" id="L240">            fileInfo = indexPersistenceMgr.readFileInfoCache.asMap().get(lid + 1);</span>
+<span class="nc" id="L241">            assertNotNull(fileInfo);</span>
+<span class="nc" id="L242">            assertEquals(2, fileInfo.getRefCount());</span>
+<span class="nc" id="L243">            fileInfo = indexPersistenceMgr.readFileInfoCache.asMap().get(lid + 2);</span>
+<span class="nc" id="L244">            assertNotNull(fileInfo);</span>
+<span class="nc" id="L245">            assertEquals(2, fileInfo.getRefCount());</span>
+        } finally {
+<span class="nc bnc" id="L247" title="All 2 branches missed.">            if (null != indexPersistenceMgr) {</span>
+<span class="nc" id="L248">                indexPersistenceMgr.close();</span>
+            }
+        }
+<span class="nc" id="L251">    }</span>
+
+    @Test
+    public void testEvictionShouldNotAffectLongPollRead() throws Exception {
+<span class="nc" id="L255">        IndexPersistenceMgr indexPersistenceMgr = null;</span>
+<span class="nc" id="L256">        Watcher&lt;LastAddConfirmedUpdateNotification&gt; watcher = notification -&gt; notification.recycle();</span>
+        try {
+<span class="nc" id="L258">            indexPersistenceMgr = createIndexPersistenceManager(1);</span>
+<span class="nc" id="L259">            indexPersistenceMgr.getFileInfo(lid, masterKey);</span>
+<span class="nc" id="L260">            indexPersistenceMgr.getFileInfo(lid, null);</span>
+<span class="nc" id="L261">            indexPersistenceMgr.updateLastAddConfirmed(lid, 1);</span>
+            // watch should succeed because ledger is not evicted or closed
+<span class="nc" id="L263">            assertTrue(</span>
+<span class="nc" id="L264">                indexPersistenceMgr.waitForLastAddConfirmedUpdate(lid, 1, watcher));</span>
+            // now evict ledger 1 from write cache
+<span class="nc" id="L266">            indexPersistenceMgr.getFileInfo(lid + 1, masterKey);</span>
+            // even if ledger 1 is evicted from write cache, watcher should still succeed
+<span class="nc" id="L268">            assertTrue(</span>
+<span class="nc" id="L269">                indexPersistenceMgr.waitForLastAddConfirmedUpdate(lid, 1, watcher));</span>
+            // now evict ledger 1 from read cache
+<span class="nc" id="L271">            indexPersistenceMgr.getFileInfo(lid + 2, masterKey);</span>
+<span class="nc" id="L272">            indexPersistenceMgr.getFileInfo(lid + 2, null);</span>
+            // even if ledger 1 is evicted from both cache, watcher should still succeed because it
+            // will create a new FileInfo when cache miss
+<span class="nc" id="L275">            assertTrue(</span>
+<span class="nc" id="L276">                indexPersistenceMgr.waitForLastAddConfirmedUpdate(lid, 1, watcher));</span>
+        } finally {
+<span class="nc bnc" id="L278" title="All 2 branches missed.">            if (null != indexPersistenceMgr) {</span>
+<span class="nc" id="L279">                indexPersistenceMgr.close();</span>
+            }
+        }
+<span class="nc" id="L282">    }</span>
+
+    @Test
+    public void testEvictBeforeReleaseRace() throws Exception {
+<span class="nc" id="L286">        IndexPersistenceMgr indexPersistenceMgr = null;</span>
+<span class="nc" id="L287">        Watcher&lt;LastAddConfirmedUpdateNotification&gt; watcher = notification -&gt; notification.recycle();</span>
+        try {
+<span class="nc" id="L289">            indexPersistenceMgr = createIndexPersistenceManager(1);</span>
+
+<span class="nc" id="L291">            indexPersistenceMgr.getFileInfo(1L, masterKey);</span>
+<span class="nc" id="L292">            indexPersistenceMgr.getFileInfo(2L, masterKey);</span>
+<span class="nc" id="L293">            indexPersistenceMgr.getFileInfo(3L, masterKey);</span>
+<span class="nc" id="L294">            indexPersistenceMgr.getFileInfo(4L, masterKey);</span>
+
+<span class="nc" id="L296">            CachedFileInfo fi = indexPersistenceMgr.getFileInfo(1L, masterKey);</span>
+
+            // trigger eviction
+<span class="nc" id="L299">            indexPersistenceMgr.getFileInfo(2L, masterKey);</span>
+<span class="nc" id="L300">            indexPersistenceMgr.getFileInfo(3L, null);</span>
+<span class="nc" id="L301">            indexPersistenceMgr.getFileInfo(4L, null);</span>
+
+<span class="nc" id="L303">            Thread.sleep(1000);</span>
+
+<span class="nc" id="L305">            fi.setFenced();</span>
+<span class="nc" id="L306">            fi.release();</span>
+
+<span class="nc" id="L308">            assertTrue(indexPersistenceMgr.isFenced(1));</span>
+        } finally {
+<span class="nc bnc" id="L310" title="All 2 branches missed.">            if (null != indexPersistenceMgr) {</span>
+<span class="nc" id="L311">                indexPersistenceMgr.close();</span>
+            }
+        }
+<span class="nc" id="L314">    }</span>
+
+    /*
+     * In this testcase index files (FileInfos) are precreated with different
+     * FileInfo header versions (FileInfo.V0 and FileInfo.V1) and it is
+     * validated that the current implementation of IndexPersistenceMgr (and
+     * corresponding FileInfo) is able to function as per the specifications of
+     * FileInfo header version. If it is FileInfo.V0 then explicitLac is not
+     * persisted and if it is FileInfo.V1 then explicitLac is persisted.
+     */
+    @Test
+    public void testFileInfosOfVariousHeaderVersions() throws Exception {
+<span class="nc" id="L326">        IndexPersistenceMgr indexPersistenceMgr = null;</span>
+        try {
+<span class="nc" id="L328">            indexPersistenceMgr = createIndexPersistenceManager(1);</span>
+<span class="nc" id="L329">            long ledgerIdWithVersionZero = 25L;</span>
+<span class="nc" id="L330">            validateFileInfo(indexPersistenceMgr, ledgerIdWithVersionZero, FileInfo.V0);</span>
+
+<span class="nc" id="L332">            long ledgerIdWithVersionOne = 135L;</span>
+<span class="nc" id="L333">            validateFileInfo(indexPersistenceMgr, ledgerIdWithVersionOne, FileInfo.V1);</span>
+        } finally {
+<span class="nc bnc" id="L335" title="All 2 branches missed.">            if (null != indexPersistenceMgr) {</span>
+<span class="nc" id="L336">                indexPersistenceMgr.close();</span>
+            }
+        }
+<span class="nc" id="L339">    }</span>
+
+    void validateFileInfo(IndexPersistenceMgr indexPersistenceMgr, long ledgerId, int headerVersion)
+            throws IOException, GeneralSecurityException {
+<span class="nc" id="L343">        BookKeeper.DigestType digestType = BookKeeper.DigestType.CRC32;</span>
+<span class="nc" id="L344">        boolean getUseV2WireProtocol = true;</span>
+
+<span class="nc" id="L346">        preCreateFileInfoForLedger(ledgerId, headerVersion);</span>
+<span class="nc" id="L347">        DigestManager digestManager = DigestManager.instantiate(ledgerId, masterKey,</span>
+<span class="nc" id="L348">                BookKeeper.DigestType.toProtoDigestType(digestType), UnpooledByteBufAllocator.DEFAULT,</span>
+                getUseV2WireProtocol);
+
+<span class="nc" id="L351">        CachedFileInfo fileInfo = indexPersistenceMgr.getFileInfo(ledgerId, masterKey);</span>
+<span class="nc" id="L352">        fileInfo.readHeader();</span>
+<span class="nc" id="L353">        assertEquals(&quot;ExplicitLac should be null&quot;, null, fileInfo.getExplicitLac());</span>
+<span class="nc" id="L354">        assertEquals(&quot;Header Version should match with precreated fileinfos headerversion&quot;, headerVersion,</span>
+                fileInfo.headerVersion);
+<span class="nc" id="L356">        assertTrue(&quot;Masterkey should match with precreated fileinfos masterkey&quot;,</span>
+<span class="nc" id="L357">                Arrays.equals(masterKey, fileInfo.masterKey));</span>
+<span class="nc" id="L358">        long explicitLac = 22;</span>
+<span class="nc" id="L359">        ByteBuf explicitLacByteBuf = digestManager.computeDigestAndPackageForSendingLac(explicitLac).getBuffer(0);</span>
+<span class="nc" id="L360">        explicitLacByteBuf.markReaderIndex();</span>
+<span class="nc" id="L361">        indexPersistenceMgr.setExplicitLac(ledgerId, explicitLacByteBuf);</span>
+<span class="nc" id="L362">        explicitLacByteBuf.resetReaderIndex();</span>
+<span class="nc" id="L363">        assertEquals(&quot;explicitLac ByteBuf contents should match&quot;, 0,</span>
+<span class="nc" id="L364">                ByteBufUtil.compare(explicitLacByteBuf, indexPersistenceMgr.getExplicitLac(ledgerId)));</span>
+        /*
+         * release fileInfo untill it is marked dead and closed, so that
+         * contents of it are persisted.
+         */
+<span class="nc bnc" id="L369" title="All 2 branches missed.">        while (fileInfo.refCount.get() != FileInfoBackingCache.DEAD_REF) {</span>
+<span class="nc" id="L370">            fileInfo.release();</span>
+        }
+        /*
+         * reopen the fileinfo and readHeader, so that whatever was persisted
+         * would be read.
+         */
+<span class="nc" id="L376">        fileInfo = indexPersistenceMgr.getFileInfo(ledgerId, masterKey);</span>
+<span class="nc" id="L377">        fileInfo.readHeader();</span>
+<span class="nc" id="L378">        assertEquals(&quot;Header Version should match with precreated fileinfos headerversion even after reopening&quot;,</span>
+                headerVersion, fileInfo.headerVersion);
+<span class="nc" id="L380">        assertTrue(&quot;Masterkey should match with precreated fileinfos masterkey&quot;,</span>
+<span class="nc" id="L381">                Arrays.equals(masterKey, fileInfo.masterKey));</span>
+<span class="nc bnc" id="L382" title="All 2 branches missed.">        if (headerVersion == FileInfo.V0) {</span>
+<span class="nc" id="L383">            assertEquals(&quot;Since it is V0 Header, explicitLac will not be persisted and should be null after reopening&quot;,</span>
+<span class="nc" id="L384">                    null, indexPersistenceMgr.getExplicitLac(ledgerId));</span>
+        } else {
+<span class="nc" id="L386">            explicitLacByteBuf.resetReaderIndex();</span>
+<span class="nc" id="L387">            assertEquals(&quot;Since it is V1 Header, explicitLac will be persisted and should not be null after reopening&quot;,</span>
+<span class="nc" id="L388">                    0, ByteBufUtil.compare(explicitLacByteBuf, indexPersistenceMgr.getExplicitLac(ledgerId)));</span>
+        }
+<span class="nc" id="L390">    }</span>
+
+    void preCreateFileInfoForLedger(long ledgerId, int headerVersion) throws IOException {
+<span class="nc" id="L393">        File ledgerCurDir = Bookie.getCurrentDirectory(ledgerDir);</span>
+<span class="nc" id="L394">        String ledgerName = IndexPersistenceMgr.getLedgerName(ledgerId);</span>
+<span class="nc" id="L395">        File indexFile = new File(ledgerCurDir, ledgerName);</span>
+<span class="nc" id="L396">        indexFile.getParentFile().mkdirs();</span>
+<span class="nc" id="L397">        indexFile.createNewFile();</span>
+        /*
+         * precreate index file (FileInfo) for the ledger with specified
+         * headerversion. Even in FileInfo.V1 case, it is valid for
+         * explicitLacBufLength to be 0. If it is 0, then explicitLac is
+         * considered null (not set).
+         */
+<span class="nc" id="L404">        try (RandomAccessFile raf = new RandomAccessFile(indexFile, &quot;rw&quot;)) {</span>
+<span class="nc" id="L405">            FileChannel fcForIndexFile = raf.getChannel();</span>
+<span class="nc" id="L406">            ByteBuffer bb = ByteBuffer.allocate((int) FileInfo.START_OF_DATA);</span>
+<span class="nc" id="L407">            bb.putInt(FileInfo.SIGNATURE);</span>
+<span class="nc" id="L408">            bb.putInt(headerVersion);</span>
+<span class="nc" id="L409">            bb.putInt(masterKey.length);</span>
+<span class="nc" id="L410">            bb.put(masterKey);</span>
+            // statebits
+<span class="nc" id="L412">            bb.putInt(0);</span>
+<span class="nc bnc" id="L413" title="All 2 branches missed.">            if (headerVersion == FileInfo.V1) {</span>
+                // explicitLacBufLength
+<span class="nc" id="L415">                bb.putInt(0);</span>
+            }
+<span class="nc" id="L417">            bb.rewind();</span>
+<span class="nc" id="L418">            fcForIndexFile.position(0);</span>
+<span class="nc" id="L419">            fcForIndexFile.write(bb);</span>
+<span class="nc" id="L420">            fcForIndexFile.close();</span>
+        }
+<span class="nc" id="L422">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

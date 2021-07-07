@@ -1,0 +1,1514 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>BookieWriteLedgerTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">BookieWriteLedgerTest.java</span></div><h1>BookieWriteLedgerTest.java</h1><pre class="source lang-java linenums">/**
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.client;
+
+import static org.apache.bookkeeper.client.BookKeeperClientStats.ADD_OP;
+import static org.apache.bookkeeper.client.BookKeeperClientStats.ADD_OP_UR;
+import static org.apache.bookkeeper.client.BookKeeperClientStats.CLIENT_SCOPE;
+import static org.apache.bookkeeper.client.BookKeeperClientStats.READ_OP_DM;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import com.google.common.collect.Lists;
+import io.netty.buffer.AbstractByteBufAllocator;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.PooledByteBufAllocator;
+import io.netty.buffer.Unpooled;
+import io.netty.buffer.UnpooledByteBufAllocator;
+
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+
+import org.apache.bookkeeper.bookie.Bookie;
+import org.apache.bookkeeper.bookie.BookieException;
+import org.apache.bookkeeper.client.AsyncCallback.AddCallback;
+import org.apache.bookkeeper.client.BKException.BKLedgerClosedException;
+import org.apache.bookkeeper.client.BookKeeper.DigestType;
+import org.apache.bookkeeper.client.api.LedgerEntries;
+import org.apache.bookkeeper.client.api.ReadHandle;
+import org.apache.bookkeeper.client.api.WriteAdvHandle;
+import org.apache.bookkeeper.conf.ServerConfiguration;
+import org.apache.bookkeeper.meta.LongHierarchicalLedgerManagerFactory;
+import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.apache.commons.lang3.tuple.Pair;
+import org.apache.zookeeper.KeeperException;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+import org.powermock.reflect.Whitebox;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Testing ledger write entry cases.
+ */
+public class BookieWriteLedgerTest extends
+    BookKeeperClusterTestCase implements AddCallback {
+
+<span class="nc" id="L82">    private static final Logger LOG = LoggerFactory</span>
+<span class="nc" id="L83">            .getLogger(BookieWriteLedgerTest.class);</span>
+
+<span class="nc" id="L85">    byte[] ledgerPassword = &quot;aaa&quot;.getBytes();</span>
+    LedgerHandle lh, lh2;
+    Enumeration&lt;LedgerEntry&gt; ls;
+
+    // test related variables
+<span class="nc" id="L90">    int numEntriesToWrite = 100;</span>
+<span class="nc" id="L91">    int maxInt = Integer.MAX_VALUE;</span>
+    Random rng; // Random Number Generator
+    ArrayList&lt;byte[]&gt; entries1; // generated entries
+    ArrayList&lt;byte[]&gt; entries2; // generated entries
+
+    private final DigestType digestType;
+
+    private static class SyncObj {
+        volatile int counter;
+        volatile int rc;
+
+<span class="nc" id="L102">        public SyncObj() {</span>
+<span class="nc" id="L103">            counter = 0;</span>
+<span class="nc" id="L104">        }</span>
+    }
+
+    @Override
+    @Before
+    public void setUp() throws Exception {
+<span class="nc" id="L110">        super.setUp();</span>
+<span class="nc" id="L111">        rng = new Random(0); // Initialize the Random</span>
+        // Number Generator
+<span class="nc" id="L113">        entries1 = new ArrayList&lt;byte[]&gt;(); // initialize the entries list</span>
+<span class="nc" id="L114">        entries2 = new ArrayList&lt;byte[]&gt;(); // initialize the entries list</span>
+<span class="nc" id="L115">    }</span>
+
+    public BookieWriteLedgerTest() {
+<span class="nc" id="L118">        super(5, 180);</span>
+<span class="nc" id="L119">        this.digestType = DigestType.CRC32;</span>
+<span class="nc" id="L120">        String ledgerManagerFactory = &quot;org.apache.bookkeeper.meta.HierarchicalLedgerManagerFactory&quot;;</span>
+        // set ledger manager
+<span class="nc" id="L122">        baseConf.setLedgerManagerFactoryClassName(ledgerManagerFactory);</span>
+        /*
+         * 'testLedgerCreateAdvWithLedgerIdInLoop2' testcase relies on skipListSizeLimit,
+         * so setting it to some small value for making that testcase lite.
+         */
+<span class="nc" id="L127">        baseConf.setSkipListSizeLimit(4 * 1024 * 1024);</span>
+<span class="nc" id="L128">        baseClientConf.setLedgerManagerFactoryClassName(ledgerManagerFactory);</span>
+<span class="nc" id="L129">    }</span>
+
+    /**
+     * Verify write when few bookie failures in last ensemble and forcing
+     * ensemble reformation.
+     */
+    @Test
+    public void testWithMultipleBookieFailuresInLastEnsemble() throws Exception {
+        // Create a ledger
+<span class="nc" id="L138">        lh = bkc.createLedger(5, 4, digestType, ledgerPassword);</span>
+<span class="nc" id="L139">        LOG.info(&quot;Ledger ID: &quot; + lh.getId());</span>
+<span class="nc bnc" id="L140" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntriesToWrite; i++) {</span>
+<span class="nc" id="L141">            ByteBuffer entry = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L142">            entry.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L143">            entry.position(0);</span>
+
+<span class="nc" id="L145">            entries1.add(entry.array());</span>
+<span class="nc" id="L146">            lh.addEntry(entry.array());</span>
+        }
+        // Start three more bookies
+<span class="nc" id="L149">        startNewBookie();</span>
+<span class="nc" id="L150">        startNewBookie();</span>
+<span class="nc" id="L151">        startNewBookie();</span>
+
+        // Shutdown three bookies in the last ensemble and continue writing
+<span class="nc" id="L154">        List&lt;BookieSocketAddress&gt; ensemble = lh.getLedgerMetadata()</span>
+<span class="nc" id="L155">                .getAllEnsembles().entrySet().iterator().next().getValue();</span>
+<span class="nc" id="L156">        killBookie(ensemble.get(0));</span>
+<span class="nc" id="L157">        killBookie(ensemble.get(1));</span>
+<span class="nc" id="L158">        killBookie(ensemble.get(2));</span>
+
+<span class="nc" id="L160">        int i = numEntriesToWrite;</span>
+<span class="nc" id="L161">        numEntriesToWrite = numEntriesToWrite + 50;</span>
+<span class="nc bnc" id="L162" title="All 2 branches missed.">        for (; i &lt; numEntriesToWrite; i++) {</span>
+<span class="nc" id="L163">            ByteBuffer entry = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L164">            entry.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L165">            entry.position(0);</span>
+
+<span class="nc" id="L167">            entries1.add(entry.array());</span>
+<span class="nc" id="L168">            lh.addEntry(entry.array());</span>
+        }
+<span class="nc" id="L170">        readEntries(lh, entries1);</span>
+<span class="nc" id="L171">        lh.close();</span>
+<span class="nc" id="L172">    }</span>
+
+    /**
+     * Verify write and Read durability stats.
+     */
+    @Test
+    public void testWriteAndReadStats() throws Exception {
+        // Create a ledger
+<span class="nc" id="L180">        lh = bkc.createLedger(3, 3, 2, digestType, ledgerPassword);</span>
+
+        // write-batch-1
+<span class="nc bnc" id="L183" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntriesToWrite; i++) {</span>
+<span class="nc" id="L184">            ByteBuffer entry = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L185">            entry.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L186">            entry.position(0);</span>
+
+<span class="nc" id="L188">            entries1.add(entry.array());</span>
+<span class="nc" id="L189">            lh.addEntry(entry.array());</span>
+        }
+<span class="nc" id="L191">        assertTrue(</span>
+                &quot;Stats should have captured a new writes&quot;,
+<span class="nc" id="L193">                bkc.getTestStatsProvider().getOpStatsLogger(</span>
+                        CLIENT_SCOPE + &quot;.&quot; + ADD_OP)
+<span class="nc bnc" id="L195" title="All 2 branches missed.">                        .getSuccessCount() &gt; 0);</span>
+
+<span class="nc" id="L197">        CountDownLatch sleepLatch1 = new CountDownLatch(1);</span>
+<span class="nc" id="L198">        CountDownLatch sleepLatch2 = new CountDownLatch(1);</span>
+<span class="nc" id="L199">        List&lt;BookieSocketAddress&gt; ensemble = lh.getLedgerMetadata()</span>
+<span class="nc" id="L200">                .getAllEnsembles().entrySet().iterator().next().getValue();</span>
+
+<span class="nc" id="L202">        sleepBookie(ensemble.get(0), sleepLatch1);</span>
+
+<span class="nc" id="L204">        int i = numEntriesToWrite;</span>
+<span class="nc" id="L205">        numEntriesToWrite = numEntriesToWrite + 50;</span>
+
+        // write-batch-2
+
+<span class="nc bnc" id="L209" title="All 2 branches missed.">        for (; i &lt; numEntriesToWrite; i++) {</span>
+<span class="nc" id="L210">            ByteBuffer entry = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L211">            entry.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L212">            entry.position(0);</span>
+
+<span class="nc" id="L214">            entries1.add(entry.array());</span>
+<span class="nc" id="L215">            lh.addEntry(entry.array());</span>
+        }
+
+        // Let the second bookie go to sleep. This forces write timeout and ensemble change
+        // Which will be enough time to receive delayed write failures on the write-batch-2
+
+<span class="nc" id="L221">        sleepBookie(ensemble.get(1), sleepLatch2);</span>
+<span class="nc" id="L222">        i = numEntriesToWrite;</span>
+<span class="nc" id="L223">        numEntriesToWrite = numEntriesToWrite + 50;</span>
+
+        // write-batch-3
+
+<span class="nc bnc" id="L227" title="All 2 branches missed.">        for (; i &lt; numEntriesToWrite; i++) {</span>
+<span class="nc" id="L228">            ByteBuffer entry = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L229">            entry.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L230">            entry.position(0);</span>
+
+<span class="nc" id="L232">            entries1.add(entry.array());</span>
+<span class="nc" id="L233">            lh.addEntry(entry.array());</span>
+        }
+
+<span class="nc" id="L236">        assertTrue(</span>
+                &quot;Stats should have captured a new UnderReplication during write&quot;,
+<span class="nc bnc" id="L238" title="All 2 branches missed.">                bkc.getTestStatsProvider().getCounter(</span>
+                        CLIENT_SCOPE + &quot;.&quot; + ADD_OP_UR)
+<span class="nc" id="L240">                        .get() &gt; 0);</span>
+
+<span class="nc" id="L242">        sleepLatch1.countDown();</span>
+<span class="nc" id="L243">        sleepLatch2.countDown();</span>
+
+        // Replace the bookie with a fake bookie
+<span class="nc" id="L246">        ServerConfiguration conf = killBookie(ensemble.get(0));</span>
+<span class="nc" id="L247">        BookieWriteLedgerTest.CorruptReadBookie corruptBookie = new BookieWriteLedgerTest.CorruptReadBookie(conf);</span>
+<span class="nc" id="L248">        bs.add(startBookie(conf, corruptBookie));</span>
+<span class="nc" id="L249">        bsConfs.add(conf);</span>
+
+<span class="nc" id="L251">        i = numEntriesToWrite;</span>
+<span class="nc" id="L252">        numEntriesToWrite = numEntriesToWrite + 50;</span>
+
+        // write-batch-4
+
+<span class="nc bnc" id="L256" title="All 2 branches missed.">        for (; i &lt; numEntriesToWrite; i++) {</span>
+<span class="nc" id="L257">            ByteBuffer entry = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L258">            entry.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L259">            entry.position(0);</span>
+
+<span class="nc" id="L261">            entries1.add(entry.array());</span>
+<span class="nc" id="L262">            lh.addEntry(entry.array());</span>
+        }
+
+<span class="nc" id="L265">        readEntries(lh, entries1);</span>
+<span class="nc" id="L266">        assertTrue(</span>
+                &quot;Stats should have captured DigestMismatch on Read&quot;,
+<span class="nc bnc" id="L268" title="All 2 branches missed.">                bkc.getTestStatsProvider().getCounter(</span>
+                        CLIENT_SCOPE + &quot;.&quot; + READ_OP_DM)
+<span class="nc" id="L270">                        .get() &gt; 0);</span>
+<span class="nc" id="L271">        lh.close();</span>
+<span class="nc" id="L272">    }</span>
+    /**
+     * Verty delayedWriteError causes ensemble changes.
+     */
+    @Test
+    public void testDelayedWriteEnsembleChange() throws Exception {
+        // Create a ledger
+<span class="nc" id="L279">        lh = bkc.createLedger(3, 3, 2, digestType, ledgerPassword);</span>
+<span class="nc" id="L280">        baseClientConf.setAddEntryTimeout(1);</span>
+
+<span class="nc" id="L282">        int numEntriesToWrite = 10;</span>
+        // write-batch-1
+<span class="nc bnc" id="L284" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntriesToWrite; i++) {</span>
+<span class="nc" id="L285">            ByteBuffer entry = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L286">            entry.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L287">            entry.position(0);</span>
+
+<span class="nc" id="L289">            entries1.add(entry.array());</span>
+<span class="nc" id="L290">            lh.addEntry(entry.array());</span>
+        }
+
+<span class="nc" id="L293">        CountDownLatch sleepLatch1 = new CountDownLatch(1);</span>
+
+        // get bookie at index-0
+<span class="nc" id="L296">        BookieSocketAddress bookie1 = lh.getCurrentEnsemble().get(0);</span>
+<span class="nc" id="L297">        sleepBookie(bookie1, sleepLatch1);</span>
+
+<span class="nc" id="L299">        int i = numEntriesToWrite;</span>
+<span class="nc" id="L300">        numEntriesToWrite = numEntriesToWrite + 10;</span>
+
+        // write-batch-2
+
+<span class="nc bnc" id="L304" title="All 2 branches missed.">        for (; i &lt; numEntriesToWrite; i++) {</span>
+<span class="nc" id="L305">            ByteBuffer entry = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L306">            entry.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L307">            entry.position(0);</span>
+
+<span class="nc" id="L309">            entries1.add(entry.array());</span>
+<span class="nc" id="L310">            lh.addEntry(entry.array());</span>
+        }
+        // Sleep to receive delayed error on the write directed to the sleeping bookie
+<span class="nc" id="L313">        Thread.sleep(baseClientConf.getAddEntryTimeout() * 1000 * 2);</span>
+<span class="nc" id="L314">        assertTrue(</span>
+                &quot;Stats should have captured a new UnderReplication during write&quot;,
+<span class="nc bnc" id="L316" title="All 2 branches missed.">                bkc.getTestStatsProvider().getCounter(</span>
+                        CLIENT_SCOPE + &quot;.&quot; + ADD_OP_UR)
+<span class="nc" id="L318">                        .get() &gt; 0);</span>
+
+<span class="nc" id="L320">        i = numEntriesToWrite;</span>
+<span class="nc" id="L321">        numEntriesToWrite = numEntriesToWrite + 10;</span>
+
+        // write-batch-3
+<span class="nc bnc" id="L324" title="All 2 branches missed.">        for (; i &lt; numEntriesToWrite; i++) {</span>
+<span class="nc" id="L325">            ByteBuffer entry = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L326">            entry.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L327">            entry.position(0);</span>
+
+<span class="nc" id="L329">            entries1.add(entry.array());</span>
+<span class="nc" id="L330">            lh.addEntry(entry.array());</span>
+        }
+
+<span class="nc" id="L333">        sleepLatch1.countDown();</span>
+        // get the bookie at index-0 again, this must be different.
+<span class="nc" id="L335">        BookieSocketAddress bookie2 = lh.getCurrentEnsemble().get(0);</span>
+
+<span class="nc" id="L337">        assertFalse(</span>
+                &quot;Delayed write error must have forced ensemble change&quot;,
+<span class="nc" id="L339">                        bookie1.equals(bookie2));</span>
+<span class="nc" id="L340">        lh.close();</span>
+<span class="nc" id="L341">    }</span>
+    /**
+     * Verify the functionality Ledgers with different digests.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testLedgerDigestTest() throws Exception {
+<span class="nc bnc" id="L349" title="All 2 branches missed.">        for (DigestType type: DigestType.values()) {</span>
+<span class="nc" id="L350">            lh = bkc.createLedger(5, 3, 2, type, ledgerPassword);</span>
+
+<span class="nc bnc" id="L352" title="All 2 branches missed.">            for (int i = 0; i &lt; numEntriesToWrite; i++) {</span>
+<span class="nc" id="L353">                ByteBuffer entry = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L354">                entry.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L355">                entry.position(0);</span>
+
+<span class="nc" id="L357">                entries1.add(entry.array());</span>
+<span class="nc" id="L358">                lh.addEntry(entry.array());</span>
+            }
+
+<span class="nc" id="L361">            readEntries(lh, entries1);</span>
+
+<span class="nc" id="L363">            long lid = lh.getId();</span>
+<span class="nc" id="L364">            lh.close();</span>
+<span class="nc" id="L365">            bkc.deleteLedger(lid);</span>
+<span class="nc" id="L366">            entries1.clear();</span>
+        }
+<span class="nc" id="L368">    }</span>
+
+    /**
+     * Verify the functionality of Advanced Ledger which returns
+     * LedgerHandleAdv. LedgerHandleAdv takes entryId for addEntry, and let
+     * user manage entryId allocation.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testLedgerCreateAdv() throws Exception {
+        // Create a ledger
+<span class="nc" id="L380">        lh = bkc.createLedgerAdv(5, 3, 2, digestType, ledgerPassword);</span>
+<span class="nc bnc" id="L381" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntriesToWrite; i++) {</span>
+<span class="nc" id="L382">            ByteBuffer entry = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L383">            entry.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L384">            entry.position(0);</span>
+
+<span class="nc" id="L386">            entries1.add(entry.array());</span>
+<span class="nc" id="L387">            lh.addEntry(i, entry.array());</span>
+        }
+        // Start one more bookies
+<span class="nc" id="L390">        startNewBookie();</span>
+
+        // Shutdown one bookie in the last ensemble and continue writing
+<span class="nc" id="L393">        List&lt;BookieSocketAddress&gt; ensemble = lh.getLedgerMetadata().getAllEnsembles().entrySet().iterator().next()</span>
+<span class="nc" id="L394">                .getValue();</span>
+<span class="nc" id="L395">        killBookie(ensemble.get(0));</span>
+
+<span class="nc" id="L397">        int i = numEntriesToWrite;</span>
+<span class="nc" id="L398">        numEntriesToWrite = numEntriesToWrite + 50;</span>
+<span class="nc bnc" id="L399" title="All 2 branches missed.">        for (; i &lt; numEntriesToWrite; i++) {</span>
+<span class="nc" id="L400">            ByteBuffer entry = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L401">            entry.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L402">            entry.position(0);</span>
+
+<span class="nc" id="L404">            entries1.add(entry.array());</span>
+<span class="nc" id="L405">            lh.addEntry(i, entry.array());</span>
+        }
+
+<span class="nc" id="L408">        readEntries(lh, entries1);</span>
+<span class="nc" id="L409">        lh.close();</span>
+<span class="nc" id="L410">    }</span>
+
+    /**
+     * Verify that attempts to use addEntry() variant that does not require specifying entry id
+     * on LedgerHandleAdv results in error.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testLedgerCreateAdvAndWriteNonAdv() throws Exception {
+<span class="nc" id="L420">        long ledgerId = 0xABCDEF;</span>
+<span class="nc" id="L421">        lh = bkc.createLedgerAdv(ledgerId, 3, 3, 2, digestType, ledgerPassword, null);</span>
+
+<span class="nc" id="L423">        ByteBuffer entry = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L424">        entry.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L425">        entry.position(0);</span>
+
+        try {
+<span class="nc" id="L428">            lh.addEntry(entry.array());</span>
+<span class="nc" id="L429">            fail(&quot;expected IllegalOpException&quot;);</span>
+<span class="nc" id="L430">        } catch (BKException.BKIllegalOpException e) {</span>
+            // pass, expected
+        } finally {
+<span class="nc" id="L433">            lh.close();</span>
+<span class="nc" id="L434">            bkc.deleteLedger(ledgerId);</span>
+        }
+<span class="nc" id="L436">    }</span>
+
+    /**
+     * Verify that LedgerHandleAdv cannnot handle addEntry without the entryId.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testNoAddEntryLedgerCreateAdv() throws Exception {
+
+<span class="nc" id="L446">        ByteBuffer entry = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L447">        entry.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L448">        entry.position(0);</span>
+
+<span class="nc" id="L450">        lh = bkc.createLedgerAdv(5, 3, 2, digestType, ledgerPassword);</span>
+<span class="nc" id="L451">        assertTrue(lh instanceof LedgerHandleAdv);</span>
+
+        try {
+<span class="nc" id="L454">            lh.addEntry(entry.array());</span>
+<span class="nc" id="L455">            fail(&quot;using LedgerHandleAdv addEntry without entryId is forbidden&quot;);</span>
+<span class="nc" id="L456">        } catch (BKException e) {</span>
+<span class="nc" id="L457">            assertEquals(e.getCode(), BKException.Code.IllegalOpException);</span>
+<span class="nc" id="L458">        }</span>
+
+        try {
+<span class="nc" id="L461">            lh.addEntry(entry.array(), 0, 4);</span>
+<span class="nc" id="L462">            fail(&quot;using LedgerHandleAdv addEntry without entryId is forbidden&quot;);</span>
+<span class="nc" id="L463">        } catch (BKException e) {</span>
+<span class="nc" id="L464">            assertEquals(e.getCode(), BKException.Code.IllegalOpException);</span>
+<span class="nc" id="L465">        }</span>
+
+        try {
+<span class="nc" id="L468">            CompletableFuture&lt;Object&gt; done = new CompletableFuture&lt;&gt;();</span>
+<span class="nc" id="L469">            lh.asyncAddEntry(Unpooled.wrappedBuffer(entry.array()),</span>
+                (int rc, LedgerHandle lh1, long entryId, Object ctx) -&gt; {
+<span class="nc" id="L471">                SyncCallbackUtils.finish(rc, null, done);</span>
+<span class="nc" id="L472">            }, null);</span>
+<span class="nc" id="L473">            done.get();</span>
+<span class="nc" id="L474">        } catch (ExecutionException ee) {</span>
+<span class="nc" id="L475">            assertTrue(ee.getCause() instanceof BKException);</span>
+<span class="nc" id="L476">            BKException e = (BKException) ee.getCause();</span>
+<span class="nc" id="L477">            assertEquals(e.getCode(), BKException.Code.IllegalOpException);</span>
+<span class="nc" id="L478">        }</span>
+
+        try {
+<span class="nc" id="L481">            CompletableFuture&lt;Object&gt; done = new CompletableFuture&lt;&gt;();</span>
+<span class="nc" id="L482">            lh.asyncAddEntry(entry.array(),</span>
+                (int rc, LedgerHandle lh1, long entryId, Object ctx) -&gt; {
+<span class="nc" id="L484">                SyncCallbackUtils.finish(rc, null, done);</span>
+<span class="nc" id="L485">            }, null);</span>
+<span class="nc" id="L486">            done.get();</span>
+<span class="nc" id="L487">        } catch (ExecutionException ee) {</span>
+<span class="nc" id="L488">            assertTrue(ee.getCause() instanceof BKException);</span>
+<span class="nc" id="L489">            BKException e = (BKException) ee.getCause();</span>
+<span class="nc" id="L490">            assertEquals(e.getCode(), BKException.Code.IllegalOpException);</span>
+<span class="nc" id="L491">        }</span>
+
+        try {
+<span class="nc" id="L494">            CompletableFuture&lt;Object&gt; done = new CompletableFuture&lt;&gt;();</span>
+<span class="nc" id="L495">            lh.asyncAddEntry(entry.array(), 0, 4,</span>
+                (int rc, LedgerHandle lh1, long entryId, Object ctx) -&gt; {
+<span class="nc" id="L497">                SyncCallbackUtils.finish(rc, null, done);</span>
+<span class="nc" id="L498">            }, null);</span>
+<span class="nc" id="L499">            done.get();</span>
+<span class="nc" id="L500">        } catch (ExecutionException ee) {</span>
+<span class="nc" id="L501">            assertTrue(ee.getCause() instanceof BKException);</span>
+<span class="nc" id="L502">            BKException e = (BKException) ee.getCause();</span>
+<span class="nc" id="L503">            assertEquals(e.getCode(), BKException.Code.IllegalOpException);</span>
+<span class="nc" id="L504">        }</span>
+<span class="nc" id="L505">        lh.close();</span>
+<span class="nc" id="L506">    }</span>
+
+    /**
+     * Verify the functionality of Advanced Ledger which accepts ledgerId as input and returns
+     * LedgerHandleAdv. LedgerHandleAdv takes entryId for addEntry, and let
+     * user manage entryId allocation.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testLedgerCreateAdvWithLedgerId() throws Exception {
+        // Create a ledger
+<span class="nc" id="L518">        long ledgerId = 0xABCDEF;</span>
+<span class="nc" id="L519">        lh = bkc.createLedgerAdv(ledgerId, 5, 3, 2, digestType, ledgerPassword, null);</span>
+<span class="nc bnc" id="L520" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntriesToWrite; i++) {</span>
+<span class="nc" id="L521">            ByteBuffer entry = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L522">            entry.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L523">            entry.position(0);</span>
+
+<span class="nc" id="L525">            entries1.add(entry.array());</span>
+<span class="nc" id="L526">            lh.addEntry(i, entry.array());</span>
+        }
+        // Start one more bookies
+<span class="nc" id="L529">        startNewBookie();</span>
+
+        // Shutdown one bookie in the last ensemble and continue writing
+<span class="nc" id="L532">        List&lt;BookieSocketAddress&gt; ensemble = lh.getLedgerMetadata().getAllEnsembles().entrySet().iterator().next()</span>
+<span class="nc" id="L533">                .getValue();</span>
+<span class="nc" id="L534">        killBookie(ensemble.get(0));</span>
+
+<span class="nc" id="L536">        int i = numEntriesToWrite;</span>
+<span class="nc" id="L537">        numEntriesToWrite = numEntriesToWrite + 50;</span>
+<span class="nc bnc" id="L538" title="All 2 branches missed.">        for (; i &lt; numEntriesToWrite; i++) {</span>
+<span class="nc" id="L539">            ByteBuffer entry = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L540">            entry.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L541">            entry.position(0);</span>
+
+<span class="nc" id="L543">            entries1.add(entry.array());</span>
+<span class="nc" id="L544">            lh.addEntry(i, entry.array());</span>
+        }
+
+<span class="nc" id="L547">        readEntries(lh, entries1);</span>
+<span class="nc" id="L548">        lh.close();</span>
+<span class="nc" id="L549">        bkc.deleteLedger(ledgerId);</span>
+<span class="nc" id="L550">    }</span>
+
+    /**
+     * Verify the functionality of Ledger create which accepts customMetadata as input.
+     * Also verifies that the data written is read back properly.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testLedgerCreateWithCustomMetadata() throws Exception {
+        // Create a ledger
+        long ledgerId;
+<span class="nc" id="L562">        int maxLedgers = 10;</span>
+<span class="nc bnc" id="L563" title="All 2 branches missed.">        for (int i = 0; i &lt; maxLedgers; i++) {</span>
+<span class="nc" id="L564">            Map&lt;String, byte[]&gt; inputCustomMetadataMap = new HashMap&lt;String, byte[]&gt;();</span>
+<span class="nc" id="L565">            ByteBuffer entry = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L566">            entry.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L567">            entry.position(0);</span>
+
+            // each ledger has different number of key, value pairs.
+<span class="nc bnc" id="L570" title="All 2 branches missed.">            for (int j = 0; j &lt; i; j++) {</span>
+<span class="nc" id="L571">                inputCustomMetadataMap.put(&quot;key&quot; + j, UUID.randomUUID().toString().getBytes());</span>
+            }
+
+<span class="nc bnc" id="L574" title="All 2 branches missed.">            if (i &lt; maxLedgers / 2) {</span>
+                // 0 to 4 test with createLedger interface
+<span class="nc" id="L576">                lh = bkc.createLedger(5, 3, 2, digestType, ledgerPassword, inputCustomMetadataMap);</span>
+<span class="nc" id="L577">                ledgerId = lh.getId();</span>
+<span class="nc" id="L578">                lh.addEntry(entry.array());</span>
+            } else {
+                // 5 to 9 test with createLedgerAdv interface
+<span class="nc" id="L581">                lh = bkc.createLedgerAdv(5, 3, 2, digestType, ledgerPassword, inputCustomMetadataMap);</span>
+<span class="nc" id="L582">                ledgerId = lh.getId();</span>
+<span class="nc" id="L583">                lh.addEntry(0, entry.array());</span>
+            }
+<span class="nc" id="L585">            lh.close();</span>
+
+            // now reopen the ledger; this should fetch all the metadata stored on zk
+            // and the customMetadata written and read should match
+<span class="nc" id="L589">            lh = bkc.openLedger(ledgerId, digestType, ledgerPassword);</span>
+<span class="nc" id="L590">            Map&lt;String, byte[]&gt; outputCustomMetadataMap = lh.getCustomMetadata();</span>
+<span class="nc" id="L591">            assertTrue(&quot;Can't retrieve proper Custom Data&quot;,</span>
+<span class="nc" id="L592">                       areByteArrayValMapsEqual(inputCustomMetadataMap, outputCustomMetadataMap));</span>
+<span class="nc" id="L593">            lh.close();</span>
+<span class="nc" id="L594">            bkc.deleteLedger(ledgerId);</span>
+        }
+<span class="nc" id="L596">    }</span>
+
+    /**
+     * Routine to compare two {@code Map&lt;String, byte[]&gt;}; Since the values in the map are {@code byte[]}, we can't use
+     * {@code Map.equals}.
+     * @param first
+     *          The first map
+     * @param second
+     *          The second map to compare with
+     * @return true if the 2 maps contain the exact set of {@code &lt;K,V&gt;} pairs.
+     */
+    public static boolean areByteArrayValMapsEqual(Map&lt;String, byte[]&gt; first, Map&lt;String, byte[]&gt; second) {
+<span class="nc bnc" id="L608" title="All 4 branches missed.">        if (first == null &amp;&amp; second == null) {</span>
+<span class="nc" id="L609">            return true;</span>
+        }
+
+        // above check confirms that both are not null;
+        // if one is null the other isn't; so they must
+        // be different
+<span class="nc bnc" id="L615" title="All 4 branches missed.">        if (first == null || second == null) {</span>
+<span class="nc" id="L616">            return false;</span>
+        }
+
+<span class="nc bnc" id="L619" title="All 2 branches missed.">        if (first.size() != second.size()) {</span>
+<span class="nc" id="L620">            return false;</span>
+        }
+<span class="nc bnc" id="L622" title="All 2 branches missed.">        for (Map.Entry&lt;String, byte[]&gt; entry : first.entrySet()) {</span>
+<span class="nc bnc" id="L623" title="All 2 branches missed.">            if (!Arrays.equals(entry.getValue(), second.get(entry.getKey()))) {</span>
+<span class="nc" id="L624">                return false;</span>
+            }
+<span class="nc" id="L626">        }</span>
+<span class="nc" id="L627">        return true;</span>
+    }
+
+    /*
+     * Verify the functionality of Advanced Ledger which accepts ledgerId as
+     * input and returns LedgerHandleAdv. LedgerHandleAdv takes entryId for
+     * addEntry, and let user manage entryId allocation.
+     * This testcase is mainly added for covering missing code coverage branches
+     * in LedgerHandleAdv
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testLedgerHandleAdvFunctionality() throws Exception {
+        // Create a ledger
+<span class="nc" id="L642">        long ledgerId = 0xABCDEF;</span>
+<span class="nc" id="L643">        lh = bkc.createLedgerAdv(ledgerId, 5, 3, 2, digestType, ledgerPassword, null);</span>
+<span class="nc" id="L644">        numEntriesToWrite = 3;</span>
+
+<span class="nc" id="L646">        ByteBuffer entry = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L647">        entry.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L648">        entry.position(0);</span>
+<span class="nc" id="L649">        entries1.add(entry.array());</span>
+<span class="nc" id="L650">        lh.addEntry(0, entry.array());</span>
+
+        // here asyncAddEntry(final long entryId, final byte[] data, final
+        // AddCallback cb, final Object ctx) method is
+        // called which is not covered in any other testcase
+<span class="nc" id="L655">        entry = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L656">        entry.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L657">        entry.position(0);</span>
+<span class="nc" id="L658">        entries1.add(entry.array());</span>
+<span class="nc" id="L659">        CountDownLatch latch = new CountDownLatch(1);</span>
+<span class="nc" id="L660">        final int[] returnedRC = new int[1];</span>
+<span class="nc" id="L661">        lh.asyncAddEntry(1, entry.array(), new AddCallback() {</span>
+            @Override
+            public void addComplete(int rc, LedgerHandle lh, long entryId, Object ctx) {
+<span class="nc" id="L664">                CountDownLatch latch = (CountDownLatch) ctx;</span>
+<span class="nc" id="L665">                returnedRC[0] = rc;</span>
+<span class="nc" id="L666">                latch.countDown();</span>
+<span class="nc" id="L667">            }</span>
+        }, latch);
+<span class="nc" id="L669">        latch.await();</span>
+<span class="nc bnc" id="L670" title="All 2 branches missed.">        assertTrue(&quot;Returned code is expected to be OK&quot;, returnedRC[0] == BKException.Code.OK);</span>
+
+        // here addEntry is called with incorrect offset and length
+<span class="nc" id="L673">        entry = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L674">        entry.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L675">        entry.position(0);</span>
+        try {
+<span class="nc" id="L677">            lh.addEntry(2, entry.array(), -3, 9);</span>
+<span class="nc" id="L678">            fail(&quot;AddEntry is called with negative offset and incorrect length,&quot;</span>
+                    + &quot;so it is expected to throw RuntimeException/IndexOutOfBoundsException&quot;);
+<span class="nc" id="L680">        } catch (RuntimeException exception) {</span>
+            // expected RuntimeException/IndexOutOfBoundsException
+<span class="nc" id="L682">        }</span>
+
+        // here addEntry is called with corrected offset and length and it is
+        // supposed to succeed
+<span class="nc" id="L686">        entry = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L687">        entry.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L688">        entry.position(0);</span>
+<span class="nc" id="L689">        entries1.add(entry.array());</span>
+<span class="nc" id="L690">        lh.addEntry(2, entry.array());</span>
+
+        // LedgerHandle is closed for write
+<span class="nc" id="L693">        lh.close();</span>
+
+        // here addEntry is called even after the close of the LedgerHandle, so
+        // it is expected to throw exception
+<span class="nc" id="L697">        entry = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L698">        entry.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L699">        entry.position(0);</span>
+<span class="nc" id="L700">        entries1.add(entry.array());</span>
+        try {
+<span class="nc" id="L702">            lh.addEntry(3, entry.array());</span>
+<span class="nc" id="L703">            fail(&quot;AddEntry is called after the close of LedgerHandle,&quot;</span>
+                    + &quot;so it is expected to throw BKLedgerClosedException&quot;);
+<span class="nc" id="L705">        } catch (BKLedgerClosedException exception) {</span>
+<span class="nc" id="L706">        }</span>
+
+<span class="nc" id="L708">        readEntries(lh, entries1);</span>
+<span class="nc" id="L709">        bkc.deleteLedger(ledgerId);</span>
+<span class="nc" id="L710">    }</span>
+
+    /**
+     * In a loop create/write/delete the ledger with same ledgerId through
+     * the functionality of Advanced Ledger which accepts ledgerId as input.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testLedgerCreateAdvWithLedgerIdInLoop() throws Exception {
+<span class="nc" id="L720">        int ledgerCount = 40;</span>
+
+<span class="nc" id="L722">        long maxId = 9999999999L;</span>
+<span class="nc bnc" id="L723" title="All 2 branches missed.">        if (baseConf.getLedgerManagerFactoryClass().equals(LongHierarchicalLedgerManagerFactory.class)) {</span>
+            // since LongHierarchicalLedgerManager supports ledgerIds of decimal length upto 19 digits but other
+            // LedgerManagers only upto 10 decimals
+<span class="nc" id="L726">            maxId = Long.MAX_VALUE;</span>
+        }
+
+<span class="nc" id="L729">        rng.longs(ledgerCount, 0, maxId) // generate a stream of ledger ids</span>
+<span class="nc" id="L730">            .mapToObj(ledgerId -&gt; { // create a ledger for each ledger id</span>
+<span class="nc" id="L731">                    LOG.info(&quot;Creating adv ledger with id {}&quot;, ledgerId);</span>
+<span class="nc" id="L732">                    return bkc.newCreateLedgerOp()</span>
+<span class="nc" id="L733">                        .withEnsembleSize(1).withWriteQuorumSize(1).withAckQuorumSize(1)</span>
+<span class="nc" id="L734">                        .withDigestType(org.apache.bookkeeper.client.api.DigestType.CRC32)</span>
+<span class="nc" id="L735">                        .withPassword(ledgerPassword).makeAdv().withLedgerId(ledgerId)</span>
+<span class="nc" id="L736">                        .execute()</span>
+<span class="nc" id="L737">                        .thenApply(writer -&gt; { // Add entries to ledger when created</span>
+<span class="nc" id="L738">                                LOG.info(&quot;Writing stream of {} entries to {}&quot;,</span>
+<span class="nc" id="L739">                                         numEntriesToWrite, ledgerId);</span>
+<span class="nc" id="L740">                                List&lt;ByteBuf&gt; entries = rng.ints(numEntriesToWrite, 0, maxInt)</span>
+<span class="nc" id="L741">                                    .mapToObj(i -&gt; {</span>
+<span class="nc" id="L742">                                            ByteBuf entry = Unpooled.buffer(4);</span>
+<span class="nc" id="L743">                                            entry.retain();</span>
+<span class="nc" id="L744">                                            entry.writeInt(i);</span>
+<span class="nc" id="L745">                                            return entry;</span>
+                                        })
+<span class="nc" id="L747">                                    .collect(Collectors.toList());</span>
+<span class="nc" id="L748">                                CompletableFuture&lt;?&gt; lastRequest = null;</span>
+<span class="nc" id="L749">                                int i = 0;</span>
+<span class="nc bnc" id="L750" title="All 2 branches missed.">                                for (ByteBuf entry : entries) {</span>
+<span class="nc" id="L751">                                    long entryId = i++;</span>
+<span class="nc" id="L752">                                    LOG.info(&quot;Writing {}:{} as {}&quot;,</span>
+<span class="nc" id="L753">                                             ledgerId, entryId, entry.slice().readInt());</span>
+<span class="nc" id="L754">                                    lastRequest = writer.writeAsync(entryId, entry);</span>
+<span class="nc" id="L755">                                }</span>
+<span class="nc" id="L756">                                lastRequest.join();</span>
+<span class="nc" id="L757">                                return Pair.of(writer, entries);</span>
+                            });
+                })
+<span class="nc" id="L760">            .parallel().map(CompletableFuture::join) // wait for all creations and adds in parallel</span>
+<span class="nc" id="L761">            .forEach(e -&gt; { // check that each set of adds succeeded</span>
+                    try {
+<span class="nc" id="L763">                        WriteAdvHandle handle = e.getLeft();</span>
+<span class="nc" id="L764">                        List&lt;ByteBuf&gt; entries = e.getRight();</span>
+                        // Read and verify
+<span class="nc" id="L766">                        LOG.info(&quot;Read entries for ledger: {}&quot;, handle.getId());</span>
+<span class="nc" id="L767">                        readEntries(handle, entries);</span>
+<span class="nc" id="L768">                        entries.forEach(ByteBuf::release);</span>
+<span class="nc" id="L769">                        handle.close();</span>
+<span class="nc" id="L770">                        bkc.deleteLedger(handle.getId());</span>
+<span class="nc" id="L771">                    } catch (InterruptedException ie) {</span>
+<span class="nc" id="L772">                        Thread.currentThread().interrupt();</span>
+<span class="nc" id="L773">                        Assert.fail(&quot;Test interrupted&quot;);</span>
+<span class="nc" id="L774">                    } catch (Exception ex) {</span>
+<span class="nc" id="L775">                        LOG.info(&quot;Readback failed with exception&quot;, ex);</span>
+<span class="nc" id="L776">                        Assert.fail(&quot;Readback failed &quot; + ex.getMessage());</span>
+<span class="nc" id="L777">                    }</span>
+<span class="nc" id="L778">                });</span>
+<span class="nc" id="L779">    }</span>
+
+    /**
+     * In a loop create/write/read/delete the ledger with ledgerId through the
+     * functionality of Advanced Ledger which accepts ledgerId as input.
+     * In this testcase (other testcases don't cover these conditions, hence new
+     * testcase is added), we create entries which are greater than
+     * SKIP_LIST_MAX_ALLOC_ENTRY size and tried to addEntries so that the total
+     * length of data written in this testcase is much greater than
+     * SKIP_LIST_SIZE_LIMIT, so that entries will be flushed from EntryMemTable
+     * to persistent storage
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testLedgerCreateAdvWithLedgerIdInLoop2() throws Exception {
+
+<span class="nc" id="L796">        assertTrue(&quot;Here we are expecting Bookies are configured to use SortedLedgerStorage&quot;,</span>
+<span class="nc" id="L797">                baseConf.getSortedLedgerStorageEnabled());</span>
+
+        long ledgerId;
+<span class="nc" id="L800">        int ledgerCount = 10;</span>
+
+<span class="nc" id="L802">        List&lt;List&lt;byte[]&gt;&gt; entryList = new ArrayList&lt;List&lt;byte[]&gt;&gt;();</span>
+<span class="nc" id="L803">        LedgerHandle[] lhArray = new LedgerHandle[ledgerCount];</span>
+<span class="nc" id="L804">        long skipListSizeLimit = baseConf.getSkipListSizeLimit();</span>
+<span class="nc" id="L805">        int skipListArenaMaxAllocSize = baseConf.getSkipListArenaMaxAllocSize();</span>
+
+        List&lt;byte[]&gt; tmpEntry;
+<span class="nc bnc" id="L808" title="All 2 branches missed.">        for (int lc = 0; lc &lt; ledgerCount; lc++) {</span>
+<span class="nc" id="L809">            tmpEntry = new ArrayList&lt;byte[]&gt;();</span>
+
+<span class="nc" id="L811">            ledgerId = rng.nextLong();</span>
+<span class="nc" id="L812">            ledgerId &amp;= Long.MAX_VALUE;</span>
+<span class="nc bnc" id="L813" title="All 2 branches missed.">            if (!baseConf.getLedgerManagerFactoryClass().equals(LongHierarchicalLedgerManagerFactory.class)) {</span>
+                // since LongHierarchicalLedgerManager supports ledgerIds of
+                // decimal length upto 19 digits but other
+                // LedgerManagers only upto 10 decimals
+<span class="nc" id="L817">                ledgerId %= 9999999999L;</span>
+            }
+
+<span class="nc" id="L820">            LOG.debug(&quot;Iteration: {}  LedgerId: {}&quot;, lc, ledgerId);</span>
+<span class="nc" id="L821">            lh = bkc.createLedgerAdv(ledgerId, 5, 3, 2, digestType, ledgerPassword, null);</span>
+<span class="nc" id="L822">            lhArray[lc] = lh;</span>
+
+<span class="nc" id="L824">            long ledgerLength = 0;</span>
+<span class="nc" id="L825">            int i = 0;</span>
+<span class="nc bnc" id="L826" title="All 2 branches missed.">            while (ledgerLength &lt; ((4 * skipListSizeLimit) / ledgerCount)) {</span>
+                int length;
+<span class="nc bnc" id="L828" title="All 2 branches missed.">                if (rng.nextBoolean()) {</span>
+<span class="nc" id="L829">                    length = Math.abs(rng.nextInt()) % (skipListArenaMaxAllocSize);</span>
+                } else {
+                    // here we want length to be random no. in the range of skipListArenaMaxAllocSize and
+                    // 4*skipListArenaMaxAllocSize
+<span class="nc" id="L833">                    length = (Math.abs(rng.nextInt()) % (skipListArenaMaxAllocSize * 3)) + skipListArenaMaxAllocSize;</span>
+                }
+<span class="nc" id="L835">                byte[] data = new byte[length];</span>
+<span class="nc" id="L836">                rng.nextBytes(data);</span>
+<span class="nc" id="L837">                tmpEntry.add(data);</span>
+<span class="nc" id="L838">                lh.addEntry(i, data);</span>
+<span class="nc" id="L839">                ledgerLength += length;</span>
+<span class="nc" id="L840">                i++;</span>
+<span class="nc" id="L841">            }</span>
+<span class="nc" id="L842">            entryList.add(tmpEntry);</span>
+        }
+<span class="nc bnc" id="L844" title="All 2 branches missed.">        for (int lc = 0; lc &lt; ledgerCount; lc++) {</span>
+            // Read and verify
+<span class="nc" id="L846">            long lid = lhArray[lc].getId();</span>
+<span class="nc" id="L847">            LOG.debug(&quot;readEntries for lc: {} ledgerId: {} &quot;, lc, lhArray[lc].getId());</span>
+<span class="nc" id="L848">            readEntriesAndValidateDataArray(lhArray[lc], entryList.get(lc));</span>
+<span class="nc" id="L849">            lhArray[lc].close();</span>
+<span class="nc" id="L850">            bkc.deleteLedger(lid);</span>
+        }
+<span class="nc" id="L852">    }</span>
+
+    /**
+     * Verify asynchronous writing when few bookie failures in last ensemble.
+     */
+    @Test
+    public void testAsyncWritesWithMultipleFailuresInLastEnsemble()
+            throws Exception {
+        // Create ledgers
+<span class="nc" id="L861">        lh = bkc.createLedger(5, 4, digestType, ledgerPassword);</span>
+<span class="nc" id="L862">        lh2 = bkc.createLedger(5, 4, digestType, ledgerPassword);</span>
+
+<span class="nc" id="L864">        LOG.info(&quot;Ledger ID-1: &quot; + lh.getId());</span>
+<span class="nc" id="L865">        LOG.info(&quot;Ledger ID-2: &quot; + lh2.getId());</span>
+<span class="nc bnc" id="L866" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntriesToWrite; i++) {</span>
+<span class="nc" id="L867">            ByteBuffer entry = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L868">            entry.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L869">            entry.position(0);</span>
+
+<span class="nc" id="L871">            entries1.add(entry.array());</span>
+<span class="nc" id="L872">            entries2.add(entry.array());</span>
+<span class="nc" id="L873">            lh.addEntry(entry.array());</span>
+<span class="nc" id="L874">            lh2.addEntry(entry.array());</span>
+        }
+        // Start three more bookies
+<span class="nc" id="L877">        startNewBookie();</span>
+<span class="nc" id="L878">        startNewBookie();</span>
+<span class="nc" id="L879">        startNewBookie();</span>
+
+        // Shutdown three bookies in the last ensemble and continue writing
+<span class="nc" id="L882">        List&lt;BookieSocketAddress&gt; ensemble = lh.getLedgerMetadata()</span>
+<span class="nc" id="L883">                .getAllEnsembles().entrySet().iterator().next().getValue();</span>
+<span class="nc" id="L884">        killBookie(ensemble.get(0));</span>
+<span class="nc" id="L885">        killBookie(ensemble.get(1));</span>
+<span class="nc" id="L886">        killBookie(ensemble.get(2));</span>
+
+        // adding one more entry to both the ledgers async after multiple bookie
+        // failures. This will do asynchronously modifying the ledger metadata
+        // simultaneously.
+<span class="nc" id="L891">        numEntriesToWrite++;</span>
+<span class="nc" id="L892">        ByteBuffer entry = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L893">        entry.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L894">        entry.position(0);</span>
+<span class="nc" id="L895">        entries1.add(entry.array());</span>
+<span class="nc" id="L896">        entries2.add(entry.array());</span>
+
+<span class="nc" id="L898">        SyncObj syncObj1 = new SyncObj();</span>
+<span class="nc" id="L899">        SyncObj syncObj2 = new SyncObj();</span>
+<span class="nc" id="L900">        lh.asyncAddEntry(entry.array(), this, syncObj1);</span>
+<span class="nc" id="L901">        lh2.asyncAddEntry(entry.array(), this, syncObj2);</span>
+
+        // wait for all entries to be acknowledged for the first ledger
+<span class="nc" id="L904">        synchronized (syncObj1) {</span>
+<span class="nc bnc" id="L905" title="All 2 branches missed.">            while (syncObj1.counter &lt; 1) {</span>
+<span class="nc" id="L906">                LOG.debug(&quot;Entries counter = &quot; + syncObj1.counter);</span>
+<span class="nc" id="L907">                syncObj1.wait();</span>
+            }
+<span class="nc" id="L909">            assertEquals(BKException.Code.OK, syncObj1.rc);</span>
+<span class="nc" id="L910">        }</span>
+        // wait for all entries to be acknowledged for the second ledger
+<span class="nc" id="L912">        synchronized (syncObj2) {</span>
+<span class="nc bnc" id="L913" title="All 2 branches missed.">            while (syncObj2.counter &lt; 1) {</span>
+<span class="nc" id="L914">                LOG.debug(&quot;Entries counter = &quot; + syncObj2.counter);</span>
+<span class="nc" id="L915">                syncObj2.wait();</span>
+            }
+<span class="nc" id="L917">            assertEquals(BKException.Code.OK, syncObj2.rc);</span>
+<span class="nc" id="L918">        }</span>
+
+        // reading ledger till the last entry
+<span class="nc" id="L921">        readEntries(lh, entries1);</span>
+<span class="nc" id="L922">        readEntries(lh2, entries2);</span>
+<span class="nc" id="L923">        lh.close();</span>
+<span class="nc" id="L924">        lh2.close();</span>
+<span class="nc" id="L925">    }</span>
+
+    /**
+     * Verify Advanced asynchronous writing with entryIds in reverse order.
+     */
+    @Test
+    public void testLedgerCreateAdvWithAsyncWritesWithBookieFailures() throws Exception {
+        // Create ledgers
+<span class="nc" id="L933">        lh = bkc.createLedgerAdv(5, 3, 2, digestType, ledgerPassword);</span>
+<span class="nc" id="L934">        lh2 = bkc.createLedgerAdv(5, 3, 2, digestType, ledgerPassword);</span>
+
+<span class="nc" id="L936">        LOG.info(&quot;Ledger ID-1: &quot; + lh.getId());</span>
+<span class="nc" id="L937">        LOG.info(&quot;Ledger ID-2: &quot; + lh2.getId());</span>
+<span class="nc" id="L938">        SyncObj syncObj1 = new SyncObj();</span>
+<span class="nc" id="L939">        SyncObj syncObj2 = new SyncObj();</span>
+<span class="nc bnc" id="L940" title="All 2 branches missed.">        for (int i = numEntriesToWrite - 1; i &gt;= 0; i--) {</span>
+<span class="nc" id="L941">            ByteBuffer entry = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L942">            entry.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L943">            entry.position(0);</span>
+            try {
+<span class="nc" id="L945">                entries1.add(0, entry.array());</span>
+<span class="nc" id="L946">                entries2.add(0, entry.array());</span>
+<span class="nc" id="L947">            } catch (Exception e) {</span>
+<span class="nc" id="L948">                e.printStackTrace();</span>
+<span class="nc" id="L949">            }</span>
+<span class="nc" id="L950">            lh.asyncAddEntry(i, entry.array(), 0, entry.capacity(), this, syncObj1);</span>
+<span class="nc" id="L951">            lh2.asyncAddEntry(i, entry.array(), 0, entry.capacity(), this, syncObj2);</span>
+        }
+        // Start One more bookie and shutdown one from last ensemble before reading
+<span class="nc" id="L954">        startNewBookie();</span>
+<span class="nc" id="L955">        List&lt;BookieSocketAddress&gt; ensemble = lh.getLedgerMetadata().getAllEnsembles().entrySet().iterator().next()</span>
+<span class="nc" id="L956">                .getValue();</span>
+<span class="nc" id="L957">        killBookie(ensemble.get(0));</span>
+
+        // Wait for all entries to be acknowledged for the first ledger
+<span class="nc" id="L960">        synchronized (syncObj1) {</span>
+<span class="nc bnc" id="L961" title="All 2 branches missed.">            while (syncObj1.counter &lt; numEntriesToWrite) {</span>
+<span class="nc" id="L962">                syncObj1.wait();</span>
+            }
+<span class="nc" id="L964">            assertEquals(BKException.Code.OK, syncObj1.rc);</span>
+<span class="nc" id="L965">        }</span>
+        // Wait for all entries to be acknowledged for the second ledger
+<span class="nc" id="L967">        synchronized (syncObj2) {</span>
+<span class="nc bnc" id="L968" title="All 2 branches missed.">            while (syncObj2.counter &lt; numEntriesToWrite) {</span>
+<span class="nc" id="L969">                syncObj2.wait();</span>
+            }
+<span class="nc" id="L971">            assertEquals(BKException.Code.OK, syncObj2.rc);</span>
+<span class="nc" id="L972">        }</span>
+
+        // Reading ledger till the last entry
+<span class="nc" id="L975">        readEntries(lh, entries1);</span>
+<span class="nc" id="L976">        readEntries(lh2, entries2);</span>
+<span class="nc" id="L977">        lh.close();</span>
+<span class="nc" id="L978">        lh2.close();</span>
+<span class="nc" id="L979">    }</span>
+
+    /**
+     * LedgerHandleAdv out of order writers with ensemble changes.
+     * Verify that entry that was written to old ensemble will be
+     * written to new enseble too after ensemble change.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testLedgerHandleAdvOutOfOrderWriteAndFrocedEnsembleChange() throws Exception {
+        // Create a ledger
+<span class="nc" id="L991">        long ledgerId = 0xABCDEF;</span>
+<span class="nc" id="L992">        SyncObj syncObj1 = new SyncObj();</span>
+        ByteBuffer entry;
+<span class="nc" id="L994">        lh = bkc.createLedgerAdv(ledgerId, 3, 3, 3, digestType, ledgerPassword, null);</span>
+<span class="nc" id="L995">        entry = ByteBuffer.allocate(4);</span>
+        // Add entries 0-4
+<span class="nc bnc" id="L997" title="All 2 branches missed.">        for (int i = 0; i &lt; 5; i++) {</span>
+<span class="nc" id="L998">            entry.rewind();</span>
+<span class="nc" id="L999">            entry.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L1000">            lh.addEntry(i, entry.array());</span>
+        }
+
+        // Add 10 as Async Entry, which goes to first ensemble
+<span class="nc" id="L1004">        ByteBuffer entry1 = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L1005">        entry1.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L1006">        lh.asyncAddEntry(10, entry1.array(), 0, entry1.capacity(), this, syncObj1);</span>
+
+        // Make sure entry-10 goes to the bookies and gets response.
+<span class="nc" id="L1009">        java.util.Queue&lt;PendingAddOp&gt; myPendingAddOps = Whitebox.getInternalState(lh, &quot;pendingAddOps&quot;);</span>
+<span class="nc" id="L1010">        PendingAddOp addOp = null;</span>
+<span class="nc" id="L1011">        boolean pendingAddOpReceived = false;</span>
+
+<span class="nc bnc" id="L1013" title="All 2 branches missed.">        while (!pendingAddOpReceived) {</span>
+<span class="nc" id="L1014">            addOp = myPendingAddOps.peek();</span>
+<span class="nc bnc" id="L1015" title="All 4 branches missed.">            if (addOp.entryId == 10 &amp;&amp; addOp.completed) {</span>
+<span class="nc" id="L1016">                pendingAddOpReceived = true;</span>
+            } else {
+<span class="nc" id="L1018">                Thread.sleep(1000);</span>
+            }
+        }
+
+<span class="nc" id="L1022">        CountDownLatch sleepLatch1 = new CountDownLatch(1);</span>
+        List&lt;BookieSocketAddress&gt; ensemble;
+
+<span class="nc" id="L1025">        ensemble = lh.getLedgerMetadata().getAllEnsembles().entrySet().iterator().next().getValue();</span>
+
+        // Put all 3 bookies to sleep and start 3 new ones
+<span class="nc" id="L1028">        sleepBookie(ensemble.get(0), sleepLatch1);</span>
+<span class="nc" id="L1029">        sleepBookie(ensemble.get(1), sleepLatch1);</span>
+<span class="nc" id="L1030">        sleepBookie(ensemble.get(2), sleepLatch1);</span>
+<span class="nc" id="L1031">        startNewBookie();</span>
+<span class="nc" id="L1032">        startNewBookie();</span>
+<span class="nc" id="L1033">        startNewBookie();</span>
+
+        // Original bookies are in sleep, new bookies added.
+        // Now add entries 5-9 which forces ensemble changes
+        // So at this point entries 0-4, 10 went to first
+        // ensemble, 5-9 will go to new ensemble.
+<span class="nc bnc" id="L1039" title="All 2 branches missed.">        for (int i = 5; i &lt; 10; i++) {</span>
+<span class="nc" id="L1040">            entry.rewind();</span>
+<span class="nc" id="L1041">            entry.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L1042">            lh.addEntry(i, entry.array());</span>
+        }
+
+        // Wakeup all 3 bookies that went to sleep
+<span class="nc" id="L1046">        sleepLatch1.countDown();</span>
+
+        // Wait for all entries to be acknowledged for the first ledger
+<span class="nc" id="L1049">        synchronized (syncObj1) {</span>
+<span class="nc bnc" id="L1050" title="All 2 branches missed.">            while (syncObj1.counter &lt; 1) {</span>
+<span class="nc" id="L1051">                syncObj1.wait();</span>
+            }
+<span class="nc" id="L1053">            assertEquals(BKException.Code.OK, syncObj1.rc);</span>
+<span class="nc" id="L1054">        }</span>
+
+        // Close write handle
+<span class="nc" id="L1057">        lh.close();</span>
+
+        // Open read handle
+<span class="nc" id="L1060">        lh = bkc.openLedger(ledgerId, digestType, ledgerPassword);</span>
+
+        // Make sure to read all 10 entries.
+<span class="nc bnc" id="L1063" title="All 2 branches missed.">        for (int i = 0; i &lt; 11; i++) {</span>
+<span class="nc" id="L1064">            lh.readEntries(i, i);</span>
+        }
+<span class="nc" id="L1066">        lh.close();</span>
+<span class="nc" id="L1067">        bkc.deleteLedger(ledgerId);</span>
+<span class="nc" id="L1068">    }</span>
+
+    /**
+     * Verify Advanced asynchronous writing with entryIds in pseudo random order with bookie failures between writes.
+     */
+    @Test
+    public void testLedgerCreateAdvWithRandomAsyncWritesWithBookieFailuresBetweenWrites() throws Exception {
+        // Create ledgers
+<span class="nc" id="L1076">        lh = bkc.createLedgerAdv(5, 3, 2, digestType, ledgerPassword);</span>
+<span class="nc" id="L1077">        lh2 = bkc.createLedgerAdv(5, 3, 2, digestType, ledgerPassword);</span>
+
+<span class="nc" id="L1079">        LOG.info(&quot;Ledger ID-1: &quot; + lh.getId());</span>
+<span class="nc" id="L1080">        LOG.info(&quot;Ledger ID-2: &quot; + lh2.getId());</span>
+<span class="nc" id="L1081">        SyncObj syncObj1 = new SyncObj();</span>
+<span class="nc" id="L1082">        SyncObj syncObj2 = new SyncObj();</span>
+<span class="nc" id="L1083">        int batchSize = 5;</span>
+        int i, j;
+
+        // Fill the result buffers first
+<span class="nc bnc" id="L1087" title="All 2 branches missed.">        for (i = 0; i &lt; numEntriesToWrite; i++) {</span>
+<span class="nc" id="L1088">            ByteBuffer entry = ByteBuffer.allocate(4);</span>
+
+<span class="nc" id="L1090">            entry.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L1091">            entry.position(0);</span>
+            try {
+<span class="nc" id="L1093">                entries1.add(0, entry.array());</span>
+<span class="nc" id="L1094">                entries2.add(0, entry.array());</span>
+<span class="nc" id="L1095">            } catch (Exception e) {</span>
+<span class="nc" id="L1096">                e.printStackTrace();</span>
+<span class="nc" id="L1097">            }</span>
+        }
+
+<span class="nc bnc" id="L1100" title="All 2 branches missed.">        for (i = 0; i &lt; batchSize; i++) {</span>
+<span class="nc bnc" id="L1101" title="All 2 branches missed.">            for (j = i; j &lt; numEntriesToWrite; j = j + batchSize) {</span>
+<span class="nc" id="L1102">                byte[] entry1 = entries1.get(j);</span>
+<span class="nc" id="L1103">                byte[] entry2 = entries2.get(j);</span>
+<span class="nc" id="L1104">                lh.asyncAddEntry(j, entry1, 0, entry1.length, this, syncObj1);</span>
+<span class="nc" id="L1105">                lh2.asyncAddEntry(j, entry2, 0, entry2.length, this, syncObj2);</span>
+<span class="nc bnc" id="L1106" title="All 2 branches missed.">                if (j == numEntriesToWrite / 2) {</span>
+                    // Start One more bookie and shutdown one from last ensemble at half-way
+<span class="nc" id="L1108">                    startNewBookie();</span>
+<span class="nc" id="L1109">                    List&lt;BookieSocketAddress&gt; ensemble = lh.getLedgerMetadata().getAllEnsembles().entrySet()</span>
+<span class="nc" id="L1110">                            .iterator().next().getValue();</span>
+<span class="nc" id="L1111">                    killBookie(ensemble.get(0));</span>
+                }
+            }
+        }
+
+        // Wait for all entries to be acknowledged for the first ledger
+<span class="nc" id="L1117">        synchronized (syncObj1) {</span>
+<span class="nc bnc" id="L1118" title="All 2 branches missed.">            while (syncObj1.counter &lt; numEntriesToWrite) {</span>
+<span class="nc" id="L1119">                syncObj1.wait();</span>
+            }
+<span class="nc" id="L1121">            assertEquals(BKException.Code.OK, syncObj1.rc);</span>
+<span class="nc" id="L1122">        }</span>
+        // Wait for all entries to be acknowledged for the second ledger
+<span class="nc" id="L1124">        synchronized (syncObj2) {</span>
+<span class="nc bnc" id="L1125" title="All 2 branches missed.">            while (syncObj2.counter &lt; numEntriesToWrite) {</span>
+<span class="nc" id="L1126">                syncObj2.wait();</span>
+            }
+<span class="nc" id="L1128">            assertEquals(BKException.Code.OK, syncObj2.rc);</span>
+<span class="nc" id="L1129">        }</span>
+
+        // Reading ledger till the last entry
+<span class="nc" id="L1132">        readEntries(lh, entries1);</span>
+<span class="nc" id="L1133">        readEntries(lh2, entries2);</span>
+<span class="nc" id="L1134">        lh.close();</span>
+<span class="nc" id="L1135">        lh2.close();</span>
+<span class="nc" id="L1136">    }</span>
+
+    /**
+     * Verify Advanced asynchronous writing with entryIds in pseudo random order.
+     */
+    @Test
+    public void testLedgerCreateAdvWithRandomAsyncWritesWithBookieFailures() throws Exception {
+        // Create ledgers
+<span class="nc" id="L1144">        lh = bkc.createLedgerAdv(5, 3, 2, digestType, ledgerPassword);</span>
+<span class="nc" id="L1145">        lh2 = bkc.createLedgerAdv(5, 3, 2, digestType, ledgerPassword);</span>
+
+<span class="nc" id="L1147">        LOG.info(&quot;Ledger ID-1: &quot; + lh.getId());</span>
+<span class="nc" id="L1148">        LOG.info(&quot;Ledger ID-2: &quot; + lh2.getId());</span>
+<span class="nc" id="L1149">        SyncObj syncObj1 = new SyncObj();</span>
+<span class="nc" id="L1150">        SyncObj syncObj2 = new SyncObj();</span>
+<span class="nc" id="L1151">        int batchSize = 5;</span>
+        int i, j;
+
+        // Fill the result buffers first
+<span class="nc bnc" id="L1155" title="All 2 branches missed.">        for (i = 0; i &lt; numEntriesToWrite; i++) {</span>
+<span class="nc" id="L1156">            ByteBuffer entry = ByteBuffer.allocate(4);</span>
+
+<span class="nc" id="L1158">            entry.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L1159">            entry.position(0);</span>
+            try {
+<span class="nc" id="L1161">                entries1.add(0, entry.array());</span>
+<span class="nc" id="L1162">                entries2.add(0, entry.array());</span>
+<span class="nc" id="L1163">            } catch (Exception e) {</span>
+<span class="nc" id="L1164">                e.printStackTrace();</span>
+<span class="nc" id="L1165">            }</span>
+        }
+
+<span class="nc bnc" id="L1168" title="All 2 branches missed.">        for (i = 0; i &lt; batchSize; i++) {</span>
+<span class="nc bnc" id="L1169" title="All 2 branches missed.">            for (j = i; j &lt; numEntriesToWrite; j = j + batchSize) {</span>
+<span class="nc" id="L1170">                byte[] entry1 = entries1.get(j);</span>
+<span class="nc" id="L1171">                byte[] entry2 = entries2.get(j);</span>
+<span class="nc" id="L1172">                lh.asyncAddEntry(j, entry1, 0, entry1.length, this, syncObj1);</span>
+<span class="nc" id="L1173">                lh2.asyncAddEntry(j, entry2, 0, entry2.length, this, syncObj2);</span>
+            }
+        }
+        // Start One more bookie and shutdown one from last ensemble before reading
+<span class="nc" id="L1177">        startNewBookie();</span>
+<span class="nc" id="L1178">        List&lt;BookieSocketAddress&gt; ensemble = lh.getLedgerMetadata().getAllEnsembles().entrySet().iterator().next()</span>
+<span class="nc" id="L1179">                .getValue();</span>
+<span class="nc" id="L1180">        killBookie(ensemble.get(0));</span>
+
+        // Wait for all entries to be acknowledged for the first ledger
+<span class="nc" id="L1183">        synchronized (syncObj1) {</span>
+<span class="nc bnc" id="L1184" title="All 2 branches missed.">            while (syncObj1.counter &lt; numEntriesToWrite) {</span>
+<span class="nc" id="L1185">                syncObj1.wait();</span>
+            }
+<span class="nc" id="L1187">            assertEquals(BKException.Code.OK, syncObj1.rc);</span>
+<span class="nc" id="L1188">        }</span>
+        // Wait for all entries to be acknowledged for the second ledger
+<span class="nc" id="L1190">        synchronized (syncObj2) {</span>
+<span class="nc bnc" id="L1191" title="All 2 branches missed.">            while (syncObj2.counter &lt; numEntriesToWrite) {</span>
+<span class="nc" id="L1192">                syncObj2.wait();</span>
+            }
+<span class="nc" id="L1194">            assertEquals(BKException.Code.OK, syncObj2.rc);</span>
+<span class="nc" id="L1195">        }</span>
+
+        // Reading ledger till the last entry
+<span class="nc" id="L1198">        readEntries(lh, entries1);</span>
+<span class="nc" id="L1199">        readEntries(lh2, entries2);</span>
+<span class="nc" id="L1200">        lh.close();</span>
+<span class="nc" id="L1201">        lh2.close();</span>
+<span class="nc" id="L1202">    }</span>
+
+    /**
+     * Skips few entries before closing the ledger and assert that the
+     * lastAddConfirmed is right before our skipEntryId.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testLedgerCreateAdvWithSkipEntries() throws Exception {
+        long ledgerId;
+<span class="nc" id="L1213">        SyncObj syncObj1 = new SyncObj();</span>
+
+        // Create a ledger
+<span class="nc" id="L1216">        lh = bkc.createLedgerAdv(5, 3, 2, digestType, ledgerPassword);</span>
+        // Save ledgerId to reopen the ledger
+<span class="nc" id="L1218">        ledgerId = lh.getId();</span>
+<span class="nc" id="L1219">        LOG.info(&quot;Ledger ID: &quot; + ledgerId);</span>
+<span class="nc" id="L1220">        int skipEntryId = rng.nextInt(numEntriesToWrite - 1);</span>
+<span class="nc bnc" id="L1221" title="All 2 branches missed.">        for (int i = numEntriesToWrite - 1; i &gt;= 0; i--) {</span>
+<span class="nc" id="L1222">            ByteBuffer entry = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L1223">            entry.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L1224">            entry.position(0);</span>
+            try {
+<span class="nc" id="L1226">                entries1.add(0, entry.array());</span>
+<span class="nc" id="L1227">            } catch (Exception e) {</span>
+<span class="nc" id="L1228">                e.printStackTrace();</span>
+<span class="nc" id="L1229">            }</span>
+<span class="nc bnc" id="L1230" title="All 2 branches missed.">            if (i == skipEntryId) {</span>
+<span class="nc" id="L1231">                LOG.info(&quot;Skipping entry:{}&quot;, skipEntryId);</span>
+<span class="nc" id="L1232">                continue;</span>
+            }
+<span class="nc" id="L1234">            lh.asyncAddEntry(i, entry.array(), 0, entry.capacity(), this, syncObj1);</span>
+        }
+        // wait for all entries to be acknowledged for the first ledger
+<span class="nc" id="L1237">        synchronized (syncObj1) {</span>
+<span class="nc bnc" id="L1238" title="All 2 branches missed.">            while (syncObj1.counter &lt; skipEntryId) {</span>
+<span class="nc" id="L1239">                syncObj1.wait();</span>
+            }
+<span class="nc" id="L1241">            assertEquals(BKException.Code.OK, syncObj1.rc);</span>
+<span class="nc" id="L1242">        }</span>
+        // Close the ledger
+<span class="nc" id="L1244">        lh.close();</span>
+        // Open the ledger
+<span class="nc" id="L1246">        lh = bkc.openLedger(ledgerId, digestType, ledgerPassword);</span>
+<span class="nc" id="L1247">        assertEquals(lh.lastAddConfirmed, skipEntryId - 1);</span>
+<span class="nc" id="L1248">        lh.close();</span>
+<span class="nc" id="L1249">    }</span>
+
+    /**
+     * Verify the functionality LedgerHandleAdv addEntry with duplicate entryIds.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testLedgerCreateAdvSyncAddDuplicateEntryIds() throws Exception {
+        // Create a ledger
+<span class="nc" id="L1259">        lh = bkc.createLedgerAdv(5, 3, 2, digestType, ledgerPassword);</span>
+<span class="nc" id="L1260">        LOG.info(&quot;Ledger ID: &quot; + lh.getId());</span>
+<span class="nc bnc" id="L1261" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntriesToWrite; i++) {</span>
+<span class="nc" id="L1262">            ByteBuffer entry = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L1263">            entry.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L1264">            entry.position(0);</span>
+
+<span class="nc" id="L1266">            entries1.add(entry.array());</span>
+<span class="nc" id="L1267">            lh.addEntry(i, entry.array());</span>
+<span class="nc" id="L1268">            entry.position(0);</span>
+        }
+<span class="nc" id="L1270">        readEntries(lh, entries1);</span>
+
+<span class="nc" id="L1272">        int dupEntryId = rng.nextInt(numEntriesToWrite - 1);</span>
+
+        try {
+<span class="nc" id="L1275">            ByteBuffer entry = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L1276">            entry.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L1277">            entry.position(0);</span>
+<span class="nc" id="L1278">            lh.addEntry(dupEntryId, entry.array());</span>
+<span class="nc" id="L1279">            fail(&quot;Expected exception not thrown&quot;);</span>
+<span class="nc" id="L1280">        } catch (BKException e) {</span>
+            // This test expects DuplicateEntryIdException
+<span class="nc" id="L1282">            assertEquals(e.getCode(), BKException.Code.DuplicateEntryIdException);</span>
+<span class="nc" id="L1283">        }</span>
+<span class="nc" id="L1284">        lh.close();</span>
+<span class="nc" id="L1285">    }</span>
+
+    /**
+     * Verify the functionality LedgerHandleAdv asyncAddEntry with duplicate
+     * entryIds.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testLedgerCreateAdvSyncAsyncAddDuplicateEntryIds() throws Exception {
+        long ledgerId;
+<span class="nc" id="L1296">        SyncObj syncObj1 = new SyncObj();</span>
+<span class="nc" id="L1297">        SyncObj syncObj2 = new SyncObj();</span>
+
+        // Create a ledger
+<span class="nc" id="L1300">        lh = bkc.createLedgerAdv(5, 3, 2, digestType, ledgerPassword);</span>
+        // Save ledgerId to reopen the ledger
+<span class="nc" id="L1302">        ledgerId = lh.getId();</span>
+<span class="nc" id="L1303">        LOG.info(&quot;Ledger ID: &quot; + ledgerId);</span>
+<span class="nc bnc" id="L1304" title="All 2 branches missed.">        for (int i = numEntriesToWrite - 1; i &gt;= 0; i--) {</span>
+<span class="nc" id="L1305">            ByteBuffer entry = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L1306">            entry.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L1307">            entry.position(0);</span>
+            try {
+<span class="nc" id="L1309">                entries1.add(0, entry.array());</span>
+<span class="nc" id="L1310">            } catch (Exception e) {</span>
+<span class="nc" id="L1311">                e.printStackTrace();</span>
+<span class="nc" id="L1312">            }</span>
+<span class="nc" id="L1313">            lh.asyncAddEntry(i, entry.array(), 0, entry.capacity(), this, syncObj1);</span>
+<span class="nc bnc" id="L1314" title="All 2 branches missed.">            if (rng.nextBoolean()) {</span>
+                // Attempt to write the same entry
+<span class="nc" id="L1316">                lh.asyncAddEntry(i, entry.array(), 0, entry.capacity(), this, syncObj2);</span>
+<span class="nc" id="L1317">                synchronized (syncObj2) {</span>
+<span class="nc bnc" id="L1318" title="All 2 branches missed.">                    while (syncObj2.counter &lt; 1) {</span>
+<span class="nc" id="L1319">                        syncObj2.wait();</span>
+                    }
+<span class="nc" id="L1321">                    assertEquals(BKException.Code.DuplicateEntryIdException, syncObj2.rc);</span>
+<span class="nc" id="L1322">                }</span>
+            }
+        }
+        // Wait for all entries to be acknowledged for the first ledger
+<span class="nc" id="L1326">        synchronized (syncObj1) {</span>
+<span class="nc bnc" id="L1327" title="All 2 branches missed.">            while (syncObj1.counter &lt; numEntriesToWrite) {</span>
+<span class="nc" id="L1328">                syncObj1.wait();</span>
+            }
+<span class="nc" id="L1330">            assertEquals(BKException.Code.OK, syncObj1.rc);</span>
+<span class="nc" id="L1331">        }</span>
+        // Close the ledger
+<span class="nc" id="L1333">        lh.close();</span>
+<span class="nc" id="L1334">    }</span>
+
+    @Test
+    @SuppressWarnings(&quot;unchecked&quot;)
+    public void testLedgerCreateAdvByteBufRefCnt() throws Exception {
+<span class="nc" id="L1339">        long ledgerId = rng.nextLong();</span>
+<span class="nc" id="L1340">        ledgerId &amp;= Long.MAX_VALUE;</span>
+<span class="nc bnc" id="L1341" title="All 2 branches missed.">        if (!baseConf.getLedgerManagerFactoryClass().equals(LongHierarchicalLedgerManagerFactory.class)) {</span>
+            // since LongHierarchicalLedgerManager supports ledgerIds of
+            // decimal length upto 19 digits but other
+            // LedgerManagers only upto 10 decimals
+<span class="nc" id="L1345">            ledgerId %= 9999999999L;</span>
+        }
+
+<span class="nc" id="L1348">        final LedgerHandle lh = bkc.createLedgerAdv(ledgerId, 5, 3, 2, digestType, ledgerPassword, null);</span>
+
+<span class="nc" id="L1350">        final List&lt;AbstractByteBufAllocator&gt; allocs = Lists.newArrayList(</span>
+                new PooledByteBufAllocator(true),
+                new PooledByteBufAllocator(false),
+                new UnpooledByteBufAllocator(true),
+                new UnpooledByteBufAllocator(false));
+
+<span class="nc" id="L1356">        long entryId = 0;</span>
+<span class="nc bnc" id="L1357" title="All 2 branches missed.">        for (AbstractByteBufAllocator alloc: allocs) {</span>
+<span class="nc" id="L1358">            final ByteBuf data = alloc.buffer(10);</span>
+<span class="nc" id="L1359">            data.writeBytes((&quot;fragment0&quot; + entryId).getBytes());</span>
+<span class="nc" id="L1360">            assertEquals(&quot;ref count on ByteBuf should be 1&quot;, 1, data.refCnt());</span>
+
+<span class="nc" id="L1362">            CompletableFuture&lt;Integer&gt; cf = new CompletableFuture&lt;&gt;();</span>
+<span class="nc" id="L1363">            lh.asyncAddEntry(entryId, data, (rc, handle, eId, qwcLatency, ctx) -&gt; {</span>
+<span class="nc" id="L1364">                CompletableFuture&lt;Integer&gt; future = (CompletableFuture&lt;Integer&gt;) ctx;</span>
+<span class="nc" id="L1365">                future.complete(rc);</span>
+<span class="nc" id="L1366">            }, cf);</span>
+
+<span class="nc" id="L1368">            int rc = cf.get();</span>
+<span class="nc" id="L1369">            assertEquals(&quot;rc code is OK&quot;, BKException.Code.OK, rc);</span>
+
+<span class="nc bnc" id="L1371" title="All 2 branches missed.">            for (int i = 0; i &lt; 10; i++) {</span>
+<span class="nc bnc" id="L1372" title="All 2 branches missed.">                if (data.refCnt() == 0) {</span>
+<span class="nc" id="L1373">                    break;</span>
+                }
+<span class="nc" id="L1375">                TimeUnit.MILLISECONDS.sleep(250); // recycler runs asynchronously</span>
+            }
+<span class="nc" id="L1377">            assertEquals(&quot;writing entry with id &quot; + entryId + &quot;, ref count on ByteBuf should be 0 &quot;,</span>
+<span class="nc" id="L1378">                    0, data.refCnt());</span>
+
+<span class="nc" id="L1380">            org.apache.bookkeeper.client.api.LedgerEntry e = lh.read(entryId, entryId).getEntry(entryId);</span>
+<span class="nc" id="L1381">            assertEquals(&quot;entry data is correct&quot;, &quot;fragment0&quot; + entryId, new String(e.getEntryBytes()));</span>
+<span class="nc" id="L1382">            entryId++;</span>
+<span class="nc" id="L1383">        }</span>
+
+<span class="nc" id="L1385">        bkc.deleteLedger(lh.ledgerId);</span>
+<span class="nc" id="L1386">    }</span>
+
+    @Test
+    @SuppressWarnings(&quot;unchecked&quot;)
+    public void testLedgerCreateByteBufRefCnt() throws Exception {
+<span class="nc" id="L1391">        final LedgerHandle lh = bkc.createLedger(5, 3, 2, digestType, ledgerPassword, null);</span>
+
+<span class="nc" id="L1393">        final List&lt;AbstractByteBufAllocator&gt; allocs = Lists.newArrayList(</span>
+                new PooledByteBufAllocator(true),
+                new PooledByteBufAllocator(false),
+                new UnpooledByteBufAllocator(true),
+                new UnpooledByteBufAllocator(false));
+
+<span class="nc" id="L1399">        int entryId = 0;</span>
+<span class="nc bnc" id="L1400" title="All 2 branches missed.">        for (AbstractByteBufAllocator alloc: allocs) {</span>
+<span class="nc" id="L1401">            final ByteBuf data = alloc.buffer(10);</span>
+<span class="nc" id="L1402">            data.writeBytes((&quot;fragment0&quot; + entryId).getBytes());</span>
+<span class="nc" id="L1403">            assertEquals(&quot;ref count on ByteBuf should be 1&quot;, 1, data.refCnt());</span>
+
+<span class="nc" id="L1405">            CompletableFuture&lt;Integer&gt; cf = new CompletableFuture&lt;&gt;();</span>
+<span class="nc" id="L1406">            lh.asyncAddEntry(data, (rc, handle, eId, ctx) -&gt; {</span>
+<span class="nc" id="L1407">                CompletableFuture&lt;Integer&gt; future = (CompletableFuture&lt;Integer&gt;) ctx;</span>
+<span class="nc" id="L1408">                future.complete(rc);</span>
+<span class="nc" id="L1409">            }, cf);</span>
+
+<span class="nc" id="L1411">            int rc = cf.get();</span>
+<span class="nc" id="L1412">            assertEquals(&quot;rc code is OK&quot;, BKException.Code.OK, rc);</span>
+
+<span class="nc bnc" id="L1414" title="All 2 branches missed.">            for (int i = 0; i &lt; 10; i++) {</span>
+<span class="nc bnc" id="L1415" title="All 2 branches missed.">                if (data.refCnt() == 0) {</span>
+<span class="nc" id="L1416">                    break;</span>
+                }
+<span class="nc" id="L1418">                TimeUnit.MILLISECONDS.sleep(250); // recycler runs asynchronously</span>
+            }
+<span class="nc" id="L1420">            assertEquals(&quot;writing entry with id &quot; + entryId + &quot;, ref count on ByteBuf should be 0 &quot;,</span>
+<span class="nc" id="L1421">                    0, data.refCnt());</span>
+
+<span class="nc" id="L1423">            org.apache.bookkeeper.client.api.LedgerEntry e = lh.read(entryId, entryId).getEntry(entryId);</span>
+<span class="nc" id="L1424">            assertEquals(&quot;entry data is correct&quot;, &quot;fragment0&quot; + entryId, new String(e.getEntryBytes()));</span>
+<span class="nc" id="L1425">            entryId++;</span>
+<span class="nc" id="L1426">        }</span>
+
+<span class="nc" id="L1428">        bkc.deleteLedger(lh.ledgerId);</span>
+<span class="nc" id="L1429">    }</span>
+
+    private void readEntries(LedgerHandle lh, List&lt;byte[]&gt; entries) throws InterruptedException, BKException {
+<span class="nc" id="L1432">        ls = lh.readEntries(0, numEntriesToWrite - 1);</span>
+<span class="nc" id="L1433">        int index = 0;</span>
+<span class="nc bnc" id="L1434" title="All 2 branches missed.">        while (ls.hasMoreElements()) {</span>
+<span class="nc" id="L1435">            ByteBuffer origbb = ByteBuffer.wrap(entries.get(index++));</span>
+<span class="nc" id="L1436">            Integer origEntry = origbb.getInt();</span>
+<span class="nc" id="L1437">            ByteBuffer result = ByteBuffer.wrap(ls.nextElement().getEntry());</span>
+<span class="nc" id="L1438">            LOG.debug(&quot;Length of result: &quot; + result.capacity());</span>
+<span class="nc" id="L1439">            LOG.debug(&quot;Original entry: &quot; + origEntry);</span>
+<span class="nc" id="L1440">            Integer retrEntry = result.getInt();</span>
+<span class="nc" id="L1441">            LOG.debug(&quot;Retrieved entry: &quot; + retrEntry);</span>
+<span class="nc" id="L1442">            assertTrue(&quot;Checking entry &quot; + index + &quot; for equality&quot;, origEntry</span>
+<span class="nc" id="L1443">                    .equals(retrEntry));</span>
+<span class="nc" id="L1444">        }</span>
+<span class="nc" id="L1445">    }</span>
+
+    private void readEntries(ReadHandle reader, List&lt;ByteBuf&gt; entries) throws Exception {
+<span class="nc" id="L1448">        assertEquals(&quot;Not enough entries in ledger &quot; + reader.getId(),</span>
+<span class="nc" id="L1449">                     reader.getLastAddConfirmed(), entries.size() - 1);</span>
+<span class="nc" id="L1450">        try (LedgerEntries readEntries = reader.read(0, reader.getLastAddConfirmed())) {</span>
+<span class="nc" id="L1451">            int i = 0;</span>
+<span class="nc bnc" id="L1452" title="All 2 branches missed.">            for (org.apache.bookkeeper.client.api.LedgerEntry e : readEntries) {</span>
+<span class="nc" id="L1453">                int entryId = i++;</span>
+<span class="nc" id="L1454">                ByteBuf origEntry = entries.get(entryId);</span>
+<span class="nc" id="L1455">                ByteBuf readEntry = e.getEntryBuffer();</span>
+<span class="nc" id="L1456">                assertEquals(&quot;Unexpected contents in &quot; + reader.getId() + &quot;:&quot; + entryId, origEntry, readEntry);</span>
+<span class="nc" id="L1457">            }</span>
+        }
+<span class="nc" id="L1459">    }</span>
+
+    private void readEntriesAndValidateDataArray(LedgerHandle lh, List&lt;byte[]&gt; entries)
+            throws InterruptedException, BKException {
+<span class="nc" id="L1463">        ls = lh.readEntries(0, entries.size() - 1);</span>
+<span class="nc" id="L1464">        int index = 0;</span>
+<span class="nc bnc" id="L1465" title="All 2 branches missed.">        while (ls.hasMoreElements()) {</span>
+<span class="nc" id="L1466">            byte[] originalData = entries.get(index++);</span>
+<span class="nc" id="L1467">            byte[] receivedData = ls.nextElement().getEntry();</span>
+<span class="nc" id="L1468">            LOG.debug(&quot;Length of originalData: {}&quot;, originalData.length);</span>
+<span class="nc" id="L1469">            LOG.debug(&quot;Length of receivedData: {}&quot;, receivedData.length);</span>
+<span class="nc" id="L1470">            assertEquals(</span>
+<span class="nc" id="L1471">                    String.format(&quot;LedgerID: %d EntryID: %d OriginalDataLength: %d ReceivedDataLength: %d&quot;, lh.getId(),</span>
+<span class="nc" id="L1472">                            (index - 1), originalData.length, receivedData.length),</span>
+                    originalData.length, receivedData.length);
+<span class="nc" id="L1474">            Assert.assertArrayEquals(</span>
+<span class="nc" id="L1475">                    String.format(&quot;Checking LedgerID: %d EntryID: %d  for equality&quot;, lh.getId(), (index - 1)),</span>
+                    originalData, receivedData);
+<span class="nc" id="L1477">        }</span>
+<span class="nc" id="L1478">    }</span>
+
+    @Override
+    public void addComplete(int rc, LedgerHandle lh, long entryId, Object ctx) {
+<span class="nc" id="L1482">        SyncObj x = (SyncObj) ctx;</span>
+<span class="nc" id="L1483">        synchronized (x) {</span>
+<span class="nc" id="L1484">            x.rc = rc;</span>
+<span class="nc" id="L1485">            x.counter++;</span>
+<span class="nc" id="L1486">            x.notify();</span>
+<span class="nc" id="L1487">        }</span>
+<span class="nc" id="L1488">    }</span>
+
+    static class CorruptReadBookie extends Bookie {
+
+<span class="nc" id="L1492">        static final Logger LOG = LoggerFactory.getLogger(CorruptReadBookie.class);</span>
+        ByteBuf localBuf;
+
+        public CorruptReadBookie(ServerConfiguration conf)
+                throws IOException, KeeperException, InterruptedException, BookieException {
+<span class="nc" id="L1497">            super(conf);</span>
+<span class="nc" id="L1498">        }</span>
+
+        @Override
+        public ByteBuf readEntry(long ledgerId, long entryId) throws IOException, NoLedgerException {
+<span class="nc" id="L1502">            localBuf = super.readEntry(ledgerId, entryId);</span>
+
+<span class="nc" id="L1504">            int capacity = 0;</span>
+<span class="nc bnc" id="L1505" title="All 2 branches missed.">            while (capacity &lt; localBuf.capacity()) {</span>
+<span class="nc" id="L1506">                localBuf.setByte(capacity, 0);</span>
+<span class="nc" id="L1507">                capacity++;</span>
+            }
+<span class="nc" id="L1509">            return localBuf;</span>
+        }
+
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

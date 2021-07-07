@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Bokkeeper2Test.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">Bokkeeper2Test.java</span></div><h1>Bokkeeper2Test.java</h1><pre class="source lang-java linenums">/*
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.client;
+
+import static org.apache.bookkeeper.client.BookKeeperClientStats.WRITE_DELAYED_DUE_TO_NOT_ENOUGH_FAULT_DOMAINS;
+import static org.apache.bookkeeper.client.BookKeeperClientStats.WRITE_TIMED_OUT_DUE_TO_NOT_ENOUGH_FAULT_DOMAINS;
+import static org.apache.bookkeeper.common.concurrent.FutureUtils.result;
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import io.netty.util.IllegalReferenceCountException;
+
+import java.io.IOException;
+import java.net.UnknownHostException;
+import java.util.Collections;
+import java.util.Enumeration;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+
+import org.apache.bookkeeper.client.AsyncCallback.AddCallback;
+import org.apache.bookkeeper.client.AsyncCallback.ReadCallback;
+import org.apache.bookkeeper.client.BKException.BKBookieHandleNotAvailableException;
+import org.apache.bookkeeper.client.BKException.BKIllegalOpException;
+import org.apache.bookkeeper.client.BookKeeper.DigestType;
+import org.apache.bookkeeper.client.api.WriteFlag;
+import org.apache.bookkeeper.client.api.WriteHandle;
+import org.apache.bookkeeper.conf.ClientConfiguration;
+import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.proto.BookieServer;
+import org.apache.bookkeeper.stats.NullStatsLogger;
+import org.apache.bookkeeper.stats.StatsLogger;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.apache.bookkeeper.test.TestStatsProvider;
+import org.apache.bookkeeper.zookeeper.BoundExponentialBackoffRetryPolicy;
+import org.apache.bookkeeper.zookeeper.ZooKeeperClient;
+import org.apache.bookkeeper.zookeeper.ZooKeeperWatcherBase;
+import org.apache.zookeeper.AsyncCallback.StringCallback;
+import org.apache.zookeeper.CreateMode;
+import org.apache.zookeeper.KeeperException;
+import org.apache.zookeeper.KeeperException.ConnectionLossException;
+import org.apache.zookeeper.WatchedEvent;
+import org.apache.zookeeper.Watcher;
+import org.apache.zookeeper.Watcher.Event.EventType;
+import org.apache.zookeeper.Watcher.Event.KeeperState;
+import org.apache.zookeeper.ZooKeeper;
+import org.apache.zookeeper.ZooKeeper.States;
+import org.apache.zookeeper.data.ACL;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Tests of the main BookKeeper client.
+ */
+public class Bokkeeper2Test extends BookKeeperClusterTestCase {
+<span class="fc" id="L83">    private static final Logger LOG = LoggerFactory.getLogger(BookKeeperTest.class);</span>
+    private static final long INVALID_LEDGERID = -1L;
+    private final DigestType digestType;
+
+    public Bokkeeper2Test() {
+<span class="fc" id="L88">        super(4);</span>
+<span class="fc" id="L89">        this.digestType = DigestType.CRC32;</span>
+<span class="fc" id="L90">    }</span>
+
+    private LedgerHandle createLedgerWithEntries(BookKeeper bk, int numOfEntries)
+            throws Exception {
+<span class="fc" id="L94">        LedgerHandle lh = bk</span>
+<span class="fc" id="L95">                .createLedger(3, 3, digestType, &quot;password&quot;.getBytes());</span>
+
+<span class="fc" id="L97">        final AtomicInteger rc = new AtomicInteger(BKException.Code.OK);</span>
+<span class="fc" id="L98">        final CountDownLatch latch = new CountDownLatch(numOfEntries);</span>
+
+<span class="fc" id="L100">        final AddCallback cb = new AddCallback() {</span>
+            public void addComplete(int rccb, LedgerHandle lh, long entryId,
+                                    Object ctx) {
+<span class="fc" id="L103">                rc.compareAndSet(BKException.Code.OK, rccb);</span>
+<span class="fc" id="L104">                latch.countDown();</span>
+<span class="fc" id="L105">            }</span>
+        };
+<span class="fc bfc" id="L107" title="All 2 branches covered.">        for (int i = 0; i &lt; numOfEntries; i++) {</span>
+<span class="fc" id="L108">            lh.asyncAddEntry(&quot;foobar&quot;.getBytes(), cb, null);</span>
+        }
+<span class="pc bpc" id="L110" title="1 of 2 branches missed.">        if (!latch.await(30, TimeUnit.SECONDS)) {</span>
+<span class="nc" id="L111">            throw new Exception(&quot;Entries took too long to add&quot;);</span>
+        }
+<span class="pc bpc" id="L113" title="1 of 2 branches missed.">        if (rc.get() != BKException.Code.OK) {</span>
+<span class="nc" id="L114">            throw BKException.create(rc.get());</span>
+        }
+<span class="fc" id="L116">        return lh;</span>
+    }
+
+    /**
+     * Test that deleting a ledger using bookkeeper client which is closed
+     * should throw ClientClosedException.
+     */
+    @Test
+    public void testDeleteLedger() throws Exception {
+<span class="fc" id="L125">        BookKeeper bk = new BookKeeper(baseClientConf, zkc);</span>
+<span class="fc" id="L126">        LOG.info(&quot;Create ledger and add entries to it&quot;);</span>
+<span class="fc" id="L127">        LedgerHandle lh = createLedgerWithEntries(bk, 100);</span>
+<span class="fc" id="L128">        LOG.info(&quot;Closing bookkeeper client&quot;);</span>
+<span class="fc" id="L129">        bk.close();</span>
+        try {
+<span class="nc" id="L131">            bk.deleteLedger(lh.getId());</span>
+<span class="nc" id="L132">            fail(&quot;should have failed, client is closed&quot;);</span>
+<span class="fc" id="L133">        } catch (BKException.BKClientClosedException e) {</span>
+            // correct
+<span class="nc" id="L135">        }</span>
+
+        // using async, because this could trigger an assertion
+<span class="fc" id="L138">        final AtomicInteger returnCode = new AtomicInteger(0);</span>
+<span class="fc" id="L139">        final CountDownLatch openLatch = new CountDownLatch(1);</span>
+<span class="fc" id="L140">        AsyncCallback.DeleteCallback cb = new AsyncCallback.DeleteCallback() {</span>
+            public void deleteComplete(int rc, Object ctx) {
+<span class="fc" id="L142">                returnCode.set(rc);</span>
+<span class="fc" id="L143">                openLatch.countDown();</span>
+<span class="fc" id="L144">            }</span>
+        };
+<span class="fc" id="L146">        bk.asyncDeleteLedger(lh.getId(), cb, openLatch);</span>
+
+<span class="fc" id="L148">        LOG.info(&quot;Waiting to delete the ledger asynchronously&quot;);</span>
+<span class="fc" id="L149">        assertTrue(&quot;Delete call should have completed&quot;,</span>
+<span class="fc" id="L150">                openLatch.await(20, TimeUnit.SECONDS));</span>
+<span class="fc" id="L151">        assertEquals(&quot;Delete should not have succeeded through closed bkclient!&quot;,</span>
+<span class="fc" id="L152">                BKException.Code.ClientClosedException, returnCode.get());</span>
+<span class="fc" id="L153">    }</span>
+
+
+
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

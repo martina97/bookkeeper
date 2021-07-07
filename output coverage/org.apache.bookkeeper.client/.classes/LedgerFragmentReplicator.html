@@ -1,0 +1,619 @@
+
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html id="htmlId">
+<head>
+  <title>Coverage Report :: LedgerFragmentReplicator</title>
+  <style type="text/css">
+    @import "../../.css/coverage.css";
+  </style>
+</head>
+
+<body>
+<div class="header"></div>
+
+<div class="content">
+<div class="breadCrumbs">
+    [ <a href="../../index.html">all classes</a> ]
+    [ <a href="../index.html">org.apache.bookkeeper.client</a> ]
+</div>
+
+<h1>Coverage Summary for Class: LedgerFragmentReplicator (org.apache.bookkeeper.client)</h1>
+
+<table class="coverageStats">
+
+<tr>
+  <th class="name">Class</th>
+<th class="coverageStat 
+">
+  Method, %
+</th>
+<th class="coverageStat 
+">
+  Line, %
+</th>
+</tr>
+<tr>
+  <td class="name">LedgerFragmentReplicator</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 13)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 99)
+  </span>
+</td>
+</tr>
+  <tr>
+    <td class="name">LedgerFragmentReplicator$1</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 2)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 5)
+  </span>
+</td>
+  </tr>
+  <tr>
+    <td class="name">LedgerFragmentReplicator$2</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 2)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 15)
+  </span>
+</td>
+  </tr>
+  <tr>
+    <td class="name">LedgerFragmentReplicator$3</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 2)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 23)
+  </span>
+</td>
+  </tr>
+  <tr>
+    <td class="name">LedgerFragmentReplicator$SingleFragmentCallback</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 2)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 14)
+  </span>
+</td>
+  </tr>
+<tr>
+  <td class="name"><strong>total</strong></td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 21)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 156)
+  </span>
+</td>
+</tr>
+</table>
+
+<br/>
+<br/>
+
+
+<div class="sourceCode"><i>1</i>&nbsp;/**
+<i>2</i>&nbsp; * Licensed to the Apache Software Foundation (ASF) under one
+<i>3</i>&nbsp; * or more contributor license agreements.  See the NOTICE file
+<i>4</i>&nbsp; * distributed with this work for additional information
+<i>5</i>&nbsp; * regarding copyright ownership.  The ASF licenses this file
+<i>6</i>&nbsp; * to you under the Apache License, Version 2.0 (the
+<i>7</i>&nbsp; * &quot;License&quot;); you may not use this file except in compliance
+<i>8</i>&nbsp; * with the License.  You may obtain a copy of the License at
+<i>9</i>&nbsp; *
+<i>10</i>&nbsp; *   http://www.apache.org/licenses/LICENSE-2.0
+<i>11</i>&nbsp; *
+<i>12</i>&nbsp; * Unless required by applicable law or agreed to in writing,
+<i>13</i>&nbsp; * software distributed under the License is distributed on an
+<i>14</i>&nbsp; * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+<i>15</i>&nbsp; * KIND, either express or implied.  See the License for the
+<i>16</i>&nbsp; * specific language governing permissions and limitations
+<i>17</i>&nbsp; * under the License.
+<i>18</i>&nbsp; *
+<i>19</i>&nbsp; */
+<i>20</i>&nbsp;package org.apache.bookkeeper.client;
+<i>21</i>&nbsp;
+<i>22</i>&nbsp;import static org.apache.bookkeeper.client.LedgerHandle.INVALID_ENTRY_ID;
+<i>23</i>&nbsp;import static org.apache.bookkeeper.replication.ReplicationStats.NUM_BYTES_READ;
+<i>24</i>&nbsp;import static org.apache.bookkeeper.replication.ReplicationStats.NUM_BYTES_WRITTEN;
+<i>25</i>&nbsp;import static org.apache.bookkeeper.replication.ReplicationStats.NUM_ENTRIES_READ;
+<i>26</i>&nbsp;import static org.apache.bookkeeper.replication.ReplicationStats.NUM_ENTRIES_WRITTEN;
+<i>27</i>&nbsp;import static org.apache.bookkeeper.replication.ReplicationStats.REPLICATION_WORKER_SCOPE;
+<i>28</i>&nbsp;
+<i>29</i>&nbsp;import io.netty.buffer.Unpooled;
+<i>30</i>&nbsp;
+<i>31</i>&nbsp;import java.util.Enumeration;
+<i>32</i>&nbsp;import java.util.HashSet;
+<i>33</i>&nbsp;import java.util.Iterator;
+<i>34</i>&nbsp;import java.util.LinkedList;
+<i>35</i>&nbsp;import java.util.List;
+<i>36</i>&nbsp;import java.util.Map;
+<i>37</i>&nbsp;import java.util.Set;
+<i>38</i>&nbsp;import java.util.concurrent.atomic.AtomicBoolean;
+<i>39</i>&nbsp;import java.util.concurrent.atomic.AtomicInteger;
+<i>40</i>&nbsp;import java.util.function.BiConsumer;
+<i>41</i>&nbsp;import java.util.stream.Collectors;
+<i>42</i>&nbsp;
+<i>43</i>&nbsp;import org.apache.bookkeeper.client.AsyncCallback.ReadCallback;
+<i>44</i>&nbsp;import org.apache.bookkeeper.client.api.WriteFlag;
+<i>45</i>&nbsp;import org.apache.bookkeeper.meta.LedgerManager;
+<i>46</i>&nbsp;import org.apache.bookkeeper.net.BookieSocketAddress;
+<i>47</i>&nbsp;import org.apache.bookkeeper.proto.BookieProtocol;
+<i>48</i>&nbsp;import org.apache.bookkeeper.proto.BookkeeperInternalCallbacks.MultiCallback;
+<i>49</i>&nbsp;import org.apache.bookkeeper.proto.BookkeeperInternalCallbacks.WriteCallback;
+<i>50</i>&nbsp;import org.apache.bookkeeper.stats.Counter;
+<i>51</i>&nbsp;import org.apache.bookkeeper.stats.NullStatsLogger;
+<i>52</i>&nbsp;import org.apache.bookkeeper.stats.OpStatsLogger;
+<i>53</i>&nbsp;import org.apache.bookkeeper.stats.StatsLogger;
+<i>54</i>&nbsp;import org.apache.bookkeeper.stats.annotations.StatsDoc;
+<i>55</i>&nbsp;import org.apache.bookkeeper.util.ByteBufList;
+<i>56</i>&nbsp;import org.apache.zookeeper.AsyncCallback;
+<i>57</i>&nbsp;import org.slf4j.Logger;
+<i>58</i>&nbsp;import org.slf4j.LoggerFactory;
+<i>59</i>&nbsp;
+<i>60</i>&nbsp;/**
+<i>61</i>&nbsp; * This is the helper class for replicating the fragments from one bookie to
+<i>62</i>&nbsp; * another.
+<i>63</i>&nbsp; */
+<b class="nc"><i>64</i>&nbsp;@StatsDoc(</b>
+<i>65</i>&nbsp;    name = REPLICATION_WORKER_SCOPE,
+<i>66</i>&nbsp;    help = &quot;Ledger fragment replicator related stats&quot;
+<i>67</i>&nbsp;)
+<i>68</i>&nbsp;public class LedgerFragmentReplicator {
+<i>69</i>&nbsp;
+<i>70</i>&nbsp;    // BookKeeper instance
+<i>71</i>&nbsp;    private BookKeeper bkc;
+<i>72</i>&nbsp;    private StatsLogger statsLogger;
+<i>73</i>&nbsp;    @StatsDoc(
+<i>74</i>&nbsp;        name = NUM_ENTRIES_READ,
+<i>75</i>&nbsp;        help = &quot;Number of entries read by the replicator&quot;
+<i>76</i>&nbsp;    )
+<i>77</i>&nbsp;    private final Counter numEntriesRead;
+<i>78</i>&nbsp;    @StatsDoc(
+<i>79</i>&nbsp;        name = NUM_BYTES_READ,
+<i>80</i>&nbsp;        help = &quot;The distribution of size of entries read by the replicator&quot;
+<i>81</i>&nbsp;    )
+<i>82</i>&nbsp;    private final OpStatsLogger numBytesRead;
+<i>83</i>&nbsp;    @StatsDoc(
+<i>84</i>&nbsp;        name = NUM_ENTRIES_WRITTEN,
+<i>85</i>&nbsp;        help = &quot;Number of entries written by the replicator&quot;
+<i>86</i>&nbsp;    )
+<i>87</i>&nbsp;    private final Counter numEntriesWritten;
+<i>88</i>&nbsp;    @StatsDoc(
+<i>89</i>&nbsp;        name = NUM_BYTES_WRITTEN,
+<i>90</i>&nbsp;        help = &quot;The distribution of size of entries written by the replicator&quot;
+<i>91</i>&nbsp;    )
+<i>92</i>&nbsp;    private final OpStatsLogger numBytesWritten;
+<i>93</i>&nbsp;
+<b class="nc"><i>94</i>&nbsp;    public LedgerFragmentReplicator(BookKeeper bkc, StatsLogger statsLogger) {</b>
+<b class="nc"><i>95</i>&nbsp;        this.bkc = bkc;</b>
+<b class="nc"><i>96</i>&nbsp;        this.statsLogger = statsLogger;</b>
+<b class="nc"><i>97</i>&nbsp;        numEntriesRead = this.statsLogger.getCounter(NUM_ENTRIES_READ);</b>
+<b class="nc"><i>98</i>&nbsp;        numBytesRead = this.statsLogger.getOpStatsLogger(NUM_BYTES_READ);</b>
+<b class="nc"><i>99</i>&nbsp;        numEntriesWritten = this.statsLogger.getCounter(NUM_ENTRIES_WRITTEN);</b>
+<b class="nc"><i>100</i>&nbsp;        numBytesWritten = this.statsLogger.getOpStatsLogger(NUM_BYTES_WRITTEN);</b>
+<b class="nc"><i>101</i>&nbsp;    }</b>
+<i>102</i>&nbsp;
+<i>103</i>&nbsp;    public LedgerFragmentReplicator(BookKeeper bkc) {
+<b class="nc"><i>104</i>&nbsp;        this(bkc, NullStatsLogger.INSTANCE);</b>
+<b class="nc"><i>105</i>&nbsp;    }</b>
+<i>106</i>&nbsp;
+<b class="nc"><i>107</i>&nbsp;    private static final Logger LOG = LoggerFactory</b>
+<b class="nc"><i>108</i>&nbsp;            .getLogger(LedgerFragmentReplicator.class);</b>
+<i>109</i>&nbsp;
+<i>110</i>&nbsp;    private void replicateFragmentInternal(final LedgerHandle lh,
+<i>111</i>&nbsp;            final LedgerFragment lf,
+<i>112</i>&nbsp;            final AsyncCallback.VoidCallback ledgerFragmentMcb,
+<i>113</i>&nbsp;            final Set&lt;BookieSocketAddress&gt; newBookies,
+<i>114</i>&nbsp;            final BiConsumer&lt;Long, Long&gt; onReadEntryFailureCallback) throws InterruptedException {
+<b class="nc"><i>115</i>&nbsp;        if (!lf.isClosed()) {</b>
+<b class="nc"><i>116</i>&nbsp;            LOG.error(&quot;Trying to replicate an unclosed fragment;&quot;</b>
+<i>117</i>&nbsp;                      + &quot; This is not safe {}&quot;, lf);
+<b class="nc"><i>118</i>&nbsp;            ledgerFragmentMcb.processResult(BKException.Code.UnclosedFragmentException,</b>
+<i>119</i>&nbsp;                                            null, null);
+<b class="nc"><i>120</i>&nbsp;            return;</b>
+<i>121</i>&nbsp;        }
+<b class="nc"><i>122</i>&nbsp;        Long startEntryId = lf.getFirstStoredEntryId();</b>
+<b class="nc"><i>123</i>&nbsp;        Long endEntryId = lf.getLastStoredEntryId();</b>
+<i>124</i>&nbsp;
+<i>125</i>&nbsp;        /*
+<i>126</i>&nbsp;         * if startEntryId is INVALID_ENTRY_ID then endEntryId should be
+<i>127</i>&nbsp;         * INVALID_ENTRY_ID and viceversa.
+<i>128</i>&nbsp;         */
+<b class="nc"><i>129</i>&nbsp;        if (startEntryId == INVALID_ENTRY_ID ^ endEntryId == INVALID_ENTRY_ID) {</b>
+<b class="nc"><i>130</i>&nbsp;            LOG.error(&quot;For LedgerFragment: {}, seeing inconsistent firstStoredEntryId: {} and lastStoredEntryId: {}&quot;,</b>
+<i>131</i>&nbsp;                    lf, startEntryId, endEntryId);
+<b class="nc"><i>132</i>&nbsp;            assert false;</b>
+<i>133</i>&nbsp;        }
+<i>134</i>&nbsp;
+<b class="nc"><i>135</i>&nbsp;        if (startEntryId &gt; endEntryId || endEntryId &lt;= INVALID_ENTRY_ID) {</b>
+<i>136</i>&nbsp;            // for open ledger which there is no entry, the start entry id is 0,
+<i>137</i>&nbsp;            // the end entry id is -1.
+<i>138</i>&nbsp;            // we can return immediately to trigger forward read
+<b class="nc"><i>139</i>&nbsp;            ledgerFragmentMcb.processResult(BKException.Code.OK, null, null);</b>
+<b class="nc"><i>140</i>&nbsp;            return;</b>
+<i>141</i>&nbsp;        }
+<i>142</i>&nbsp;
+<i>143</i>&nbsp;        /*
+<i>144</i>&nbsp;         * Add all the entries to entriesToReplicate list from
+<i>145</i>&nbsp;         * firstStoredEntryId to lastStoredEntryID.
+<i>146</i>&nbsp;         */
+<b class="nc"><i>147</i>&nbsp;        List&lt;Long&gt; entriesToReplicate = new LinkedList&lt;Long&gt;();</b>
+<b class="nc"><i>148</i>&nbsp;        long lastStoredEntryId = lf.getLastStoredEntryId();</b>
+<b class="nc"><i>149</i>&nbsp;        for (long i = lf.getFirstStoredEntryId(); i &lt;= lastStoredEntryId; i++) {</b>
+<b class="nc"><i>150</i>&nbsp;            entriesToReplicate.add(i);</b>
+<i>151</i>&nbsp;        }
+<i>152</i>&nbsp;        /*
+<i>153</i>&nbsp;         * Now asynchronously replicate all of the entries for the ledger
+<i>154</i>&nbsp;         * fragment that were on the dead bookie.
+<i>155</i>&nbsp;         */
+<b class="nc"><i>156</i>&nbsp;        MultiCallback ledgerFragmentEntryMcb = new MultiCallback(</b>
+<b class="nc"><i>157</i>&nbsp;                entriesToReplicate.size(), ledgerFragmentMcb, null, BKException.Code.OK,</b>
+<i>158</i>&nbsp;                BKException.Code.LedgerRecoveryException);
+<b class="nc"><i>159</i>&nbsp;        for (final Long entryId : entriesToReplicate) {</b>
+<b class="nc"><i>160</i>&nbsp;            recoverLedgerFragmentEntry(entryId, lh, ledgerFragmentEntryMcb,</b>
+<i>161</i>&nbsp;                    newBookies, onReadEntryFailureCallback);
+<b class="nc"><i>162</i>&nbsp;        }</b>
+<b class="nc"><i>163</i>&nbsp;    }</b>
+<i>164</i>&nbsp;
+<i>165</i>&nbsp;    /**
+<i>166</i>&nbsp;     * This method replicate a ledger fragment which is a contiguous portion of
+<i>167</i>&nbsp;     * a ledger that was stored in an ensemble that included the failed bookie.
+<i>168</i>&nbsp;     * It will Splits the fragment into multiple sub fragments by keeping the
+<i>169</i>&nbsp;     * max entries up to the configured value of rereplicationEntryBatchSize and
+<i>170</i>&nbsp;     * then it re-replicates that batched entry fragments one by one. After
+<i>171</i>&nbsp;     * re-replication of all batched entry fragments, it will update the
+<i>172</i>&nbsp;     * ensemble info with new Bookie once
+<i>173</i>&nbsp;     *
+<i>174</i>&nbsp;     * @param lh
+<i>175</i>&nbsp;     *            LedgerHandle for the ledger
+<i>176</i>&nbsp;     * @param lf
+<i>177</i>&nbsp;     *            LedgerFragment to replicate
+<i>178</i>&nbsp;     * @param ledgerFragmentMcb
+<i>179</i>&nbsp;     *            MultiCallback to invoke once we&#39;ve recovered the current
+<i>180</i>&nbsp;     *            ledger fragment.
+<i>181</i>&nbsp;     * @param targetBookieAddresses
+<i>182</i>&nbsp;     *            New bookies we want to use to recover and replicate the ledger
+<i>183</i>&nbsp;     *            entries that were stored on the failed bookie.
+<i>184</i>&nbsp;     */
+<i>185</i>&nbsp;    void replicate(final LedgerHandle lh, final LedgerFragment lf,
+<i>186</i>&nbsp;            final AsyncCallback.VoidCallback ledgerFragmentMcb,
+<i>187</i>&nbsp;            final Set&lt;BookieSocketAddress&gt; targetBookieAddresses,
+<i>188</i>&nbsp;            final BiConsumer&lt;Long, Long&gt; onReadEntryFailureCallback)
+<i>189</i>&nbsp;            throws InterruptedException {
+<b class="nc"><i>190</i>&nbsp;        Set&lt;LedgerFragment&gt; partionedFragments = splitIntoSubFragments(lh, lf,</b>
+<b class="nc"><i>191</i>&nbsp;                bkc.getConf().getRereplicationEntryBatchSize());</b>
+<b class="nc"><i>192</i>&nbsp;        LOG.info(&quot;Replicating fragment {} in {} sub fragments.&quot;,</b>
+<b class="nc"><i>193</i>&nbsp;                lf, partionedFragments.size());</b>
+<b class="nc"><i>194</i>&nbsp;        replicateNextBatch(lh, partionedFragments.iterator(),</b>
+<i>195</i>&nbsp;                ledgerFragmentMcb, targetBookieAddresses, onReadEntryFailureCallback);
+<b class="nc"><i>196</i>&nbsp;    }</b>
+<i>197</i>&nbsp;
+<i>198</i>&nbsp;    /**
+<i>199</i>&nbsp;     * Replicate the batched entry fragments one after other.
+<i>200</i>&nbsp;     */
+<i>201</i>&nbsp;    private void replicateNextBatch(final LedgerHandle lh,
+<i>202</i>&nbsp;            final Iterator&lt;LedgerFragment&gt; fragments,
+<i>203</i>&nbsp;            final AsyncCallback.VoidCallback ledgerFragmentMcb,
+<i>204</i>&nbsp;            final Set&lt;BookieSocketAddress&gt; targetBookieAddresses,
+<i>205</i>&nbsp;            final BiConsumer&lt;Long, Long&gt; onReadEntryFailureCallback) {
+<b class="nc"><i>206</i>&nbsp;        if (fragments.hasNext()) {</b>
+<i>207</i>&nbsp;            try {
+<b class="nc"><i>208</i>&nbsp;                replicateFragmentInternal(lh, fragments.next(),</b>
+<b class="nc"><i>209</i>&nbsp;                        new AsyncCallback.VoidCallback() {</b>
+<i>210</i>&nbsp;                            @Override
+<i>211</i>&nbsp;                            public void processResult(int rc, String v, Object ctx) {
+<b class="nc"><i>212</i>&nbsp;                                if (rc != BKException.Code.OK) {</b>
+<b class="nc"><i>213</i>&nbsp;                                    ledgerFragmentMcb.processResult(rc, null,</b>
+<i>214</i>&nbsp;                                            null);
+<i>215</i>&nbsp;                                } else {
+<b class="nc"><i>216</i>&nbsp;                                    replicateNextBatch(lh, fragments,</b>
+<i>217</i>&nbsp;                                            ledgerFragmentMcb,
+<i>218</i>&nbsp;                                            targetBookieAddresses,
+<i>219</i>&nbsp;                                            onReadEntryFailureCallback);
+<i>220</i>&nbsp;                                }
+<b class="nc"><i>221</i>&nbsp;                            }</b>
+<i>222</i>&nbsp;
+<i>223</i>&nbsp;                        }, targetBookieAddresses, onReadEntryFailureCallback);
+<b class="nc"><i>224</i>&nbsp;            } catch (InterruptedException e) {</b>
+<b class="nc"><i>225</i>&nbsp;                ledgerFragmentMcb.processResult(</b>
+<i>226</i>&nbsp;                        BKException.Code.InterruptedException, null, null);
+<b class="nc"><i>227</i>&nbsp;                Thread.currentThread().interrupt();</b>
+<b class="nc"><i>228</i>&nbsp;            }</b>
+<i>229</i>&nbsp;        } else {
+<b class="nc"><i>230</i>&nbsp;            ledgerFragmentMcb.processResult(BKException.Code.OK, null, null);</b>
+<i>231</i>&nbsp;        }
+<b class="nc"><i>232</i>&nbsp;    }</b>
+<i>233</i>&nbsp;
+<i>234</i>&nbsp;    /**
+<i>235</i>&nbsp;     * Split the full fragment into batched entry fragments by keeping
+<i>236</i>&nbsp;     * rereplicationEntryBatchSize of entries in each one and can treat them as
+<i>237</i>&nbsp;     * sub fragments.
+<i>238</i>&nbsp;     */
+<i>239</i>&nbsp;    static Set&lt;LedgerFragment&gt; splitIntoSubFragments(LedgerHandle lh,
+<i>240</i>&nbsp;            LedgerFragment ledgerFragment, long rereplicationEntryBatchSize) {
+<b class="nc"><i>241</i>&nbsp;        Set&lt;LedgerFragment&gt; fragments = new HashSet&lt;LedgerFragment&gt;();</b>
+<b class="nc"><i>242</i>&nbsp;        if (rereplicationEntryBatchSize &lt;= 0) {</b>
+<i>243</i>&nbsp;            // rereplicationEntryBatchSize can not be 0 or less than 0,
+<i>244</i>&nbsp;            // returning with the current fragment
+<b class="nc"><i>245</i>&nbsp;            fragments.add(ledgerFragment);</b>
+<b class="nc"><i>246</i>&nbsp;            return fragments;</b>
+<i>247</i>&nbsp;        }
+<i>248</i>&nbsp;
+<b class="nc"><i>249</i>&nbsp;        long firstEntryId = ledgerFragment.getFirstStoredEntryId();</b>
+<b class="nc"><i>250</i>&nbsp;        long lastEntryId = ledgerFragment.getLastStoredEntryId();</b>
+<i>251</i>&nbsp;
+<i>252</i>&nbsp;        /*
+<i>253</i>&nbsp;         * if firstEntryId is INVALID_ENTRY_ID then lastEntryId should be
+<i>254</i>&nbsp;         * INVALID_ENTRY_ID and viceversa.
+<i>255</i>&nbsp;         */
+<b class="nc"><i>256</i>&nbsp;        if (firstEntryId == INVALID_ENTRY_ID ^ lastEntryId == INVALID_ENTRY_ID) {</b>
+<b class="nc"><i>257</i>&nbsp;            LOG.error(&quot;For LedgerFragment: {}, seeing inconsistent firstStoredEntryId: {} and lastStoredEntryId: {}&quot;,</b>
+<b class="nc"><i>258</i>&nbsp;                    ledgerFragment, firstEntryId, lastEntryId);</b>
+<b class="nc"><i>259</i>&nbsp;            assert false;</b>
+<i>260</i>&nbsp;        }
+<i>261</i>&nbsp;
+<b class="nc"><i>262</i>&nbsp;        long numberOfEntriesToReplicate = (lastEntryId - firstEntryId) + 1;</b>
+<b class="nc"><i>263</i>&nbsp;        long splitsWithFullEntries = numberOfEntriesToReplicate</b>
+<i>264</i>&nbsp;                / rereplicationEntryBatchSize;
+<i>265</i>&nbsp;
+<b class="nc"><i>266</i>&nbsp;        if (splitsWithFullEntries == 0) {// only one fragment</b>
+<b class="nc"><i>267</i>&nbsp;            fragments.add(ledgerFragment);</b>
+<b class="nc"><i>268</i>&nbsp;            return fragments;</b>
+<i>269</i>&nbsp;        }
+<i>270</i>&nbsp;
+<b class="nc"><i>271</i>&nbsp;        long fragmentSplitLastEntry = 0;</b>
+<b class="nc"><i>272</i>&nbsp;        for (int i = 0; i &lt; splitsWithFullEntries; i++) {</b>
+<b class="nc"><i>273</i>&nbsp;            fragmentSplitLastEntry = (firstEntryId + rereplicationEntryBatchSize) - 1;</b>
+<b class="nc"><i>274</i>&nbsp;            fragments.add(new LedgerFragment(lh, firstEntryId,</b>
+<b class="nc"><i>275</i>&nbsp;                    fragmentSplitLastEntry, ledgerFragment.getBookiesIndexes()));</b>
+<b class="nc"><i>276</i>&nbsp;            firstEntryId = fragmentSplitLastEntry + 1;</b>
+<i>277</i>&nbsp;        }
+<i>278</i>&nbsp;
+<b class="nc"><i>279</i>&nbsp;        long lastSplitWithPartialEntries = numberOfEntriesToReplicate</b>
+<i>280</i>&nbsp;                % rereplicationEntryBatchSize;
+<b class="nc"><i>281</i>&nbsp;        if (lastSplitWithPartialEntries &gt; 0) {</b>
+<b class="nc"><i>282</i>&nbsp;            fragments.add(new LedgerFragment(lh, firstEntryId, firstEntryId</b>
+<i>283</i>&nbsp;                    + lastSplitWithPartialEntries - 1, ledgerFragment
+<b class="nc"><i>284</i>&nbsp;                    .getBookiesIndexes()));</b>
+<i>285</i>&nbsp;        }
+<b class="nc"><i>286</i>&nbsp;        return fragments;</b>
+<i>287</i>&nbsp;    }
+<i>288</i>&nbsp;
+<i>289</i>&nbsp;    /**
+<i>290</i>&nbsp;     * This method asynchronously recovers a specific ledger entry by reading
+<i>291</i>&nbsp;     * the values via the BookKeeper Client (which would read it from the other
+<i>292</i>&nbsp;     * replicas) and then writing it to the chosen new bookie.
+<i>293</i>&nbsp;     *
+<i>294</i>&nbsp;     * @param entryId
+<i>295</i>&nbsp;     *            Ledger Entry ID to recover.
+<i>296</i>&nbsp;     * @param lh
+<i>297</i>&nbsp;     *            LedgerHandle for the ledger
+<i>298</i>&nbsp;     * @param ledgerFragmentEntryMcb
+<i>299</i>&nbsp;     *            MultiCallback to invoke once we&#39;ve recovered the current
+<i>300</i>&nbsp;     *            ledger entry.
+<i>301</i>&nbsp;     * @param newBookies
+<i>302</i>&nbsp;     *            New bookies we want to use to recover and replicate the ledger
+<i>303</i>&nbsp;     *            entries that were stored on the failed bookie.
+<i>304</i>&nbsp;     */
+<i>305</i>&nbsp;    private void recoverLedgerFragmentEntry(final Long entryId,
+<i>306</i>&nbsp;            final LedgerHandle lh,
+<i>307</i>&nbsp;            final AsyncCallback.VoidCallback ledgerFragmentEntryMcb,
+<i>308</i>&nbsp;            final Set&lt;BookieSocketAddress&gt; newBookies,
+<i>309</i>&nbsp;            final BiConsumer&lt;Long, Long&gt; onReadEntryFailureCallback) throws InterruptedException {
+<b class="nc"><i>310</i>&nbsp;        final long ledgerId = lh.getId();</b>
+<b class="nc"><i>311</i>&nbsp;        final AtomicInteger numCompleted = new AtomicInteger(0);</b>
+<b class="nc"><i>312</i>&nbsp;        final AtomicBoolean completed = new AtomicBoolean(false);</b>
+<b class="nc"><i>313</i>&nbsp;        final WriteCallback multiWriteCallback = new WriteCallback() {</b>
+<i>314</i>&nbsp;            @Override
+<i>315</i>&nbsp;            public void writeComplete(int rc, long ledgerId, long entryId, BookieSocketAddress addr, Object ctx) {
+<b class="nc"><i>316</i>&nbsp;                if (rc != BKException.Code.OK) {</b>
+<b class="nc"><i>317</i>&nbsp;                    LOG.error(&quot;BK error writing entry for ledgerId: {}, entryId: {}, bookie: {}&quot;,</b>
+<b class="nc"><i>318</i>&nbsp;                            ledgerId, entryId, addr, BKException.create(rc));</b>
+<b class="nc"><i>319</i>&nbsp;                    if (completed.compareAndSet(false, true)) {</b>
+<b class="nc"><i>320</i>&nbsp;                        ledgerFragmentEntryMcb.processResult(rc, null, null);</b>
+<i>321</i>&nbsp;                    }
+<i>322</i>&nbsp;                } else {
+<b class="nc"><i>323</i>&nbsp;                    numEntriesWritten.inc();</b>
+<b class="nc"><i>324</i>&nbsp;                    if (ctx instanceof Long) {</b>
+<b class="nc"><i>325</i>&nbsp;                        numBytesWritten.registerSuccessfulValue((Long) ctx);</b>
+<i>326</i>&nbsp;                    }
+<b class="nc"><i>327</i>&nbsp;                    if (LOG.isDebugEnabled()) {</b>
+<b class="nc"><i>328</i>&nbsp;                        LOG.debug(&quot;Success writing ledger id {}, entry id {} to a new bookie {}!&quot;,</b>
+<b class="nc"><i>329</i>&nbsp;                                ledgerId, entryId, addr);</b>
+<i>330</i>&nbsp;                    }
+<b class="nc"><i>331</i>&nbsp;                    if (numCompleted.incrementAndGet() == newBookies.size() &amp;&amp; completed.compareAndSet(false, true)) {</b>
+<b class="nc"><i>332</i>&nbsp;                        ledgerFragmentEntryMcb.processResult(rc, null, null);</b>
+<i>333</i>&nbsp;                    }
+<i>334</i>&nbsp;                }
+<b class="nc"><i>335</i>&nbsp;            }</b>
+<i>336</i>&nbsp;        };
+<i>337</i>&nbsp;        /*
+<i>338</i>&nbsp;         * Read the ledger entry using the LedgerHandle. This will allow us to
+<i>339</i>&nbsp;         * read the entry from one of the other replicated bookies other than
+<i>340</i>&nbsp;         * the dead one.
+<i>341</i>&nbsp;         */
+<b class="nc"><i>342</i>&nbsp;        lh.asyncReadEntries(entryId, entryId, new ReadCallback() {</b>
+<i>343</i>&nbsp;            @Override
+<i>344</i>&nbsp;            public void readComplete(int rc, LedgerHandle lh,
+<i>345</i>&nbsp;                    Enumeration&lt;LedgerEntry&gt; seq, Object ctx) {
+<b class="nc"><i>346</i>&nbsp;                if (rc != BKException.Code.OK) {</b>
+<b class="nc"><i>347</i>&nbsp;                    LOG.error(&quot;BK error reading ledger entry: &quot; + entryId,</b>
+<b class="nc"><i>348</i>&nbsp;                            BKException.create(rc));</b>
+<b class="nc"><i>349</i>&nbsp;                    onReadEntryFailureCallback.accept(ledgerId, entryId);</b>
+<b class="nc"><i>350</i>&nbsp;                    ledgerFragmentEntryMcb.processResult(rc, null, null);</b>
+<b class="nc"><i>351</i>&nbsp;                    return;</b>
+<i>352</i>&nbsp;                }
+<i>353</i>&nbsp;                /*
+<i>354</i>&nbsp;                 * Now that we&#39;ve read the ledger entry, write it to the new
+<i>355</i>&nbsp;                 * bookie we&#39;ve selected.
+<i>356</i>&nbsp;                 */
+<b class="nc"><i>357</i>&nbsp;                LedgerEntry entry = seq.nextElement();</b>
+<b class="nc"><i>358</i>&nbsp;                byte[] data = entry.getEntry();</b>
+<b class="nc"><i>359</i>&nbsp;                final long dataLength = data.length;</b>
+<b class="nc"><i>360</i>&nbsp;                numEntriesRead.inc();</b>
+<b class="nc"><i>361</i>&nbsp;                numBytesRead.registerSuccessfulValue(dataLength);</b>
+<b class="nc"><i>362</i>&nbsp;                ByteBufList toSend = lh.getDigestManager()</b>
+<b class="nc"><i>363</i>&nbsp;                        .computeDigestAndPackageForSending(entryId,</b>
+<b class="nc"><i>364</i>&nbsp;                                lh.getLastAddConfirmed(), entry.getLength(),</b>
+<b class="nc"><i>365</i>&nbsp;                                Unpooled.wrappedBuffer(data, 0, data.length));</b>
+<b class="nc"><i>366</i>&nbsp;                for (BookieSocketAddress newBookie : newBookies) {</b>
+<b class="nc"><i>367</i>&nbsp;                    bkc.getBookieClient().addEntry(newBookie, lh.getId(),</b>
+<b class="nc"><i>368</i>&nbsp;                            lh.getLedgerKey(), entryId, ByteBufList.clone(toSend),</b>
+<b class="nc"><i>369</i>&nbsp;                            multiWriteCallback, dataLength, BookieProtocol.FLAG_RECOVERY_ADD,</b>
+<i>370</i>&nbsp;                            false, WriteFlag.NONE);
+<b class="nc"><i>371</i>&nbsp;                }</b>
+<b class="nc"><i>372</i>&nbsp;                toSend.release();</b>
+<b class="nc"><i>373</i>&nbsp;            }</b>
+<i>374</i>&nbsp;        }, null);
+<b class="nc"><i>375</i>&nbsp;    }</b>
+<i>376</i>&nbsp;
+<i>377</i>&nbsp;    /**
+<i>378</i>&nbsp;     * Callback for recovery of a single ledger fragment. Once the fragment has
+<i>379</i>&nbsp;     * had all entries replicated, update the ensemble in zookeeper. Once
+<i>380</i>&nbsp;     * finished propogate callback up to ledgerFragmentsMcb which should be a
+<i>381</i>&nbsp;     * multicallback responsible for all fragments in a single ledger
+<i>382</i>&nbsp;     */
+<i>383</i>&nbsp;    static class SingleFragmentCallback implements AsyncCallback.VoidCallback {
+<i>384</i>&nbsp;        final AsyncCallback.VoidCallback ledgerFragmentsMcb;
+<i>385</i>&nbsp;        final LedgerHandle lh;
+<i>386</i>&nbsp;        final LedgerManager ledgerManager;
+<i>387</i>&nbsp;        final long fragmentStartId;
+<i>388</i>&nbsp;        final Map&lt;BookieSocketAddress, BookieSocketAddress&gt; oldBookie2NewBookie;
+<i>389</i>&nbsp;
+<i>390</i>&nbsp;        SingleFragmentCallback(AsyncCallback.VoidCallback ledgerFragmentsMcb,
+<i>391</i>&nbsp;                               LedgerHandle lh, LedgerManager ledgerManager, long fragmentStartId,
+<b class="nc"><i>392</i>&nbsp;                               Map&lt;BookieSocketAddress, BookieSocketAddress&gt; oldBookie2NewBookie) {</b>
+<b class="nc"><i>393</i>&nbsp;            this.ledgerFragmentsMcb = ledgerFragmentsMcb;</b>
+<b class="nc"><i>394</i>&nbsp;            this.lh = lh;</b>
+<b class="nc"><i>395</i>&nbsp;            this.ledgerManager = ledgerManager;</b>
+<b class="nc"><i>396</i>&nbsp;            this.fragmentStartId = fragmentStartId;</b>
+<b class="nc"><i>397</i>&nbsp;            this.oldBookie2NewBookie = oldBookie2NewBookie;</b>
+<b class="nc"><i>398</i>&nbsp;        }</b>
+<i>399</i>&nbsp;
+<i>400</i>&nbsp;        @Override
+<i>401</i>&nbsp;        public void processResult(int rc, String path, Object ctx) {
+<b class="nc"><i>402</i>&nbsp;            if (rc != BKException.Code.OK) {</b>
+<b class="nc"><i>403</i>&nbsp;                LOG.error(&quot;BK error replicating ledger fragments for ledger: &quot;</b>
+<b class="nc"><i>404</i>&nbsp;                        + lh.getId(), BKException.create(rc));</b>
+<b class="nc"><i>405</i>&nbsp;                ledgerFragmentsMcb.processResult(rc, null, null);</b>
+<b class="nc"><i>406</i>&nbsp;                return;</b>
+<i>407</i>&nbsp;            }
+<b class="nc"><i>408</i>&nbsp;            updateEnsembleInfo(ledgerManager, ledgerFragmentsMcb, fragmentStartId, lh, oldBookie2NewBookie);</b>
+<b class="nc"><i>409</i>&nbsp;        }</b>
+<i>410</i>&nbsp;    }
+<i>411</i>&nbsp;
+<i>412</i>&nbsp;    /**
+<i>413</i>&nbsp;     * Updates the ensemble with newBookie and notify the ensembleUpdatedCb.
+<i>414</i>&nbsp;     */
+<i>415</i>&nbsp;    private static void updateEnsembleInfo(
+<i>416</i>&nbsp;            LedgerManager ledgerManager, AsyncCallback.VoidCallback ensembleUpdatedCb, long fragmentStartId,
+<i>417</i>&nbsp;            LedgerHandle lh, Map&lt;BookieSocketAddress, BookieSocketAddress&gt; oldBookie2NewBookie) {
+<i>418</i>&nbsp;
+<b class="nc"><i>419</i>&nbsp;        MetadataUpdateLoop updateLoop = new MetadataUpdateLoop(</b>
+<i>420</i>&nbsp;                ledgerManager,
+<b class="nc"><i>421</i>&nbsp;                lh.getId(),</b>
+<i>422</i>&nbsp;                lh::getVersionedLedgerMetadata,
+<i>423</i>&nbsp;                (metadata) -&gt; {
+<i>424</i>&nbsp;                    // returns true if any of old bookies exist in ensemble
+<b class="nc"><i>425</i>&nbsp;                    List&lt;BookieSocketAddress&gt; ensemble = metadata.getAllEnsembles().get(fragmentStartId);</b>
+<b class="nc"><i>426</i>&nbsp;                    return oldBookie2NewBookie.keySet().stream().anyMatch(ensemble::contains);</b>
+<i>427</i>&nbsp;                },
+<i>428</i>&nbsp;                (currentMetadata) -&gt; {
+<i>429</i>&nbsp;                    // replace all old bookies with new bookies in ensemble
+<b class="nc"><i>430</i>&nbsp;                    List&lt;BookieSocketAddress&gt; newEnsemble = currentMetadata.getAllEnsembles().get(fragmentStartId)</b>
+<b class="nc"><i>431</i>&nbsp;                        .stream().map((bookie) -&gt; oldBookie2NewBookie.getOrDefault(bookie, bookie))</b>
+<b class="nc"><i>432</i>&nbsp;                        .collect(Collectors.toList());</b>
+<b class="nc"><i>433</i>&nbsp;                    return LedgerMetadataBuilder.from(currentMetadata)</b>
+<b class="nc"><i>434</i>&nbsp;                        .replaceEnsembleEntry(fragmentStartId, newEnsemble).build();</b>
+<i>435</i>&nbsp;                },
+<i>436</i>&nbsp;                lh::setLedgerMetadata);
+<i>437</i>&nbsp;
+<b class="nc"><i>438</i>&nbsp;        updateLoop.run().whenComplete((result, ex) -&gt; {</b>
+<b class="nc"><i>439</i>&nbsp;                if (ex == null) {</b>
+<b class="nc"><i>440</i>&nbsp;                    LOG.info(&quot;Updated ZK for ledgerId: ({}:{}) to point ledger fragments&quot;</b>
+<i>441</i>&nbsp;                             + &quot; from old bookies to new bookies: {}&quot;, oldBookie2NewBookie);
+<i>442</i>&nbsp;
+<b class="nc"><i>443</i>&nbsp;                    ensembleUpdatedCb.processResult(BKException.Code.OK, null, null);</b>
+<i>444</i>&nbsp;                } else {
+<b class="nc"><i>445</i>&nbsp;                    LOG.error(&quot;Error updating ledger config metadata for ledgerId {}&quot;, lh.getId(), ex);</b>
+<i>446</i>&nbsp;
+<b class="nc"><i>447</i>&nbsp;                    ensembleUpdatedCb.processResult(</b>
+<b class="nc"><i>448</i>&nbsp;                            BKException.getExceptionCode(ex, BKException.Code.UnexpectedConditionException),</b>
+<i>449</i>&nbsp;                            null, null);
+<i>450</i>&nbsp;                }
+<b class="nc"><i>451</i>&nbsp;            });</b>
+<b class="nc"><i>452</i>&nbsp;    }</b>
+<i>453</i>&nbsp;}
+</div>
+</div>
+
+<div class="footer">
+    
+    <div style="float:right;">generated on 2021-06-28 15:57</div>
+</div>
+</body>
+</html>

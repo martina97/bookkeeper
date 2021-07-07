@@ -1,0 +1,326 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>LedgerStorageTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$myBookieFenceLedgerTest.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.bookie</a> &gt; <span class="el_source">LedgerStorageTest.java</span></div><h1>LedgerStorageTest.java</h1><pre class="source lang-java linenums">/**
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.bookie;
+
+import static org.junit.Assert.assertEquals;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.UnpooledByteBufAllocator;
+
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.PrimitiveIterator.OfLong;
+import java.util.concurrent.CountDownLatch;
+import java.util.function.Consumer;
+import java.util.stream.IntStream;
+
+import org.apache.bookkeeper.client.BookKeeper;
+import org.apache.bookkeeper.client.LedgerHandle;
+import org.apache.bookkeeper.conf.ClientConfiguration;
+import org.apache.bookkeeper.conf.ServerConfiguration;
+import org.apache.bookkeeper.proto.checksum.DigestManager;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.apache.bookkeeper.util.TestUtils;
+import org.junit.Assert;
+import org.junit.Test;
+
+/**
+ * Test ledger storage.
+ */
+public class LedgerStorageTest extends BookKeeperClusterTestCase {
+    public LedgerStorageTest() {
+<span class="nc" id="L52">        super(1);</span>
+<span class="nc" id="L53">    }</span>
+
+    @Test
+    public void testLedgerDeleteNotification() throws Exception {
+<span class="nc" id="L57">        LedgerStorage ledgerStorage = bs.get(0).getBookie().ledgerStorage;</span>
+
+<span class="nc" id="L59">        long deletedLedgerId = 5;</span>
+<span class="nc" id="L60">        ledgerStorage.setMasterKey(deletedLedgerId, new byte[0]);</span>
+
+<span class="nc" id="L62">        CountDownLatch counter = new CountDownLatch(1);</span>
+
+<span class="nc" id="L64">        ledgerStorage.registerLedgerDeletionListener(ledgerId -&gt; {</span>
+<span class="nc" id="L65">            assertEquals(deletedLedgerId, ledgerId);</span>
+
+<span class="nc" id="L67">            counter.countDown();</span>
+<span class="nc" id="L68">        });</span>
+
+<span class="nc" id="L70">        ledgerStorage.deleteLedger(deletedLedgerId);</span>
+
+<span class="nc" id="L72">        counter.await();</span>
+<span class="nc" id="L73">    }</span>
+
+    @Test
+    public void testExplicitLacWriteToJournalWithValidVersions() throws Exception {
+        /*
+         * to persist explicitLac, journalFormatVersionToWrite should be atleast
+         * V6 and fileInfoFormatVersionToWrite should be atleast V1
+         */
+<span class="nc" id="L81">        testExplicitLacWriteToJournal(6, 1);</span>
+<span class="nc" id="L82">    }</span>
+
+    @Test
+    public void testExplicitLacWriteToJournalWithOlderVersions() throws Exception {
+        /*
+         * to persist explicitLac, journalFormatVersionToWrite should be atleast
+         * V6 and fileInfoFormatVersionToWrite should be atleast V1
+         */
+<span class="nc" id="L90">        testExplicitLacWriteToJournal(5, 0);</span>
+<span class="nc" id="L91">    }</span>
+
+    public void testExplicitLacWriteToJournal(int journalFormatVersionToWrite, int fileInfoFormatVersionToWrite)
+            throws Exception {
+<span class="nc" id="L95">        ServerConfiguration bookieServerConfig = bsConfs.get(0);</span>
+<span class="nc" id="L96">        bookieServerConfig.setJournalFormatVersionToWrite(journalFormatVersionToWrite);</span>
+<span class="nc" id="L97">        bookieServerConfig.setFileInfoFormatVersionToWrite(fileInfoFormatVersionToWrite);</span>
+
+<span class="nc" id="L99">        restartBookies(bookieServerConfig);</span>
+
+<span class="nc" id="L101">        ClientConfiguration confWithExplicitLAC = new ClientConfiguration();</span>
+<span class="nc" id="L102">        confWithExplicitLAC.setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+        /*
+         * enable explicitLacFlush by setting non-zero value for
+         * explictLacInterval
+         */
+<span class="nc" id="L107">        int explictLacInterval = 100;</span>
+<span class="nc" id="L108">        BookKeeper.DigestType digestType = BookKeeper.DigestType.CRC32;</span>
+<span class="nc" id="L109">        byte[] passwdBytes = &quot;testPasswd&quot;.getBytes();</span>
+<span class="nc" id="L110">        confWithExplicitLAC.setExplictLacInterval(explictLacInterval);</span>
+
+<span class="nc" id="L112">        BookKeeper bkcWithExplicitLAC = new BookKeeper(confWithExplicitLAC);</span>
+
+<span class="nc" id="L114">        LedgerHandle wlh = bkcWithExplicitLAC.createLedger(1, 1, 1, digestType, passwdBytes);</span>
+<span class="nc" id="L115">        long ledgerId = wlh.getId();</span>
+<span class="nc" id="L116">        int numOfEntries = 5;</span>
+<span class="nc bnc" id="L117" title="All 2 branches missed.">        for (int i = 0; i &lt; numOfEntries; i++) {</span>
+<span class="nc" id="L118">            wlh.addEntry((&quot;foobar&quot; + i).getBytes());</span>
+        }
+
+<span class="nc" id="L121">        LedgerHandle rlh = bkcWithExplicitLAC.openLedgerNoRecovery(ledgerId, digestType, passwdBytes);</span>
+
+<span class="nc" id="L123">        assertEquals(&quot;LAC of rlh&quot;, (long) numOfEntries - 2, rlh.getLastAddConfirmed());</span>
+<span class="nc" id="L124">        assertEquals(&quot;Read explicit LAC of rlh&quot;, (long) numOfEntries - 2, rlh.readExplicitLastConfirmed());</span>
+
+        /*
+         * we need to wait for atleast 2 explicitlacintervals, since in
+         * writehandle for the first call lh.getExplicitLastAddConfirmed() will
+         * be &lt; lh.getPiggyBackedLastAddConfirmed(), so it wont make explicit
+         * writelac in the first run
+         */
+<span class="nc" id="L132">        long readExplicitLastConfirmed = TestUtils.waitUntilExplicitLacUpdated(rlh, numOfEntries - 1);</span>
+<span class="nc" id="L133">        assertEquals(&quot;Read explicit LAC of rlh after wait for explicitlacflush&quot;, (numOfEntries - 1),</span>
+                readExplicitLastConfirmed);
+
+<span class="nc" id="L136">        ServerConfiguration newBookieConf = new ServerConfiguration(bsConfs.get(0));</span>
+        /*
+         * by reusing bookieServerConfig and setting metadataServiceUri to null
+         * we can create/start new Bookie instance using the same data
+         * (journal/ledger/index) of the existing BookeieServer for our testing
+         * purpose.
+         */
+<span class="nc" id="L143">        newBookieConf.setMetadataServiceUri(null);</span>
+<span class="nc" id="L144">        Bookie newbookie = new Bookie(newBookieConf);</span>
+        /*
+         * since 'newbookie' uses the same data as original Bookie, it should be
+         * able to read journal of the original bookie and hence explicitLac buf
+         * entry written to Journal in the original bookie.
+         */
+<span class="nc" id="L150">        newbookie.readJournal();</span>
+<span class="nc" id="L151">        ByteBuf explicitLacBuf = newbookie.getExplicitLac(ledgerId);</span>
+
+<span class="nc bnc" id="L153" title="All 4 branches missed.">        if ((journalFormatVersionToWrite &gt;= 6) &amp;&amp; (fileInfoFormatVersionToWrite &gt;= 1)) {</span>
+<span class="nc" id="L154">            DigestManager digestManager = DigestManager.instantiate(ledgerId, passwdBytes,</span>
+<span class="nc" id="L155">                    BookKeeper.DigestType.toProtoDigestType(digestType), UnpooledByteBufAllocator.DEFAULT,</span>
+<span class="nc" id="L156">                    confWithExplicitLAC.getUseV2WireProtocol());</span>
+<span class="nc" id="L157">            long explicitLacPersistedInJournal = digestManager.verifyDigestAndReturnLac(explicitLacBuf);</span>
+<span class="nc" id="L158">            assertEquals(&quot;explicitLac persisted in journal&quot;, (numOfEntries - 1), explicitLacPersistedInJournal);</span>
+<span class="nc" id="L159">        } else {</span>
+<span class="nc" id="L160">            assertEquals(&quot;explicitLac is not expected to be persisted, so it should be null&quot;, null, explicitLacBuf);</span>
+        }
+<span class="nc" id="L162">        bkcWithExplicitLAC.close();</span>
+<span class="nc" id="L163">    }</span>
+
+    @Test
+    public void testExplicitLacWriteToFileInfoWithValidVersions() throws Exception {
+        /*
+         * to persist explicitLac, journalFormatVersionToWrite should be atleast
+         * V6 and fileInfoFormatVersionToWrite should be atleast V1
+         */
+<span class="nc" id="L171">        testExplicitLacWriteToFileInfo(6, 1);</span>
+<span class="nc" id="L172">    }</span>
+
+    @Test
+    public void testExplicitLacWriteToFileInfoWithOlderVersions() throws Exception {
+        /*
+         * to persist explicitLac, journalFormatVersionToWrite should be atleast
+         * V6 and fileInfoFormatVersionToWrite should be atleast V1
+         */
+<span class="nc" id="L180">        testExplicitLacWriteToFileInfo(5, 0);</span>
+<span class="nc" id="L181">    }</span>
+
+    public void testExplicitLacWriteToFileInfo(int journalFormatVersionToWrite, int fileInfoFormatVersionToWrite)
+            throws Exception {
+<span class="nc" id="L185">        ServerConfiguration bookieServerConfig = bsConfs.get(0);</span>
+<span class="nc" id="L186">        bookieServerConfig.setJournalFormatVersionToWrite(journalFormatVersionToWrite);</span>
+<span class="nc" id="L187">        bookieServerConfig.setFileInfoFormatVersionToWrite(fileInfoFormatVersionToWrite);</span>
+
+<span class="nc" id="L189">        restartBookies(bookieServerConfig);</span>
+
+<span class="nc" id="L191">        ClientConfiguration confWithExplicitLAC = new ClientConfiguration();</span>
+<span class="nc" id="L192">        confWithExplicitLAC.setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+        /*
+         * enable explicitLacFlush by setting non-zero value for
+         * explictLacInterval
+         */
+<span class="nc" id="L197">        int explictLacInterval = 100;</span>
+<span class="nc" id="L198">        BookKeeper.DigestType digestType = BookKeeper.DigestType.CRC32;</span>
+<span class="nc" id="L199">        byte[] passwdBytes = &quot;testPasswd&quot;.getBytes();</span>
+<span class="nc" id="L200">        confWithExplicitLAC.setExplictLacInterval(explictLacInterval);</span>
+
+<span class="nc" id="L202">        BookKeeper bkcWithExplicitLAC = new BookKeeper(confWithExplicitLAC);</span>
+
+<span class="nc" id="L204">        LedgerHandle wlh = bkcWithExplicitLAC.createLedger(1, 1, 1, digestType, passwdBytes);</span>
+<span class="nc" id="L205">        long ledgerId = wlh.getId();</span>
+<span class="nc" id="L206">        int numOfEntries = 5;</span>
+<span class="nc bnc" id="L207" title="All 2 branches missed.">        for (int i = 0; i &lt; numOfEntries; i++) {</span>
+<span class="nc" id="L208">            wlh.addEntry((&quot;foobar&quot; + i).getBytes());</span>
+        }
+
+<span class="nc" id="L211">        LedgerHandle rlh = bkcWithExplicitLAC.openLedgerNoRecovery(ledgerId, digestType, passwdBytes);</span>
+
+<span class="nc" id="L213">        assertEquals(&quot;LAC of rlh&quot;, (long) numOfEntries - 2, rlh.getLastAddConfirmed());</span>
+<span class="nc" id="L214">        assertEquals(&quot;Read explicit LAC of rlh&quot;, (long) numOfEntries - 2, rlh.readExplicitLastConfirmed());</span>
+
+        /*
+         * we need to wait for atleast 2 explicitlacintervals, since in
+         * writehandle for the first call lh.getExplicitLastAddConfirmed() will
+         * be &lt; lh.getPiggyBackedLastAddConfirmed(), so it wont make explicit
+         * writelac in the first run
+         */
+<span class="nc" id="L222">        long readExplicitLastConfirmed = TestUtils.waitUntilExplicitLacUpdated(rlh, numOfEntries - 1);</span>
+<span class="nc" id="L223">        assertEquals(&quot;Read explicit LAC of rlh after wait for explicitlacflush&quot;, (numOfEntries - 1),</span>
+                readExplicitLastConfirmed);
+
+        /*
+         * flush ledgerStorage so that header of fileinfo is flushed.
+         */
+<span class="nc" id="L229">        bs.get(0).getBookie().ledgerStorage.flush();</span>
+
+<span class="nc" id="L231">        ReadOnlyFileInfo fileInfo = getFileInfo(ledgerId, Bookie.getCurrentDirectories(bsConfs.get(0).getLedgerDirs()));</span>
+<span class="nc" id="L232">        fileInfo.readHeader();</span>
+<span class="nc" id="L233">        ByteBuf explicitLacBufReadFromFileInfo = fileInfo.getExplicitLac();</span>
+
+<span class="nc bnc" id="L235" title="All 4 branches missed.">        if ((journalFormatVersionToWrite &gt;= 6) &amp;&amp; (fileInfoFormatVersionToWrite &gt;= 1)) {</span>
+<span class="nc" id="L236">            DigestManager digestManager = DigestManager.instantiate(ledgerId, passwdBytes,</span>
+<span class="nc" id="L237">                    BookKeeper.DigestType.toProtoDigestType(digestType), UnpooledByteBufAllocator.DEFAULT,</span>
+<span class="nc" id="L238">                    confWithExplicitLAC.getUseV2WireProtocol());</span>
+<span class="nc" id="L239">            long explicitLacReadFromFileInfo = digestManager.verifyDigestAndReturnLac(explicitLacBufReadFromFileInfo);</span>
+<span class="nc" id="L240">            assertEquals(&quot;explicitLac persisted in FileInfo&quot;, (numOfEntries - 1), explicitLacReadFromFileInfo);</span>
+<span class="nc" id="L241">        } else {</span>
+<span class="nc" id="L242">            assertEquals(&quot;explicitLac is not expected to be persisted, so it should be null&quot;, null,</span>
+                    explicitLacBufReadFromFileInfo);
+        }
+
+<span class="nc" id="L246">        bkcWithExplicitLAC.close();</span>
+<span class="nc" id="L247">    }</span>
+
+    /**
+     * Get the ledger file of a specified ledger.
+     *
+     * @param ledgerId Ledger Id
+     *
+     * @return file object.
+     */
+    private File getLedgerFile(long ledgerId, File[] indexDirectories) {
+<span class="nc" id="L257">        String ledgerName = IndexPersistenceMgr.getLedgerName(ledgerId);</span>
+<span class="nc" id="L258">        File lf = null;</span>
+<span class="nc bnc" id="L259" title="All 2 branches missed.">        for (File d : indexDirectories) {</span>
+<span class="nc" id="L260">            lf = new File(d, ledgerName);</span>
+<span class="nc bnc" id="L261" title="All 2 branches missed.">            if (lf.exists()) {</span>
+<span class="nc" id="L262">                break;</span>
+            }
+<span class="nc" id="L264">            lf = null;</span>
+        }
+<span class="nc" id="L266">        return lf;</span>
+    }
+
+    /**
+     * Get FileInfo for a specified ledger.
+     *
+     * @param ledgerId Ledger Id
+     * @return read only file info instance
+     */
+    ReadOnlyFileInfo getFileInfo(long ledgerId, File[] indexDirectories) throws IOException {
+<span class="nc" id="L276">        File ledgerFile = getLedgerFile(ledgerId, indexDirectories);</span>
+<span class="nc bnc" id="L277" title="All 2 branches missed.">        if (null == ledgerFile) {</span>
+<span class="nc" id="L278">            throw new FileNotFoundException(&quot;No index file found for ledger &quot; + ledgerId</span>
+                    + &quot;. It may be not flushed yet.&quot;);
+        }
+<span class="nc" id="L281">        ReadOnlyFileInfo fi = new ReadOnlyFileInfo(ledgerFile, null);</span>
+<span class="nc" id="L282">        fi.readHeader();</span>
+<span class="nc" id="L283">        return fi;</span>
+    }
+
+    @Test
+    public void testGetListOfEntriesOfLedger() throws Exception {
+<span class="nc" id="L288">        ClientConfiguration conf = new ClientConfiguration();</span>
+<span class="nc" id="L289">        conf.setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+<span class="nc" id="L290">        int numOfBookies = bs.size();</span>
+<span class="nc" id="L291">        int numOfEntries = 5;</span>
+<span class="nc" id="L292">        BookKeeper.DigestType digestType = BookKeeper.DigestType.CRC32;</span>
+<span class="nc" id="L293">        BookKeeper bkc = new BookKeeper(conf);</span>
+<span class="nc" id="L294">        LedgerHandle lh = bkc.createLedger(numOfBookies, numOfBookies, digestType, &quot;testPasswd&quot;.getBytes());</span>
+<span class="nc" id="L295">        long lId = lh.getId();</span>
+<span class="nc bnc" id="L296" title="All 2 branches missed.">        for (int i = 0; i &lt; numOfEntries; i++) {</span>
+<span class="nc" id="L297">            lh.addEntry(&quot;000&quot;.getBytes());</span>
+        }
+
+<span class="nc" id="L300">        ServerConfiguration newBookieConf = new ServerConfiguration(bsConfs.get(0));</span>
+        /*
+         * by reusing bookieServerConfig and setting metadataServiceUri to null
+         * we can create/start new Bookie instance using the same data
+         * (journal/ledger/index) of the existing BookeieServer for our testing
+         * purpose.
+         */
+<span class="nc" id="L307">        newBookieConf.setMetadataServiceUri(null);</span>
+<span class="nc" id="L308">        Bookie newbookie = new Bookie(newBookieConf);</span>
+        /*
+         * since 'newbookie' uses the same data as original Bookie, it should be
+         * able to read journal of the original bookie.
+         */
+<span class="nc" id="L313">        newbookie.readJournal();</span>
+
+<span class="nc" id="L315">        OfLong listOfEntriesItr = newbookie.getListOfEntriesOfLedger(lId);</span>
+<span class="nc" id="L316">        ArrayList&lt;Long&gt; arrayList = new ArrayList&lt;Long&gt;();</span>
+<span class="nc" id="L317">        Consumer&lt;Long&gt; addMethod = arrayList::add;</span>
+<span class="nc" id="L318">        listOfEntriesItr.forEachRemaining(addMethod);</span>
+
+<span class="nc" id="L320">        assertEquals(&quot;Num Of Entries&quot;, numOfEntries, arrayList.size());</span>
+<span class="nc" id="L321">        Assert.assertTrue(&quot;Iterator should be sorted&quot;,</span>
+<span class="nc bnc" id="L322" title="All 2 branches missed.">                IntStream.range(0, arrayList.size() - 1).allMatch(k -&gt; arrayList.get(k) &lt;= arrayList.get(k + 1)));</span>
+<span class="nc" id="L323">        bkc.close();</span>
+<span class="nc" id="L324">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

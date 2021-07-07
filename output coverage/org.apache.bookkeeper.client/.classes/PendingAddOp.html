@@ -1,0 +1,656 @@
+
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html id="htmlId">
+<head>
+  <title>Coverage Report :: PendingAddOp</title>
+  <style type="text/css">
+    @import "../../.css/coverage.css";
+  </style>
+</head>
+
+<body>
+<div class="header"></div>
+
+<div class="content">
+<div class="breadCrumbs">
+    [ <a href="../../index.html">all classes</a> ]
+    [ <a href="../index.html">org.apache.bookkeeper.client</a> ]
+</div>
+
+<h1>Coverage Summary for Class: PendingAddOp (org.apache.bookkeeper.client)</h1>
+
+<table class="coverageStats">
+
+<tr>
+  <th class="name">Class</th>
+<th class="coverageStat 
+">
+  Method, %
+</th>
+<th class="coverageStat 
+">
+  Line, %
+</th>
+</tr>
+<tr>
+  <td class="name">PendingAddOp</td>
+<td class="coverageStat">
+  <span class="percent">
+    63,6%
+  </span>
+  <span class="absValue">
+    (14/ 22)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    53,8%
+  </span>
+  <span class="absValue">
+    (112/ 208)
+  </span>
+</td>
+</tr>
+  <tr>
+    <td class="name">PendingAddOp$1</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 3)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 8)
+  </span>
+</td>
+  </tr>
+  <tr>
+    <td class="name">PendingAddOp$2</td>
+<td class="coverageStat">
+  <span class="percent">
+    100%
+  </span>
+  <span class="absValue">
+    (2/ 2)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    100%
+  </span>
+  <span class="absValue">
+    (2/ 2)
+  </span>
+</td>
+  </tr>
+<tr>
+  <td class="name"><strong>total</strong></td>
+<td class="coverageStat">
+  <span class="percent">
+    59,3%
+  </span>
+  <span class="absValue">
+    (16/ 27)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    52,3%
+  </span>
+  <span class="absValue">
+    (114/ 218)
+  </span>
+</td>
+</tr>
+</table>
+
+<br/>
+<br/>
+
+
+<div class="sourceCode"><i>1</i>&nbsp;/**
+<i>2</i>&nbsp; * Licensed to the Apache Software Foundation (ASF) under one
+<i>3</i>&nbsp; * or more contributor license agreements.  See the NOTICE file
+<i>4</i>&nbsp; * distributed with this work for additional information
+<i>5</i>&nbsp; * regarding copyright ownership.  The ASF licenses this file
+<i>6</i>&nbsp; * to you under the Apache License, Version 2.0 (the
+<i>7</i>&nbsp; * &quot;License&quot;); you may not use this file except in compliance
+<i>8</i>&nbsp; * with the License.  You may obtain a copy of the License at
+<i>9</i>&nbsp; *
+<i>10</i>&nbsp; *     http://www.apache.org/licenses/LICENSE-2.0
+<i>11</i>&nbsp; *
+<i>12</i>&nbsp; * Unless required by applicable law or agreed to in writing, software
+<i>13</i>&nbsp; * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+<i>14</i>&nbsp; * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+<i>15</i>&nbsp; * See the License for the specific language governing permissions and
+<i>16</i>&nbsp; * limitations under the License.
+<i>17</i>&nbsp; */
+<i>18</i>&nbsp;package org.apache.bookkeeper.client;
+<i>19</i>&nbsp;
+<i>20</i>&nbsp;import static com.google.common.base.Preconditions.checkNotNull;
+<i>21</i>&nbsp;import static org.apache.bookkeeper.proto.BookieProtocol.FLAG_HIGH_PRIORITY;
+<i>22</i>&nbsp;import static org.apache.bookkeeper.proto.BookieProtocol.FLAG_NONE;
+<i>23</i>&nbsp;import static org.apache.bookkeeper.proto.BookieProtocol.FLAG_RECOVERY_ADD;
+<i>24</i>&nbsp;
+<i>25</i>&nbsp;import com.google.common.collect.ImmutableMap;
+<i>26</i>&nbsp;
+<i>27</i>&nbsp;import io.netty.buffer.ByteBuf;
+<i>28</i>&nbsp;import io.netty.util.Recycler;
+<i>29</i>&nbsp;import io.netty.util.Recycler.Handle;
+<i>30</i>&nbsp;import io.netty.util.ReferenceCountUtil;
+<i>31</i>&nbsp;import java.util.EnumSet;
+<i>32</i>&nbsp;
+<i>33</i>&nbsp;import java.util.HashSet;
+<i>34</i>&nbsp;import java.util.List;
+<i>35</i>&nbsp;import java.util.Map;
+<i>36</i>&nbsp;import java.util.Set;
+<i>37</i>&nbsp;import java.util.concurrent.RejectedExecutionException;
+<i>38</i>&nbsp;import java.util.concurrent.TimeUnit;
+<i>39</i>&nbsp;import org.apache.bookkeeper.client.AsyncCallback.AddCallbackWithLatency;
+<i>40</i>&nbsp;import org.apache.bookkeeper.client.api.WriteFlag;
+<i>41</i>&nbsp;import org.apache.bookkeeper.net.BookieSocketAddress;
+<i>42</i>&nbsp;import org.apache.bookkeeper.proto.BookkeeperInternalCallbacks.WriteCallback;
+<i>43</i>&nbsp;import org.apache.bookkeeper.util.ByteBufList;
+<i>44</i>&nbsp;import org.apache.bookkeeper.util.MathUtils;
+<i>45</i>&nbsp;import org.apache.bookkeeper.util.SafeRunnable;
+<i>46</i>&nbsp;import org.slf4j.Logger;
+<i>47</i>&nbsp;import org.slf4j.LoggerFactory;
+<i>48</i>&nbsp;
+<i>49</i>&nbsp;/**
+<i>50</i>&nbsp; * This represents a pending add operation. When it has got success from all
+<i>51</i>&nbsp; * bookies, it sees if its at the head of the pending adds queue, and if yes,
+<i>52</i>&nbsp; * sends ack back to the application. If a bookie fails, a replacement is made
+<i>53</i>&nbsp; * and placed at the same position in the ensemble. The pending adds are then
+<i>54</i>&nbsp; * rereplicated.
+<i>55</i>&nbsp; *
+<i>56</i>&nbsp; *
+<i>57</i>&nbsp; */
+<b class="fc"><i>58</i>&nbsp;class PendingAddOp extends SafeRunnable implements WriteCallback {</b>
+<b class="fc"><i>59</i>&nbsp;    private static final Logger LOG = LoggerFactory.getLogger(PendingAddOp.class);</b>
+<i>60</i>&nbsp;
+<i>61</i>&nbsp;    ByteBuf payload;
+<i>62</i>&nbsp;    ByteBufList toSend;
+<i>63</i>&nbsp;    AddCallbackWithLatency cb;
+<i>64</i>&nbsp;    Object ctx;
+<i>65</i>&nbsp;    long entryId;
+<i>66</i>&nbsp;    int entryLength;
+<i>67</i>&nbsp;
+<i>68</i>&nbsp;    DistributionSchedule.AckSet ackSet;
+<b class="fc"><i>69</i>&nbsp;    boolean completed = false;</b>
+<i>70</i>&nbsp;
+<i>71</i>&nbsp;    LedgerHandle lh;
+<i>72</i>&nbsp;    ClientContext clientCtx;
+<b class="fc"><i>73</i>&nbsp;    boolean isRecoveryAdd = false;</b>
+<i>74</i>&nbsp;    long requestTimeNanos;
+<i>75</i>&nbsp;    long qwcLatency; // Quorum Write Completion Latency after response from quorum bookies.
+<i>76</i>&nbsp;    Set&lt;BookieSocketAddress&gt; addEntrySuccessBookies;
+<i>77</i>&nbsp;    long writeDelayedStartTime; // min fault domains completion latency after response from ack quorum bookies
+<i>78</i>&nbsp;
+<i>79</i>&nbsp;    long currentLedgerLength;
+<i>80</i>&nbsp;    int pendingWriteRequests;
+<i>81</i>&nbsp;    boolean callbackTriggered;
+<i>82</i>&nbsp;    boolean hasRun;
+<i>83</i>&nbsp;    EnumSet&lt;WriteFlag&gt; writeFlags;
+<b class="fc"><i>84</i>&nbsp;    boolean allowFailFast = false;</b>
+<i>85</i>&nbsp;    List&lt;BookieSocketAddress&gt; ensemble;
+<i>86</i>&nbsp;
+<i>87</i>&nbsp;    static PendingAddOp create(LedgerHandle lh, ClientContext clientCtx,
+<i>88</i>&nbsp;                               List&lt;BookieSocketAddress&gt; ensemble,
+<i>89</i>&nbsp;                               ByteBuf payload, EnumSet&lt;WriteFlag&gt; writeFlags,
+<i>90</i>&nbsp;                               AddCallbackWithLatency cb, Object ctx) {
+<b class="fc"><i>91</i>&nbsp;        PendingAddOp op = RECYCLER.get();</b>
+<b class="fc"><i>92</i>&nbsp;        op.lh = lh;</b>
+<b class="fc"><i>93</i>&nbsp;        op.clientCtx = clientCtx;</b>
+<b class="fc"><i>94</i>&nbsp;        op.isRecoveryAdd = false;</b>
+<b class="fc"><i>95</i>&nbsp;        op.cb = cb;</b>
+<b class="fc"><i>96</i>&nbsp;        op.ctx = ctx;</b>
+<b class="fc"><i>97</i>&nbsp;        op.entryId = LedgerHandle.INVALID_ENTRY_ID;</b>
+<b class="fc"><i>98</i>&nbsp;        op.currentLedgerLength = -1;</b>
+<b class="fc"><i>99</i>&nbsp;        op.payload = payload;</b>
+<b class="fc"><i>100</i>&nbsp;        op.entryLength = payload.readableBytes();</b>
+<i>101</i>&nbsp;
+<b class="fc"><i>102</i>&nbsp;        op.completed = false;</b>
+<b class="fc"><i>103</i>&nbsp;        op.ensemble = ensemble;</b>
+<b class="fc"><i>104</i>&nbsp;        op.ackSet = lh.getDistributionSchedule().getAckSet();</b>
+<b class="fc"><i>105</i>&nbsp;        op.pendingWriteRequests = 0;</b>
+<b class="fc"><i>106</i>&nbsp;        op.callbackTriggered = false;</b>
+<b class="fc"><i>107</i>&nbsp;        op.hasRun = false;</b>
+<b class="fc"><i>108</i>&nbsp;        op.requestTimeNanos = Long.MAX_VALUE;</b>
+<b class="fc"><i>109</i>&nbsp;        op.allowFailFast = false;</b>
+<b class="fc"><i>110</i>&nbsp;        op.qwcLatency = 0;</b>
+<b class="fc"><i>111</i>&nbsp;        op.writeFlags = writeFlags;</b>
+<i>112</i>&nbsp;
+<b class="fc"><i>113</i>&nbsp;        if (op.addEntrySuccessBookies == null) {</b>
+<b class="fc"><i>114</i>&nbsp;            op.addEntrySuccessBookies = new HashSet&lt;&gt;();</b>
+<i>115</i>&nbsp;        } else {
+<b class="fc"><i>116</i>&nbsp;            op.addEntrySuccessBookies.clear();</b>
+<i>117</i>&nbsp;        }
+<b class="fc"><i>118</i>&nbsp;        op.writeDelayedStartTime = -1;</b>
+<i>119</i>&nbsp;
+<b class="fc"><i>120</i>&nbsp;        return op;</b>
+<i>121</i>&nbsp;    }
+<i>122</i>&nbsp;
+<i>123</i>&nbsp;    /**
+<i>124</i>&nbsp;     * Enable the recovery add flag for this operation.
+<i>125</i>&nbsp;     * @see LedgerHandle#asyncRecoveryAddEntry
+<i>126</i>&nbsp;     */
+<i>127</i>&nbsp;    PendingAddOp enableRecoveryAdd() {
+<b class="nc"><i>128</i>&nbsp;        isRecoveryAdd = true;</b>
+<b class="nc"><i>129</i>&nbsp;        return this;</b>
+<i>130</i>&nbsp;    }
+<i>131</i>&nbsp;
+<i>132</i>&nbsp;    PendingAddOp allowFailFastOnUnwritableChannel() {
+<b class="nc"><i>133</i>&nbsp;        allowFailFast = true;</b>
+<b class="nc"><i>134</i>&nbsp;        return this;</b>
+<i>135</i>&nbsp;    }
+<i>136</i>&nbsp;
+<i>137</i>&nbsp;    void setEntryId(long entryId) {
+<b class="fc"><i>138</i>&nbsp;        this.entryId = entryId;</b>
+<b class="fc"><i>139</i>&nbsp;    }</b>
+<i>140</i>&nbsp;
+<i>141</i>&nbsp;    void setLedgerLength(long ledgerLength) {
+<b class="fc"><i>142</i>&nbsp;        this.currentLedgerLength = ledgerLength;</b>
+<b class="fc"><i>143</i>&nbsp;    }</b>
+<i>144</i>&nbsp;
+<i>145</i>&nbsp;    long getEntryId() {
+<b class="fc"><i>146</i>&nbsp;        return this.entryId;</b>
+<i>147</i>&nbsp;    }
+<i>148</i>&nbsp;
+<i>149</i>&nbsp;    void sendWriteRequest(List&lt;BookieSocketAddress&gt; ensemble, int bookieIndex) {
+<b class="pc"><i>150</i>&nbsp;        int flags = isRecoveryAdd ? FLAG_RECOVERY_ADD | FLAG_HIGH_PRIORITY : FLAG_NONE;</b>
+<i>151</i>&nbsp;
+<b class="fc"><i>152</i>&nbsp;        clientCtx.getBookieClient().addEntry(ensemble.get(bookieIndex),</b>
+<b class="fc"><i>153</i>&nbsp;                                             lh.ledgerId, lh.ledgerKey, entryId, toSend, this, bookieIndex,</b>
+<i>154</i>&nbsp;                                             flags, allowFailFast, lh.writeFlags);
+<b class="fc"><i>155</i>&nbsp;        ++pendingWriteRequests;</b>
+<b class="fc"><i>156</i>&nbsp;    }</b>
+<i>157</i>&nbsp;
+<i>158</i>&nbsp;    boolean maybeTimeout() {
+<b class="nc"><i>159</i>&nbsp;        if (MathUtils.elapsedNanos(requestTimeNanos) &gt;= clientCtx.getConf().addEntryQuorumTimeoutNanos) {</b>
+<b class="nc"><i>160</i>&nbsp;            timeoutQuorumWait();</b>
+<b class="nc"><i>161</i>&nbsp;            return true;</b>
+<i>162</i>&nbsp;        }
+<b class="nc"><i>163</i>&nbsp;        return false;</b>
+<i>164</i>&nbsp;    }
+<i>165</i>&nbsp;
+<i>166</i>&nbsp;    void timeoutQuorumWait() {
+<i>167</i>&nbsp;        try {
+<b class="nc"><i>168</i>&nbsp;            clientCtx.getMainWorkerPool().executeOrdered(lh.ledgerId, new SafeRunnable() {</b>
+<i>169</i>&nbsp;                @Override
+<i>170</i>&nbsp;                public void safeRun() {
+<b class="nc"><i>171</i>&nbsp;                    if (completed) {</b>
+<b class="nc"><i>172</i>&nbsp;                        return;</b>
+<b class="nc"><i>173</i>&nbsp;                    } else if (addEntrySuccessBookies.size() &gt;= lh.getLedgerMetadata().getAckQuorumSize()) {</b>
+<i>174</i>&nbsp;                        // If ackQuorum number of bookies have acknowledged the write but still not complete, indicates
+<i>175</i>&nbsp;                        // failures due to not having been written to enough fault domains. Increment corresponding
+<i>176</i>&nbsp;                        // counter.
+<b class="nc"><i>177</i>&nbsp;                        clientCtx.getClientStats().getWriteTimedOutDueToNotEnoughFaultDomains().inc();</b>
+<i>178</i>&nbsp;                    }
+<b class="nc"><i>179</i>&nbsp;                    lh.handleUnrecoverableErrorDuringAdd(BKException.Code.AddEntryQuorumTimeoutException);</b>
+<b class="nc"><i>180</i>&nbsp;                }</b>
+<i>181</i>&nbsp;                @Override
+<i>182</i>&nbsp;                public String toString() {
+<b class="nc"><i>183</i>&nbsp;                    return String.format(&quot;AddEntryQuorumTimeout(lid=%d, eid=%d)&quot;, lh.ledgerId, entryId);</b>
+<i>184</i>&nbsp;                }
+<i>185</i>&nbsp;            });
+<b class="nc"><i>186</i>&nbsp;        } catch (RejectedExecutionException e) {</b>
+<b class="nc"><i>187</i>&nbsp;            LOG.warn(&quot;Timeout add entry quorum wait failed {} entry: {}&quot;, lh.ledgerId, entryId);</b>
+<b class="nc"><i>188</i>&nbsp;        }</b>
+<b class="nc"><i>189</i>&nbsp;    }</b>
+<i>190</i>&nbsp;
+<i>191</i>&nbsp;    void unsetSuccessAndSendWriteRequest(List&lt;BookieSocketAddress&gt; ensemble, int bookieIndex) {
+<i>192</i>&nbsp;        // update the ensemble
+<b class="nc"><i>193</i>&nbsp;        this.ensemble = ensemble;</b>
+<i>194</i>&nbsp;
+<b class="nc"><i>195</i>&nbsp;        if (toSend == null) {</b>
+<i>196</i>&nbsp;            // this addOp hasn&#39;t yet had its mac computed. When the mac is
+<i>197</i>&nbsp;            // computed, its write requests will be sent, so no need to send it
+<i>198</i>&nbsp;            // now
+<b class="nc"><i>199</i>&nbsp;            return;</b>
+<i>200</i>&nbsp;        }
+<i>201</i>&nbsp;        // Suppose that unset doesn&#39;t happen on the write set of an entry. In this
+<i>202</i>&nbsp;        // case we don&#39;t need to resend the write request upon an ensemble change.
+<i>203</i>&nbsp;        // We do need to invoke #sendAddSuccessCallbacks() for such entries because
+<i>204</i>&nbsp;        // they may have already completed, but they are just waiting for the ensemble
+<i>205</i>&nbsp;        // to change.
+<i>206</i>&nbsp;        // E.g.
+<i>207</i>&nbsp;        // ensemble (A, B, C, D), entry k is written to (A, B, D). An ensemble change
+<i>208</i>&nbsp;        // happens to replace C with E. Entry k does not complete until C is
+<i>209</i>&nbsp;        // replaced with E successfully. When the ensemble change completes, it tries
+<i>210</i>&nbsp;        // to unset entry k. C however is not in k&#39;s write set, so no entry is written
+<i>211</i>&nbsp;        // again, and no one triggers #sendAddSuccessCallbacks. Consequently, k never
+<i>212</i>&nbsp;        // completes.
+<i>213</i>&nbsp;        //
+<i>214</i>&nbsp;        // We call sendAddSuccessCallback when unsetting t cover this case.
+<b class="nc"><i>215</i>&nbsp;        DistributionSchedule.WriteSet writeSet = lh.distributionSchedule.getWriteSet(entryId);</b>
+<i>216</i>&nbsp;        try {
+<b class="nc"><i>217</i>&nbsp;            if (!writeSet.contains(bookieIndex)) {</b>
+<b class="nc"><i>218</i>&nbsp;                lh.sendAddSuccessCallbacks();</b>
+<b class="nc"><i>219</i>&nbsp;                return;</b>
+<i>220</i>&nbsp;            }
+<i>221</i>&nbsp;        } finally {
+<b class="nc"><i>222</i>&nbsp;            writeSet.recycle();</b>
+<b class="nc"><i>223</i>&nbsp;        }</b>
+<i>224</i>&nbsp;
+<b class="nc"><i>225</i>&nbsp;        if (callbackTriggered) {</b>
+<b class="nc"><i>226</i>&nbsp;            return;</b>
+<i>227</i>&nbsp;        }
+<i>228</i>&nbsp;
+<b class="nc"><i>229</i>&nbsp;        if (LOG.isDebugEnabled()) {</b>
+<b class="nc"><i>230</i>&nbsp;            LOG.debug(&quot;Unsetting success for ledger: &quot; + lh.ledgerId + &quot; entry: &quot; + entryId + &quot; bookie index: &quot;</b>
+<i>231</i>&nbsp;                      + bookieIndex);
+<i>232</i>&nbsp;        }
+<i>233</i>&nbsp;
+<i>234</i>&nbsp;        // if we had already heard a success from this array index, need to
+<i>235</i>&nbsp;        // increment our number of responses that are pending, since we are
+<i>236</i>&nbsp;        // going to unset this success
+<b class="nc"><i>237</i>&nbsp;        if (!ackSet.removeBookieAndCheck(bookieIndex)) {</b>
+<i>238</i>&nbsp;            // unset completed if this results in loss of ack quorum
+<b class="nc"><i>239</i>&nbsp;            completed = false;</b>
+<i>240</i>&nbsp;        }
+<i>241</i>&nbsp;
+<b class="nc"><i>242</i>&nbsp;        sendWriteRequest(ensemble, bookieIndex);</b>
+<b class="nc"><i>243</i>&nbsp;    }</b>
+<i>244</i>&nbsp;
+<i>245</i>&nbsp;    /**
+<i>246</i>&nbsp;     * Initiate the add operation.
+<i>247</i>&nbsp;     */
+<i>248</i>&nbsp;    @Override
+<i>249</i>&nbsp;    public void safeRun() {
+<b class="fc"><i>250</i>&nbsp;        hasRun = true;</b>
+<b class="pc"><i>251</i>&nbsp;        if (callbackTriggered) {</b>
+<i>252</i>&nbsp;            // this should only be true if the request was failed due
+<i>253</i>&nbsp;            // to another request ahead in the pending queue,
+<i>254</i>&nbsp;            // so we can just ignore this request
+<b class="nc"><i>255</i>&nbsp;            maybeRecycle();</b>
+<b class="nc"><i>256</i>&nbsp;            return;</b>
+<i>257</i>&nbsp;        }
+<i>258</i>&nbsp;
+<b class="fc"><i>259</i>&nbsp;        this.requestTimeNanos = MathUtils.nowInNano();</b>
+<b class="fc"><i>260</i>&nbsp;        checkNotNull(lh);</b>
+<b class="fc"><i>261</i>&nbsp;        checkNotNull(lh.macManager);</b>
+<i>262</i>&nbsp;
+<b class="fc"><i>263</i>&nbsp;        this.toSend = lh.macManager.computeDigestAndPackageForSending(</b>
+<i>264</i>&nbsp;                entryId, lh.lastAddConfirmed, currentLedgerLength,
+<i>265</i>&nbsp;                payload);
+<i>266</i>&nbsp;        // ownership of RefCounted ByteBuf was passed to computeDigestAndPackageForSending
+<b class="fc"><i>267</i>&nbsp;        payload = null;</b>
+<i>268</i>&nbsp;
+<i>269</i>&nbsp;        // We are about to send. Check if we need to make an ensemble change
+<i>270</i>&nbsp;        // becasue of delayed write errors
+<b class="fc"><i>271</i>&nbsp;        lh.maybeHandleDelayedWriteBookieFailure();</b>
+<i>272</i>&nbsp;
+<i>273</i>&nbsp;        // Iterate over set and trigger the sendWriteRequests
+<b class="fc"><i>274</i>&nbsp;        DistributionSchedule.WriteSet writeSet = lh.distributionSchedule.getWriteSet(entryId);</b>
+<i>275</i>&nbsp;
+<i>276</i>&nbsp;        try {
+<b class="fc"><i>277</i>&nbsp;            for (int i = 0; i &lt; writeSet.size(); i++) {</b>
+<b class="fc"><i>278</i>&nbsp;                sendWriteRequest(ensemble, writeSet.get(i));</b>
+<i>279</i>&nbsp;            }
+<i>280</i>&nbsp;        } finally {
+<b class="fc"><i>281</i>&nbsp;            writeSet.recycle();</b>
+<b class="fc"><i>282</i>&nbsp;        }</b>
+<b class="fc"><i>283</i>&nbsp;    }</b>
+<i>284</i>&nbsp;
+<i>285</i>&nbsp;    @Override
+<i>286</i>&nbsp;    public void writeComplete(int rc, long ledgerId, long entryId, BookieSocketAddress addr, Object ctx) {
+<b class="fc"><i>287</i>&nbsp;        int bookieIndex = (Integer) ctx;</b>
+<b class="fc"><i>288</i>&nbsp;        --pendingWriteRequests;</b>
+<i>289</i>&nbsp;
+<b class="pc"><i>290</i>&nbsp;        if (!ensemble.get(bookieIndex).equals(addr)) {</b>
+<i>291</i>&nbsp;            // ensemble has already changed, failure of this addr is immaterial
+<b class="nc"><i>292</i>&nbsp;            if (LOG.isDebugEnabled()) {</b>
+<b class="nc"><i>293</i>&nbsp;                LOG.debug(&quot;Write did not succeed: &quot; + ledgerId + &quot;, &quot; + entryId + &quot;. But we have already fixed it.&quot;);</b>
+<i>294</i>&nbsp;            }
+<b class="nc"><i>295</i>&nbsp;            return;</b>
+<i>296</i>&nbsp;        }
+<i>297</i>&nbsp;
+<i>298</i>&nbsp;        // must record all acks, even if complete (completion can be undone by an ensemble change)
+<b class="fc"><i>299</i>&nbsp;        boolean ackQuorum = false;</b>
+<b class="pc"><i>300</i>&nbsp;        if (BKException.Code.OK == rc) {</b>
+<b class="fc"><i>301</i>&nbsp;            ackQuorum = ackSet.completeBookieAndCheck(bookieIndex);</b>
+<b class="fc"><i>302</i>&nbsp;            addEntrySuccessBookies.add(ensemble.get(bookieIndex));</b>
+<i>303</i>&nbsp;        }
+<i>304</i>&nbsp;
+<b class="pc"><i>305</i>&nbsp;        if (completed) {</b>
+<b class="nc"><i>306</i>&nbsp;            if (rc != BKException.Code.OK) {</b>
+<i>307</i>&nbsp;                // Got an error after satisfying AQ. This means we are under replicated at the create itself.
+<i>308</i>&nbsp;                // Update the stat to reflect it.
+<b class="nc"><i>309</i>&nbsp;                clientCtx.getClientStats().getAddOpUrCounter().inc();</b>
+<b class="nc"><i>310</i>&nbsp;                if (!clientCtx.getConf().disableEnsembleChangeFeature.isAvailable()</b>
+<b class="nc"><i>311</i>&nbsp;                        &amp;&amp; !clientCtx.getConf().delayEnsembleChange) {</b>
+<b class="nc"><i>312</i>&nbsp;                    lh.notifyWriteFailed(bookieIndex, addr);</b>
+<i>313</i>&nbsp;                }
+<i>314</i>&nbsp;            }
+<i>315</i>&nbsp;            // even the add operation is completed, but because we don&#39;t reset completed flag back to false when
+<i>316</i>&nbsp;            // #unsetSuccessAndSendWriteRequest doesn&#39;t break ack quorum constraint. we still have current pending
+<i>317</i>&nbsp;            // add op is completed but never callback. so do a check here to complete again.
+<i>318</i>&nbsp;            //
+<i>319</i>&nbsp;            // E.g. entry x is going to complete.
+<i>320</i>&nbsp;            //
+<i>321</i>&nbsp;            // 1) entry x + k hits a failure. lh.handleBookieFailure increases blockAddCompletions to 1, for ensemble
+<i>322</i>&nbsp;            //    change
+<i>323</i>&nbsp;            // 2) entry x receives all responses, sets completed to true but fails to send success callback because
+<i>324</i>&nbsp;            //    blockAddCompletions is 1
+<i>325</i>&nbsp;            // 3) ensemble change completed. lh unset success starting from x to x+k, but since the unset doesn&#39;t break
+<i>326</i>&nbsp;            //    ackSet constraint. #removeBookieAndCheck doesn&#39;t set completed back to false.
+<i>327</i>&nbsp;            // 4) so when the retry request on new bookie completes, it finds the pending op is already completed.
+<i>328</i>&nbsp;            //    we have to trigger #sendAddSuccessCallbacks
+<i>329</i>&nbsp;            //
+<b class="nc"><i>330</i>&nbsp;            sendAddSuccessCallbacks();</b>
+<i>331</i>&nbsp;            // I am already finished, ignore incoming responses.
+<i>332</i>&nbsp;            // otherwise, we might hit the following error handling logic, which might cause bad things.
+<b class="nc"><i>333</i>&nbsp;            maybeRecycle();</b>
+<b class="nc"><i>334</i>&nbsp;            return;</b>
+<i>335</i>&nbsp;        }
+<i>336</i>&nbsp;
+<b class="pc"><i>337</i>&nbsp;        switch (rc) {</b>
+<i>338</i>&nbsp;        case BKException.Code.OK:
+<i>339</i>&nbsp;            // continue
+<b class="fc"><i>340</i>&nbsp;            break;</b>
+<i>341</i>&nbsp;        case BKException.Code.ClientClosedException:
+<i>342</i>&nbsp;            // bookie client is closed.
+<b class="nc"><i>343</i>&nbsp;            lh.errorOutPendingAdds(rc);</b>
+<b class="nc"><i>344</i>&nbsp;            return;</b>
+<i>345</i>&nbsp;        case BKException.Code.IllegalOpException:
+<i>346</i>&nbsp;            // illegal operation requested, like using unsupported feature in v2 protocol
+<b class="nc"><i>347</i>&nbsp;            lh.handleUnrecoverableErrorDuringAdd(rc);</b>
+<b class="nc"><i>348</i>&nbsp;            return;</b>
+<i>349</i>&nbsp;        case BKException.Code.LedgerFencedException:
+<b class="nc"><i>350</i>&nbsp;            LOG.warn(&quot;Fencing exception on write: L{} E{} on {}&quot;,</b>
+<b class="nc"><i>351</i>&nbsp;                    ledgerId, entryId, addr);</b>
+<b class="nc"><i>352</i>&nbsp;            lh.handleUnrecoverableErrorDuringAdd(rc);</b>
+<b class="nc"><i>353</i>&nbsp;            return;</b>
+<i>354</i>&nbsp;        case BKException.Code.UnauthorizedAccessException:
+<b class="nc"><i>355</i>&nbsp;            LOG.warn(&quot;Unauthorized access exception on write: L{} E{} on {}&quot;,</b>
+<b class="nc"><i>356</i>&nbsp;                    ledgerId, entryId, addr);</b>
+<b class="nc"><i>357</i>&nbsp;            lh.handleUnrecoverableErrorDuringAdd(rc);</b>
+<b class="nc"><i>358</i>&nbsp;            return;</b>
+<i>359</i>&nbsp;        default:
+<b class="nc"><i>360</i>&nbsp;            if (clientCtx.getConf().delayEnsembleChange) {</b>
+<b class="nc"><i>361</i>&nbsp;                if (ackSet.failBookieAndCheck(bookieIndex, addr)</b>
+<i>362</i>&nbsp;                        || rc == BKException.Code.WriteOnReadOnlyBookieException) {
+<b class="nc"><i>363</i>&nbsp;                    Map&lt;Integer, BookieSocketAddress&gt; failedBookies = ackSet.getFailedBookies();</b>
+<b class="nc"><i>364</i>&nbsp;                    LOG.warn(&quot;Failed to write entry ({}, {}) to bookies {}, handling failures.&quot;,</b>
+<b class="nc"><i>365</i>&nbsp;                            ledgerId, entryId, failedBookies);</b>
+<i>366</i>&nbsp;                    // we can&#39;t meet ack quorum requirement, trigger ensemble change.
+<b class="nc"><i>367</i>&nbsp;                    lh.handleBookieFailure(failedBookies);</b>
+<b class="nc"><i>368</i>&nbsp;                } else {</b>
+<b class="nc"><i>369</i>&nbsp;                    if (LOG.isDebugEnabled()) {</b>
+<b class="nc"><i>370</i>&nbsp;                        LOG.debug(&quot;Failed to write entry ({}, {}) to bookie ({}, {}),&quot;</b>
+<i>371</i>&nbsp;                                  + &quot; but it didn&#39;t break ack quorum, delaying ensemble change : {}&quot;,
+<b class="nc"><i>372</i>&nbsp;                                ledgerId, entryId, bookieIndex, addr, BKException.getMessage(rc));</b>
+<i>373</i>&nbsp;                    }
+<i>374</i>&nbsp;                }
+<i>375</i>&nbsp;            } else {
+<b class="nc"><i>376</i>&nbsp;                LOG.warn(&quot;Failed to write entry ({}, {}): {}&quot;,</b>
+<b class="nc"><i>377</i>&nbsp;                        ledgerId, entryId, BKException.getMessage(rc));</b>
+<b class="nc"><i>378</i>&nbsp;                lh.handleBookieFailure(ImmutableMap.of(bookieIndex, addr));</b>
+<i>379</i>&nbsp;            }
+<b class="nc"><i>380</i>&nbsp;            return;</b>
+<i>381</i>&nbsp;        }
+<i>382</i>&nbsp;
+<b class="pc"><i>383</i>&nbsp;        if (ackQuorum &amp;&amp; !completed) {</b>
+<b class="pc"><i>384</i>&nbsp;            if (clientCtx.getConf().enforceMinNumFaultDomainsForWrite</b>
+<b class="nc"><i>385</i>&nbsp;                &amp;&amp; !(clientCtx.getPlacementPolicy()</b>
+<b class="nc"><i>386</i>&nbsp;                              .areAckedBookiesAdheringToPlacementPolicy(addEntrySuccessBookies,</b>
+<b class="nc"><i>387</i>&nbsp;                                                                        lh.getLedgerMetadata().getWriteQuorumSize(),</b>
+<b class="nc"><i>388</i>&nbsp;                                                                        lh.getLedgerMetadata().getAckQuorumSize()))) {</b>
+<b class="nc"><i>389</i>&nbsp;                LOG.warn(&quot;Write success for entry ID {} delayed, not acknowledged by bookies in enough fault domains&quot;,</b>
+<b class="nc"><i>390</i>&nbsp;                         entryId);</b>
+<i>391</i>&nbsp;                // Increment to indicate write did not complete due to not enough fault domains
+<b class="nc"><i>392</i>&nbsp;                clientCtx.getClientStats().getWriteDelayedDueToNotEnoughFaultDomains().inc();</b>
+<i>393</i>&nbsp;
+<i>394</i>&nbsp;                // Only do this for the first time.
+<b class="nc"><i>395</i>&nbsp;                if (writeDelayedStartTime == -1) {</b>
+<b class="nc"><i>396</i>&nbsp;                    writeDelayedStartTime = MathUtils.nowInNano();</b>
+<i>397</i>&nbsp;                }
+<i>398</i>&nbsp;            } else {
+<b class="fc"><i>399</i>&nbsp;                completed = true;</b>
+<b class="fc"><i>400</i>&nbsp;                this.qwcLatency = MathUtils.elapsedNanos(requestTimeNanos);</b>
+<i>401</i>&nbsp;
+<b class="pc"><i>402</i>&nbsp;                if (writeDelayedStartTime != -1) {</b>
+<b class="nc"><i>403</i>&nbsp;                    clientCtx.getClientStats()</b>
+<b class="nc"><i>404</i>&nbsp;                             .getWriteDelayedDueToNotEnoughFaultDomainsLatency()</b>
+<b class="nc"><i>405</i>&nbsp;                             .registerSuccessfulEvent(MathUtils.elapsedNanos(writeDelayedStartTime),</b>
+<i>406</i>&nbsp;                                                      TimeUnit.NANOSECONDS);
+<i>407</i>&nbsp;                }
+<i>408</i>&nbsp;
+<b class="fc"><i>409</i>&nbsp;                sendAddSuccessCallbacks();</b>
+<i>410</i>&nbsp;            }
+<i>411</i>&nbsp;        }
+<b class="fc"><i>412</i>&nbsp;    }</b>
+<i>413</i>&nbsp;
+<i>414</i>&nbsp;    void sendAddSuccessCallbacks() {
+<b class="fc"><i>415</i>&nbsp;        lh.sendAddSuccessCallbacks();</b>
+<b class="fc"><i>416</i>&nbsp;    }</b>
+<i>417</i>&nbsp;
+<i>418</i>&nbsp;    void submitCallback(final int rc) {
+<b class="pc"><i>419</i>&nbsp;        if (LOG.isDebugEnabled()) {</b>
+<b class="nc"><i>420</i>&nbsp;            LOG.debug(&quot;Submit callback (lid:{}, eid: {}). rc:{}&quot;, lh.getId(), entryId, rc);</b>
+<i>421</i>&nbsp;        }
+<i>422</i>&nbsp;
+<b class="fc"><i>423</i>&nbsp;        long latencyNanos = MathUtils.elapsedNanos(requestTimeNanos);</b>
+<b class="pc"><i>424</i>&nbsp;        if (rc != BKException.Code.OK) {</b>
+<b class="nc"><i>425</i>&nbsp;            clientCtx.getClientStats().getAddOpLogger().registerFailedEvent(latencyNanos, TimeUnit.NANOSECONDS);</b>
+<b class="nc"><i>426</i>&nbsp;            LOG.error(&quot;Write of ledger entry to quorum failed: L{} E{}&quot;,</b>
+<b class="nc"><i>427</i>&nbsp;                      lh.getId(), entryId);</b>
+<i>428</i>&nbsp;        } else {
+<b class="fc"><i>429</i>&nbsp;            clientCtx.getClientStats().getAddOpLogger().registerSuccessfulEvent(latencyNanos, TimeUnit.NANOSECONDS);</b>
+<i>430</i>&nbsp;        }
+<b class="fc"><i>431</i>&nbsp;        cb.addCompleteWithLatency(rc, lh, entryId, qwcLatency, ctx);</b>
+<b class="fc"><i>432</i>&nbsp;        callbackTriggered = true;</b>
+<i>433</i>&nbsp;
+<b class="fc"><i>434</i>&nbsp;        maybeRecycle();</b>
+<b class="fc"><i>435</i>&nbsp;    }</b>
+<i>436</i>&nbsp;
+<i>437</i>&nbsp;    @Override
+<i>438</i>&nbsp;    public String toString() {
+<b class="nc"><i>439</i>&nbsp;        StringBuilder sb = new StringBuilder();</b>
+<b class="nc"><i>440</i>&nbsp;        sb.append(&quot;PendingAddOp(lid:&quot;).append(lh.ledgerId)</b>
+<b class="nc"><i>441</i>&nbsp;          .append(&quot;, eid:&quot;).append(entryId).append(&quot;, completed:&quot;)</b>
+<b class="nc"><i>442</i>&nbsp;          .append(completed).append(&quot;)&quot;);</b>
+<b class="nc"><i>443</i>&nbsp;        return sb.toString();</b>
+<i>444</i>&nbsp;    }
+<i>445</i>&nbsp;
+<i>446</i>&nbsp;    @Override
+<i>447</i>&nbsp;    public int hashCode() {
+<b class="nc"><i>448</i>&nbsp;        return (int) entryId;</b>
+<i>449</i>&nbsp;    }
+<i>450</i>&nbsp;
+<i>451</i>&nbsp;    @Override
+<i>452</i>&nbsp;    public boolean equals(Object o) {
+<b class="nc"><i>453</i>&nbsp;       if (o instanceof PendingAddOp) {</b>
+<b class="nc"><i>454</i>&nbsp;           return (this.entryId == ((PendingAddOp) o).entryId);</b>
+<i>455</i>&nbsp;       }
+<b class="nc"><i>456</i>&nbsp;       return (this == o);</b>
+<i>457</i>&nbsp;    }
+<i>458</i>&nbsp;
+<i>459</i>&nbsp;    private final Handle&lt;PendingAddOp&gt; recyclerHandle;
+<b class="fc"><i>460</i>&nbsp;    private static final Recycler&lt;PendingAddOp&gt; RECYCLER = new Recycler&lt;PendingAddOp&gt;() {</b>
+<i>461</i>&nbsp;        @Override
+<i>462</i>&nbsp;        protected PendingAddOp newObject(Recycler.Handle&lt;PendingAddOp&gt; handle) {
+<b class="fc"><i>463</i>&nbsp;            return new PendingAddOp(handle);</b>
+<i>464</i>&nbsp;        }
+<i>465</i>&nbsp;    };
+<i>466</i>&nbsp;
+<b class="fc"><i>467</i>&nbsp;    private PendingAddOp(Handle&lt;PendingAddOp&gt; recyclerHandle) {</b>
+<b class="fc"><i>468</i>&nbsp;        this.recyclerHandle = recyclerHandle;</b>
+<b class="fc"><i>469</i>&nbsp;    }</b>
+<i>470</i>&nbsp;
+<i>471</i>&nbsp;
+<i>472</i>&nbsp;    private void maybeRecycle() {
+<i>473</i>&nbsp;        /**
+<i>474</i>&nbsp;         * We have opportunity to recycle two objects here.
+<i>475</i>&nbsp;         * PendingAddOp#toSend and LedgerHandle#pendingAddOp
+<i>476</i>&nbsp;         *
+<i>477</i>&nbsp;         * A. LedgerHandle#pendingAddOp: This can be released after all 3 conditions are met.
+<i>478</i>&nbsp;         *    - After the callback is run
+<i>479</i>&nbsp;         *    - After safeRun finished by the executor
+<i>480</i>&nbsp;         *    - Write responses are returned from all bookies
+<i>481</i>&nbsp;         *      as BookieClient Holds a reference from the point the addEntry requests are sent.
+<i>482</i>&nbsp;         *
+<i>483</i>&nbsp;         * B. ByteBuf can be released after 2 of the conditions are met.
+<i>484</i>&nbsp;         *    - After the callback is run as we will not retry the write after callback
+<i>485</i>&nbsp;         *    - After safeRun finished by the executor
+<i>486</i>&nbsp;         * BookieClient takes and releases on this buffer immediately after sending the data.
+<i>487</i>&nbsp;         *
+<i>488</i>&nbsp;         * The object can only be recycled after the above conditions are met
+<i>489</i>&nbsp;         * otherwise we could end up recycling twice and all
+<i>490</i>&nbsp;         * joy that goes along with that.
+<i>491</i>&nbsp;         */
+<b class="pc"><i>492</i>&nbsp;        if (hasRun &amp;&amp; callbackTriggered) {</b>
+<b class="fc"><i>493</i>&nbsp;            ReferenceCountUtil.release(toSend);</b>
+<b class="fc"><i>494</i>&nbsp;            toSend = null;</b>
+<i>495</i>&nbsp;        }
+<i>496</i>&nbsp;        // only recycle a pending add op after it has been run.
+<b class="pc"><i>497</i>&nbsp;        if (hasRun &amp;&amp; toSend == null &amp;&amp; pendingWriteRequests == 0) {</b>
+<b class="fc"><i>498</i>&nbsp;            recyclePendAddOpObject();</b>
+<i>499</i>&nbsp;        }
+<b class="fc"><i>500</i>&nbsp;    }</b>
+<i>501</i>&nbsp;
+<i>502</i>&nbsp;    private void recyclePendAddOpObject() {
+<b class="fc"><i>503</i>&nbsp;        entryId = LedgerHandle.INVALID_ENTRY_ID;</b>
+<b class="fc"><i>504</i>&nbsp;        currentLedgerLength = -1;</b>
+<b class="pc"><i>505</i>&nbsp;        if (payload != null) {</b>
+<b class="nc"><i>506</i>&nbsp;            ReferenceCountUtil.release(payload);</b>
+<b class="nc"><i>507</i>&nbsp;            payload = null;</b>
+<i>508</i>&nbsp;        }
+<b class="fc"><i>509</i>&nbsp;        cb = null;</b>
+<b class="fc"><i>510</i>&nbsp;        ctx = null;</b>
+<b class="fc"><i>511</i>&nbsp;        ensemble = null;</b>
+<b class="fc"><i>512</i>&nbsp;        ackSet.recycle();</b>
+<b class="fc"><i>513</i>&nbsp;        ackSet = null;</b>
+<b class="fc"><i>514</i>&nbsp;        lh = null;</b>
+<b class="fc"><i>515</i>&nbsp;        clientCtx = null;</b>
+<b class="fc"><i>516</i>&nbsp;        isRecoveryAdd = false;</b>
+<b class="fc"><i>517</i>&nbsp;        completed = false;</b>
+<b class="fc"><i>518</i>&nbsp;        pendingWriteRequests = 0;</b>
+<b class="fc"><i>519</i>&nbsp;        callbackTriggered = false;</b>
+<b class="fc"><i>520</i>&nbsp;        hasRun = false;</b>
+<b class="fc"><i>521</i>&nbsp;        allowFailFast = false;</b>
+<b class="fc"><i>522</i>&nbsp;        writeFlags = null;</b>
+<b class="fc"><i>523</i>&nbsp;        addEntrySuccessBookies.clear();</b>
+<b class="fc"><i>524</i>&nbsp;        writeDelayedStartTime = -1;</b>
+<i>525</i>&nbsp;
+<b class="fc"><i>526</i>&nbsp;        recyclerHandle.recycle(this);</b>
+<b class="fc"><i>527</i>&nbsp;    }</b>
+<i>528</i>&nbsp;}
+</div>
+</div>
+
+<div class="footer">
+    
+    <div style="float:right;">generated on 2021-06-28 15:57</div>
+</div>
+</body>
+</html>

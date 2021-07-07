@@ -1,0 +1,912 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>LedgerCacheTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$myBookieFenceLedgerTest.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.bookie</a> &gt; <span class="el_source">LedgerCacheTest.java</span></div><h1>LedgerCacheTest.java</h1><pre class="source lang-java linenums">/*
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+
+package org.apache.bookkeeper.bookie;
+
+import static org.apache.bookkeeper.bookie.BookieException.Code.OK;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.Unpooled;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+
+import org.apache.bookkeeper.bookie.Bookie.NoLedgerException;
+import org.apache.bookkeeper.bookie.CheckpointSource.Checkpoint;
+import org.apache.bookkeeper.bookie.FileInfoBackingCache.CachedFileInfo;
+import org.apache.bookkeeper.conf.ServerConfiguration;
+import org.apache.bookkeeper.conf.TestBKConfiguration;
+import org.apache.bookkeeper.meta.LedgerManager;
+import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.proto.BookkeeperInternalCallbacks;
+import org.apache.bookkeeper.stats.StatsLogger;
+import org.apache.bookkeeper.util.BookKeeperConstants;
+import org.apache.bookkeeper.util.IOUtils;
+import org.apache.bookkeeper.util.SnapshotMap;
+import org.apache.commons.io.FileUtils;
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * LedgerCache related test cases.
+ */
+<span class="nc" id="L66">public class LedgerCacheTest {</span>
+<span class="nc" id="L67">    private static final Logger LOG = LoggerFactory.getLogger(LedgerCacheTest.class);</span>
+
+    SnapshotMap&lt;Long, Boolean&gt; activeLedgers;
+    LedgerCache ledgerCache;
+    Thread flushThread;
+    ServerConfiguration conf;
+    File txnDir, ledgerDir;
+
+<span class="nc" id="L75">    private final List&lt;File&gt; tempDirs = new ArrayList&lt;File&gt;();</span>
+
+    private Bookie bookie;
+
+    @Before
+    public void setUp() throws Exception {
+<span class="nc" id="L81">        txnDir = IOUtils.createTempDir(&quot;ledgercache&quot;, &quot;txn&quot;);</span>
+<span class="nc" id="L82">        ledgerDir = IOUtils.createTempDir(&quot;ledgercache&quot;, &quot;ledger&quot;);</span>
+        // create current dir
+<span class="nc" id="L84">        new File(ledgerDir, BookKeeperConstants.CURRENT_DIR).mkdir();</span>
+
+<span class="nc" id="L86">        conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L87">        conf.setMetadataServiceUri(null);</span>
+<span class="nc" id="L88">        conf.setJournalDirName(txnDir.getPath());</span>
+<span class="nc" id="L89">        conf.setLedgerDirNames(new String[] { ledgerDir.getPath() });</span>
+<span class="nc" id="L90">        bookie = new Bookie(conf);</span>
+
+<span class="nc" id="L92">        activeLedgers = new SnapshotMap&lt;Long, Boolean&gt;();</span>
+<span class="nc" id="L93">        ledgerCache = ((InterleavedLedgerStorage) bookie.ledgerStorage.getUnderlyingLedgerStorage()).ledgerCache;</span>
+<span class="nc" id="L94">    }</span>
+
+    @After
+    public void tearDown() throws Exception {
+<span class="nc bnc" id="L98" title="All 2 branches missed.">        if (flushThread != null) {</span>
+<span class="nc" id="L99">            flushThread.interrupt();</span>
+<span class="nc" id="L100">            flushThread.join();</span>
+        }
+<span class="nc" id="L102">        bookie.ledgerStorage.shutdown();</span>
+<span class="nc" id="L103">        FileUtils.deleteDirectory(txnDir);</span>
+<span class="nc" id="L104">        FileUtils.deleteDirectory(ledgerDir);</span>
+<span class="nc bnc" id="L105" title="All 2 branches missed.">        for (File dir : tempDirs) {</span>
+<span class="nc" id="L106">            FileUtils.deleteDirectory(dir);</span>
+<span class="nc" id="L107">        }</span>
+<span class="nc" id="L108">    }</span>
+
+    File createTempDir(String prefix, String suffix) throws IOException {
+<span class="nc" id="L111">        File dir = IOUtils.createTempDir(prefix, suffix);</span>
+<span class="nc" id="L112">        tempDirs.add(dir);</span>
+<span class="nc" id="L113">        return dir;</span>
+    }
+
+    private void newLedgerCache() throws IOException {
+<span class="nc bnc" id="L117" title="All 2 branches missed.">        if (ledgerCache != null) {</span>
+<span class="nc" id="L118">            ledgerCache.close();</span>
+        }
+<span class="nc" id="L120">        ledgerCache = ((InterleavedLedgerStorage) bookie.ledgerStorage.getUnderlyingLedgerStorage())</span>
+<span class="nc" id="L121">                .ledgerCache = new LedgerCacheImpl(conf, activeLedgers, bookie.getIndexDirsManager());</span>
+<span class="nc" id="L122">        flushThread = new Thread() {</span>
+                public void run() {
+                    while (true) {
+                        try {
+<span class="nc" id="L126">                            sleep(conf.getFlushInterval());</span>
+<span class="nc" id="L127">                            ledgerCache.flushLedger(true);</span>
+<span class="nc" id="L128">                        } catch (InterruptedException ie) {</span>
+                            // killed by teardown
+<span class="nc" id="L130">                            Thread.currentThread().interrupt();</span>
+<span class="nc" id="L131">                            return;</span>
+<span class="nc" id="L132">                        } catch (Exception e) {</span>
+<span class="nc" id="L133">                            LOG.error(&quot;Exception in flush thread&quot;, e);</span>
+<span class="nc" id="L134">                        }</span>
+                    }
+                }
+            };
+<span class="nc" id="L138">        flushThread.start();</span>
+<span class="nc" id="L139">    }</span>
+
+    @Test
+    public void testAddEntryException() throws IOException {
+        // set page limitation
+<span class="nc" id="L144">        conf.setPageLimit(10);</span>
+        // create a ledger cache
+<span class="nc" id="L146">        newLedgerCache();</span>
+        /*
+         * Populate ledger cache.
+         */
+        try {
+<span class="nc" id="L151">            byte[] masterKey = &quot;blah&quot;.getBytes();</span>
+<span class="nc bnc" id="L152" title="All 2 branches missed.">            for (int i = 0; i &lt; 100; i++) {</span>
+<span class="nc" id="L153">                ledgerCache.setMasterKey((long) i, masterKey);</span>
+<span class="nc" id="L154">                ledgerCache.putEntryOffset(i, 0, i * 8);</span>
+            }
+<span class="nc" id="L156">        } catch (IOException e) {</span>
+<span class="nc" id="L157">            LOG.error(&quot;Got IOException.&quot;, e);</span>
+<span class="nc" id="L158">            fail(&quot;Failed to add entry.&quot;);</span>
+<span class="nc" id="L159">        }</span>
+<span class="nc" id="L160">    }</span>
+
+    @Test
+    public void testLedgerEviction() throws Exception {
+<span class="nc" id="L164">        int numEntries = 10;</span>
+        // limit open files &amp; pages
+<span class="nc" id="L166">        conf.setOpenFileLimit(1).setPageLimit(2)</span>
+<span class="nc" id="L167">            .setPageSize(8 * numEntries);</span>
+        // create ledger cache
+<span class="nc" id="L169">        newLedgerCache();</span>
+        try {
+<span class="nc" id="L171">            int numLedgers = 3;</span>
+<span class="nc" id="L172">            byte[] masterKey = &quot;blah&quot;.getBytes();</span>
+<span class="nc bnc" id="L173" title="All 2 branches missed.">            for (int i = 1; i &lt;= numLedgers; i++) {</span>
+<span class="nc" id="L174">                ledgerCache.setMasterKey((long) i, masterKey);</span>
+<span class="nc bnc" id="L175" title="All 2 branches missed.">                for (int j = 0; j &lt; numEntries; j++) {</span>
+<span class="nc" id="L176">                    ledgerCache.putEntryOffset(i, j, i * numEntries + j);</span>
+                }
+            }
+<span class="nc" id="L179">        } catch (Exception e) {</span>
+<span class="nc" id="L180">            LOG.error(&quot;Got Exception.&quot;, e);</span>
+<span class="nc" id="L181">            fail(&quot;Failed to add entry.&quot;);</span>
+<span class="nc" id="L182">        }</span>
+<span class="nc" id="L183">    }</span>
+
+    @Test
+    public void testDeleteLedger() throws Exception {
+<span class="nc" id="L187">        int numEntries = 10;</span>
+        // limit open files &amp; pages
+<span class="nc" id="L189">        conf.setOpenFileLimit(999).setPageLimit(2)</span>
+<span class="nc" id="L190">            .setPageSize(8 * numEntries);</span>
+        // create ledger cache
+<span class="nc" id="L192">        newLedgerCache();</span>
+        try {
+<span class="nc" id="L194">            int numLedgers = 2;</span>
+<span class="nc" id="L195">            byte[] masterKey = &quot;blah&quot;.getBytes();</span>
+<span class="nc bnc" id="L196" title="All 2 branches missed.">            for (int i = 1; i &lt;= numLedgers; i++) {</span>
+<span class="nc" id="L197">                ledgerCache.setMasterKey((long) i, masterKey);</span>
+<span class="nc bnc" id="L198" title="All 2 branches missed.">                for (int j = 0; j &lt; numEntries; j++) {</span>
+<span class="nc" id="L199">                    ledgerCache.putEntryOffset(i, j, i * numEntries + j);</span>
+                }
+            }
+            // ledger cache is exhausted
+            // delete ledgers
+<span class="nc bnc" id="L204" title="All 2 branches missed.">            for (int i = 1; i &lt;= numLedgers; i++) {</span>
+<span class="nc" id="L205">                ledgerCache.deleteLedger((long) i);</span>
+            }
+            // create num ledgers to add entries
+<span class="nc bnc" id="L208" title="All 2 branches missed.">            for (int i = numLedgers + 1; i &lt;= 2 * numLedgers; i++) {</span>
+<span class="nc" id="L209">                ledgerCache.setMasterKey((long) i, masterKey);</span>
+<span class="nc bnc" id="L210" title="All 2 branches missed.">                for (int j = 0; j &lt; numEntries; j++) {</span>
+<span class="nc" id="L211">                    ledgerCache.putEntryOffset(i, j, i * numEntries + j);</span>
+                }
+            }
+<span class="nc" id="L214">        } catch (Exception e) {</span>
+<span class="nc" id="L215">            LOG.error(&quot;Got Exception.&quot;, e);</span>
+<span class="nc" id="L216">            fail(&quot;Failed to add entry.&quot;);</span>
+<span class="nc" id="L217">        }</span>
+<span class="nc" id="L218">    }</span>
+
+    @Test
+    public void testPageEviction() throws Exception {
+<span class="nc" id="L222">        int numLedgers = 10;</span>
+<span class="nc" id="L223">        byte[] masterKey = &quot;blah&quot;.getBytes();</span>
+        // limit page count
+<span class="nc" id="L225">        conf.setOpenFileLimit(999999).setPageLimit(3);</span>
+        // create ledger cache
+<span class="nc" id="L227">        newLedgerCache();</span>
+        try {
+            // create serveral ledgers
+<span class="nc bnc" id="L230" title="All 2 branches missed.">            for (int i = 1; i &lt;= numLedgers; i++) {</span>
+<span class="nc" id="L231">                ledgerCache.setMasterKey((long) i, masterKey);</span>
+<span class="nc" id="L232">                ledgerCache.putEntryOffset(i, 0, i * 8);</span>
+<span class="nc" id="L233">                ledgerCache.putEntryOffset(i, 1, i * 8);</span>
+            }
+
+            // flush all first to clean previous dirty ledgers
+<span class="nc" id="L237">            ledgerCache.flushLedger(true);</span>
+            // flush all
+<span class="nc" id="L239">            ledgerCache.flushLedger(true);</span>
+
+            // delete serveral ledgers
+<span class="nc bnc" id="L242" title="All 2 branches missed.">            for (int i = 1; i &lt;= numLedgers / 2; i++) {</span>
+<span class="nc" id="L243">                ledgerCache.deleteLedger(i);</span>
+            }
+
+            // bookie restarts
+<span class="nc" id="L247">            newLedgerCache();</span>
+
+            // simulate replaying journals to add entries again
+<span class="nc bnc" id="L250" title="All 2 branches missed.">            for (int i = 1; i &lt;= numLedgers; i++) {</span>
+                try {
+<span class="nc" id="L252">                    ledgerCache.putEntryOffset(i, 1, i * 8);</span>
+<span class="nc" id="L253">                } catch (NoLedgerException nsle) {</span>
+<span class="nc bnc" id="L254" title="All 2 branches missed.">                    if (i &lt;= numLedgers / 2) {</span>
+                        // it is ok
+                    } else {
+<span class="nc" id="L257">                        LOG.error(&quot;Error put entry offset : &quot;, nsle);</span>
+<span class="nc" id="L258">                        fail(&quot;Should not reach here.&quot;);</span>
+                    }
+<span class="nc" id="L260">                }</span>
+            }
+<span class="nc" id="L262">        } catch (Exception e) {</span>
+<span class="nc" id="L263">            LOG.error(&quot;Got Exception.&quot;, e);</span>
+<span class="nc" id="L264">            fail(&quot;Failed to add entry.&quot;);</span>
+<span class="nc" id="L265">        }</span>
+<span class="nc" id="L266">    }</span>
+
+    /**
+     * Test Ledger Cache flush failure.
+     */
+    @Test
+    public void testLedgerCacheFlushFailureOnDiskFull() throws Exception {
+<span class="nc" id="L273">        File ledgerDir1 = createTempDir(&quot;bkTest&quot;, &quot;.dir&quot;);</span>
+<span class="nc" id="L274">        File ledgerDir2 = createTempDir(&quot;bkTest&quot;, &quot;.dir&quot;);</span>
+<span class="nc" id="L275">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L276">        conf.setLedgerDirNames(new String[] { ledgerDir1.getAbsolutePath(), ledgerDir2.getAbsolutePath() });</span>
+
+<span class="nc" id="L278">        Bookie bookie = new Bookie(conf);</span>
+<span class="nc" id="L279">        InterleavedLedgerStorage ledgerStorage =</span>
+<span class="nc" id="L280">                ((InterleavedLedgerStorage) bookie.ledgerStorage.getUnderlyingLedgerStorage());</span>
+<span class="nc" id="L281">        LedgerCacheImpl ledgerCache = (LedgerCacheImpl) ledgerStorage.ledgerCache;</span>
+        // Create ledger index file
+<span class="nc" id="L283">        ledgerStorage.setMasterKey(1, &quot;key&quot;.getBytes());</span>
+
+<span class="nc" id="L285">        CachedFileInfo fileInfo = ledgerCache.getIndexPersistenceManager().getFileInfo(Long.valueOf(1), null);</span>
+
+        // Add entries
+<span class="nc" id="L288">        ledgerStorage.addEntry(generateEntry(1, 1));</span>
+<span class="nc" id="L289">        ledgerStorage.addEntry(generateEntry(1, 2));</span>
+<span class="nc" id="L290">        ledgerStorage.flush();</span>
+
+<span class="nc" id="L292">        ledgerStorage.addEntry(generateEntry(1, 3));</span>
+        // add the dir to failed dirs
+<span class="nc" id="L294">        bookie.getIndexDirsManager().addToFilledDirs(</span>
+<span class="nc" id="L295">                fileInfo.getLf().getParentFile().getParentFile().getParentFile());</span>
+<span class="nc" id="L296">        File before = fileInfo.getLf();</span>
+        // flush after disk is added as failed.
+<span class="nc" id="L298">        ledgerStorage.flush();</span>
+<span class="nc" id="L299">        File after = fileInfo.getLf();</span>
+
+<span class="nc" id="L301">        assertFalse(&quot;After flush index file should be changed&quot;, before.equals(after));</span>
+        // Verify written entries
+<span class="nc" id="L303">        Assert.assertEquals(generateEntry(1, 1), ledgerStorage.getEntry(1, 1));</span>
+<span class="nc" id="L304">        Assert.assertEquals(generateEntry(1, 2), ledgerStorage.getEntry(1, 2));</span>
+<span class="nc" id="L305">        Assert.assertEquals(generateEntry(1, 3), ledgerStorage.getEntry(1, 3));</span>
+<span class="nc" id="L306">    }</span>
+
+    /**
+     * Test that if we are writing to more ledgers than there
+     * are pages, then we will not flush the index before the
+     * entries in the entrylogger have been persisted to disk.
+     * {@link https://issues.apache.org/jira/browse/BOOKKEEPER-447}
+     */
+    @Test
+    public void testIndexPageEvictionWriteOrder() throws Exception {
+<span class="nc" id="L316">        final int numLedgers = 10;</span>
+<span class="nc" id="L317">        File journalDir = createTempDir(&quot;bookie&quot;, &quot;journal&quot;);</span>
+<span class="nc" id="L318">        Bookie.checkDirectoryStructure(Bookie.getCurrentDirectory(journalDir));</span>
+
+<span class="nc" id="L320">        File ledgerDir = createTempDir(&quot;bookie&quot;, &quot;ledger&quot;);</span>
+<span class="nc" id="L321">        Bookie.checkDirectoryStructure(Bookie.getCurrentDirectory(ledgerDir));</span>
+
+<span class="nc" id="L323">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L324">        conf.setMetadataServiceUri(null);</span>
+<span class="nc" id="L325">        conf.setJournalDirName(journalDir.getPath())</span>
+<span class="nc" id="L326">            .setLedgerDirNames(new String[] { ledgerDir.getPath() })</span>
+<span class="nc" id="L327">            .setFlushInterval(1000)</span>
+<span class="nc" id="L328">            .setPageLimit(1)</span>
+<span class="nc" id="L329">            .setLedgerStorageClass(InterleavedLedgerStorage.class.getName());</span>
+
+<span class="nc" id="L331">        Bookie b = new Bookie(conf);</span>
+<span class="nc" id="L332">        b.start();</span>
+<span class="nc bnc" id="L333" title="All 2 branches missed.">        for (int i = 1; i &lt;= numLedgers; i++) {</span>
+<span class="nc" id="L334">            ByteBuf packet = generateEntry(i, 1);</span>
+<span class="nc" id="L335">            b.addEntry(packet, false, new Bookie.NopWriteCallback(), null, &quot;passwd&quot;.getBytes());</span>
+        }
+
+<span class="nc" id="L338">        conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L339">        conf.setMetadataServiceUri(null);</span>
+<span class="nc" id="L340">        conf.setJournalDirName(journalDir.getPath())</span>
+<span class="nc" id="L341">            .setLedgerDirNames(new String[] { ledgerDir.getPath() });</span>
+
+<span class="nc" id="L343">        b = new Bookie(conf);</span>
+<span class="nc bnc" id="L344" title="All 2 branches missed.">        for (int i = 1; i &lt;= numLedgers; i++) {</span>
+            try {
+<span class="nc" id="L346">                b.readEntry(i, 1);</span>
+<span class="nc" id="L347">            } catch (Bookie.NoLedgerException nle) {</span>
+                // this is fine, means the ledger was never written to the index cache
+<span class="nc" id="L349">                assertEquals(&quot;No ledger should only happen for the last ledger&quot;,</span>
+                             i, numLedgers);
+<span class="nc" id="L351">            } catch (Bookie.NoEntryException nee) {</span>
+                // this is fine, means the ledger was written to the index cache, but not
+                // the entry log
+<span class="nc" id="L354">            } catch (IOException ioe) {</span>
+<span class="nc" id="L355">                LOG.info(&quot;Shouldn't have received IOException&quot;, ioe);</span>
+<span class="nc" id="L356">                fail(&quot;Shouldn't throw IOException, should say that entry is not found&quot;);</span>
+<span class="nc" id="L357">            }</span>
+        }
+<span class="nc" id="L359">    }</span>
+
+
+    /**
+     * {@link https://issues.apache.org/jira/browse/BOOKKEEPER-524}
+     * Checks that getLedgerEntryPage does not throw an NPE in the
+     * case getFromTable returns a null ledger entry page reference.
+     * This NPE might kill the sync thread leaving a bookie with no
+     * sync thread running.
+     *
+     * @throws IOException
+     */
+    @Test
+    public void testSyncThreadNPE() throws IOException {
+<span class="nc" id="L373">        newLedgerCache();</span>
+        try {
+<span class="nc" id="L375">            ((LedgerCacheImpl) ledgerCache).getIndexPageManager().getLedgerEntryPageFromCache(0L, 0L, true);</span>
+<span class="nc" id="L376">        } catch (Exception e) {</span>
+<span class="nc" id="L377">            LOG.error(&quot;Exception when trying to get a ledger entry page&quot;, e);</span>
+<span class="nc" id="L378">            fail(&quot;Shouldn't have thrown an exception&quot;);</span>
+<span class="nc" id="L379">        }</span>
+<span class="nc" id="L380">    }</span>
+
+
+    /**
+     * Test for race between putEntryOffset and flush.
+     * {@link https://github.com/apache/bookkeeper/issues/1919}
+     */
+    @Test
+    public void testPutEntryOffsetDeleteRace() throws Exception {
+<span class="nc" id="L389">        newLedgerCache();</span>
+<span class="nc" id="L390">        final AtomicInteger rc = new AtomicInteger(0);</span>
+<span class="nc" id="L391">        final LinkedBlockingQueue&lt;Long&gt; putQ = new LinkedBlockingQueue&lt;&gt;(100);</span>
+<span class="nc" id="L392">        final LinkedBlockingQueue&lt;Long&gt; deleteQ = new LinkedBlockingQueue&lt;&gt;(100);</span>
+<span class="nc" id="L393">        final byte[] masterKey = &quot;masterKey&quot;.getBytes();</span>
+<span class="nc" id="L394">        final long numLedgers = 1000;</span>
+<span class="nc" id="L395">        final int numPutters = 10;</span>
+<span class="nc" id="L396">        final int numDeleters = 10;</span>
+<span class="nc" id="L397">        final AtomicBoolean running = new AtomicBoolean(true);</span>
+<span class="nc" id="L398">        Thread newLedgerThread = new Thread() {</span>
+                public void run() {
+                    try {
+<span class="nc bnc" id="L401" title="All 4 branches missed.">                        for (long i = 0; i &lt; numLedgers &amp;&amp; rc.get() == 0; i++) {</span>
+<span class="nc" id="L402">                            ledgerCache.setMasterKey(i, masterKey);</span>
+
+<span class="nc" id="L404">                            ledgerCache.putEntryOffset(i, 1, 0);</span>
+<span class="nc" id="L405">                            deleteQ.put(i);</span>
+<span class="nc" id="L406">                            putQ.put(i);</span>
+                        }
+<span class="nc bnc" id="L408" title="All 2 branches missed.">                        for (int i = 0; i &lt; numPutters; ++i) {</span>
+<span class="nc" id="L409">                            putQ.put(-1L);</span>
+                        }
+<span class="nc bnc" id="L411" title="All 2 branches missed.">                        for (int i = 0; i &lt; numDeleters; ++i) {</span>
+<span class="nc" id="L412">                            deleteQ.put(-1L);</span>
+                        }
+<span class="nc" id="L414">                    } catch (Throwable e) {</span>
+<span class="nc" id="L415">                        rc.set(-1);</span>
+<span class="nc" id="L416">                        LOG.error(&quot;Exception in new ledger thread&quot;, e);</span>
+<span class="nc" id="L417">                    }</span>
+<span class="nc" id="L418">                }</span>
+            };
+<span class="nc" id="L420">        newLedgerThread.start();</span>
+
+<span class="nc" id="L422">        Thread[] flushThreads = new Thread[numPutters];</span>
+<span class="nc bnc" id="L423" title="All 2 branches missed.">        for (int i = 0; i &lt; numPutters; ++i) {</span>
+<span class="nc" id="L424">            Thread flushThread = new Thread() {</span>
+                public void run() {
+                    try {
+                        while (true) {
+<span class="nc" id="L428">                            long id = putQ.take();</span>
+<span class="nc bnc" id="L429" title="All 2 branches missed.">                            if (id == -1L) {</span>
+<span class="nc" id="L430">                                break;</span>
+                            }
+<span class="nc" id="L432">                            LOG.info(&quot;Putting {}&quot;, id);</span>
+                            try {
+<span class="nc" id="L434">                                ledgerCache.putEntryOffset(id, 2, 0);</span>
+<span class="nc" id="L435">                                ledgerCache.deleteLedger(id);</span>
+<span class="nc" id="L436">                            } catch (NoLedgerException e) {</span>
+                                // No problem
+<span class="nc" id="L438">                            }</span>
+<span class="nc" id="L439">                        }</span>
+<span class="nc" id="L440">                    } catch (Throwable e) {</span>
+<span class="nc" id="L441">                        rc.set(-1);</span>
+<span class="nc" id="L442">                        LOG.error(&quot;Exception in put thread&quot;, e);</span>
+<span class="nc" id="L443">                    }</span>
+<span class="nc" id="L444">                }</span>
+            };
+<span class="nc" id="L446">            flushThread.start();</span>
+<span class="nc" id="L447">            flushThreads[i] = flushThread;</span>
+        }
+
+<span class="nc" id="L450">        Thread[] deleteThreads = new Thread[numDeleters];</span>
+<span class="nc bnc" id="L451" title="All 2 branches missed.">        for (int i = 0; i &lt; numDeleters; ++i) {</span>
+<span class="nc" id="L452">            Thread deleteThread = new Thread() {</span>
+                public void run() {
+                    try {
+                        while (true) {
+<span class="nc" id="L456">                            long id = deleteQ.take();</span>
+<span class="nc bnc" id="L457" title="All 2 branches missed.">                            if (id == -1L) {</span>
+<span class="nc" id="L458">                                break;</span>
+                            }
+<span class="nc" id="L460">                            LOG.info(&quot;Deleting {}&quot;, id);</span>
+                            try {
+<span class="nc" id="L462">                                ledgerCache.deleteLedger(id);</span>
+<span class="nc" id="L463">                            } catch (NoLedgerException e) {</span>
+                                // No problem
+<span class="nc" id="L465">                            }</span>
+<span class="nc" id="L466">                        }</span>
+<span class="nc" id="L467">                    } catch (Throwable e) {</span>
+<span class="nc" id="L468">                        rc.set(-1);</span>
+<span class="nc" id="L469">                        LOG.error(&quot;Exception in delete thread&quot;, e);</span>
+<span class="nc" id="L470">                    }</span>
+<span class="nc" id="L471">                }</span>
+            };
+<span class="nc" id="L473">            deleteThread.start();</span>
+<span class="nc" id="L474">            deleteThreads[i] = deleteThread;</span>
+        }
+
+<span class="nc" id="L477">        newLedgerThread.join();</span>
+
+<span class="nc bnc" id="L479" title="All 2 branches missed.">        for (Thread deleteThread : deleteThreads) {</span>
+<span class="nc" id="L480">            deleteThread.join();</span>
+        }
+
+<span class="nc" id="L483">        running.set(false);</span>
+<span class="nc bnc" id="L484" title="All 2 branches missed.">        for (Thread flushThread : flushThreads) {</span>
+<span class="nc" id="L485">            flushThread.join();</span>
+        }
+
+<span class="nc" id="L488">        assertEquals(&quot;Should have been no errors&quot;, rc.get(), 0);</span>
+<span class="nc bnc" id="L489" title="All 2 branches missed.">        for (long i = 0L; i &lt; numLedgers; ++i) {</span>
+<span class="nc" id="L490">            boolean gotError = false;</span>
+            try {
+<span class="nc" id="L492">                LOG.error(&quot;Checking {}&quot;, i);</span>
+<span class="nc" id="L493">                ledgerCache.getEntryOffset(i, 0);</span>
+<span class="nc" id="L494">            } catch (NoLedgerException e) {</span>
+<span class="nc" id="L495">                gotError = true;</span>
+<span class="nc" id="L496">            }</span>
+<span class="nc bnc" id="L497" title="All 2 branches missed.">            if (!gotError) {</span>
+<span class="nc" id="L498">                LOG.error(&quot;Ledger {} is still around&quot;, i);</span>
+<span class="nc" id="L499">                fail(&quot;Found ledger &quot; + i + &quot;, which should have been removed&quot;);</span>
+            }
+        }
+<span class="nc" id="L502">    }</span>
+
+    /**
+     * Test for race between delete and flush.
+     * {@link https://issues.apache.org/jira/browse/BOOKKEEPER-604}
+     * {@link https://github.com/apache/bookkeeper/issues/1757}
+     */
+    @Test
+    public void testFlushDeleteRace() throws Exception {
+<span class="nc" id="L511">        newLedgerCache();</span>
+<span class="nc" id="L512">        final AtomicInteger rc = new AtomicInteger(0);</span>
+<span class="nc" id="L513">        final LinkedBlockingQueue&lt;Long&gt; ledgerQ = new LinkedBlockingQueue&lt;&gt;(100);</span>
+<span class="nc" id="L514">        final byte[] masterKey = &quot;masterKey&quot;.getBytes();</span>
+<span class="nc" id="L515">        final long numLedgers = 1000;</span>
+<span class="nc" id="L516">        final int numFlushers = 10;</span>
+<span class="nc" id="L517">        final int numDeleters = 10;</span>
+<span class="nc" id="L518">        final AtomicBoolean running = new AtomicBoolean(true);</span>
+<span class="nc" id="L519">        Thread newLedgerThread = new Thread() {</span>
+                public void run() {
+                    try {
+<span class="nc bnc" id="L522" title="All 4 branches missed.">                        for (long i = 0; i &lt; numLedgers &amp;&amp; rc.get() == 0; i++) {</span>
+<span class="nc" id="L523">                            ledgerCache.setMasterKey(i, masterKey);</span>
+
+<span class="nc" id="L525">                            ledgerCache.putEntryOffset(i, 1, 0);</span>
+<span class="nc" id="L526">                            ledgerQ.put(i);</span>
+                        }
+<span class="nc bnc" id="L528" title="All 2 branches missed.">                        for (int i = 0; i &lt; numDeleters; ++i) {</span>
+<span class="nc" id="L529">                            ledgerQ.put(-1L);</span>
+                        }
+<span class="nc" id="L531">                    } catch (Throwable e) {</span>
+<span class="nc" id="L532">                        rc.set(-1);</span>
+<span class="nc" id="L533">                        LOG.error(&quot;Exception in new ledger thread&quot;, e);</span>
+<span class="nc" id="L534">                    }</span>
+<span class="nc" id="L535">                }</span>
+            };
+<span class="nc" id="L537">        newLedgerThread.start();</span>
+
+<span class="nc" id="L539">        Thread[] flushThreads = new Thread[numFlushers];</span>
+<span class="nc bnc" id="L540" title="All 2 branches missed.">        for (int i = 0; i &lt; numFlushers; ++i) {</span>
+<span class="nc" id="L541">            Thread flushThread = new Thread() {</span>
+                public void run() {
+                    try {
+<span class="nc bnc" id="L544" title="All 2 branches missed.">                        while (running.get()) {</span>
+<span class="nc" id="L545">                            ledgerCache.flushLedger(true);</span>
+                        }
+<span class="nc" id="L547">                    } catch (Throwable e) {</span>
+<span class="nc" id="L548">                        rc.set(-1);</span>
+<span class="nc" id="L549">                        LOG.error(&quot;Exception in flush thread&quot;, e);</span>
+<span class="nc" id="L550">                    }</span>
+<span class="nc" id="L551">                    LOG.error(&quot;Shutting down flush thread&quot;);</span>
+<span class="nc" id="L552">                }</span>
+            };
+<span class="nc" id="L554">            flushThread.start();</span>
+<span class="nc" id="L555">            flushThreads[i] = flushThread;</span>
+        }
+
+<span class="nc" id="L558">        Thread[] deleteThreads = new Thread[numDeleters];</span>
+<span class="nc bnc" id="L559" title="All 2 branches missed.">        for (int i = 0; i &lt; numDeleters; ++i) {</span>
+<span class="nc" id="L560">            Thread deleteThread = new Thread() {</span>
+                public void run() {
+                    try {
+                        while (true) {
+<span class="nc" id="L564">                            long id = ledgerQ.take();</span>
+<span class="nc bnc" id="L565" title="All 2 branches missed.">                            if (id == -1L) {</span>
+<span class="nc" id="L566">                                break;</span>
+                            }
+<span class="nc" id="L568">                            LOG.info(&quot;Deleting {}&quot;, id);</span>
+<span class="nc" id="L569">                            ledgerCache.deleteLedger(id);</span>
+<span class="nc" id="L570">                        }</span>
+<span class="nc" id="L571">                    } catch (Throwable e) {</span>
+<span class="nc" id="L572">                        rc.set(-1);</span>
+<span class="nc" id="L573">                        LOG.error(&quot;Exception in delete thread&quot;, e);</span>
+<span class="nc" id="L574">                    }</span>
+<span class="nc" id="L575">                }</span>
+            };
+<span class="nc" id="L577">            deleteThread.start();</span>
+<span class="nc" id="L578">            deleteThreads[i] = deleteThread;</span>
+        }
+
+<span class="nc" id="L581">        newLedgerThread.join();</span>
+
+<span class="nc bnc" id="L583" title="All 2 branches missed.">        for (Thread deleteThread : deleteThreads) {</span>
+<span class="nc" id="L584">            deleteThread.join();</span>
+        }
+
+<span class="nc" id="L587">        running.set(false);</span>
+<span class="nc bnc" id="L588" title="All 2 branches missed.">        for (Thread flushThread : flushThreads) {</span>
+<span class="nc" id="L589">            flushThread.join();</span>
+        }
+
+<span class="nc" id="L592">        assertEquals(&quot;Should have been no errors&quot;, rc.get(), 0);</span>
+<span class="nc bnc" id="L593" title="All 2 branches missed.">        for (long i = 0L; i &lt; numLedgers; ++i) {</span>
+<span class="nc" id="L594">            boolean gotError = false;</span>
+            try {
+<span class="nc" id="L596">                LOG.error(&quot;Checking {}&quot;, i);</span>
+<span class="nc" id="L597">                ledgerCache.getEntryOffset(i, 0);</span>
+<span class="nc" id="L598">            } catch (NoLedgerException e) {</span>
+<span class="nc" id="L599">                gotError = true;</span>
+<span class="nc" id="L600">            }</span>
+<span class="nc bnc" id="L601" title="All 2 branches missed.">            if (!gotError) {</span>
+<span class="nc" id="L602">                LOG.error(&quot;Ledger {} is still around&quot;, i);</span>
+<span class="nc" id="L603">                fail(&quot;Found ledger &quot; + i + &quot;, which should have been removed&quot;);</span>
+            }
+        }
+<span class="nc" id="L606">    }</span>
+
+    // Mock SortedLedgerStorage to simulate flush failure (Dependency Fault Injection)
+    static class FlushTestSortedLedgerStorage extends SortedLedgerStorage {
+        final AtomicBoolean injectMemTableSizeLimitReached;
+        final AtomicBoolean injectFlushException;
+        final AtomicLong injectFlushExceptionForLedger;
+<span class="nc" id="L613">        final AtomicInteger numOfTimesFlushSnapshotCalled = new AtomicInteger(0);</span>
+        static final long FORALLLEDGERS = -1;
+
+        public FlushTestSortedLedgerStorage() {
+<span class="nc" id="L617">            super();</span>
+<span class="nc" id="L618">            injectMemTableSizeLimitReached = new AtomicBoolean();</span>
+<span class="nc" id="L619">            injectFlushException = new AtomicBoolean();</span>
+<span class="nc" id="L620">            injectFlushExceptionForLedger = new AtomicLong(FORALLLEDGERS);</span>
+<span class="nc" id="L621">        }</span>
+
+        public void setInjectMemTableSizeLimitReached(boolean setValue) {
+<span class="nc" id="L624">            injectMemTableSizeLimitReached.set(setValue);</span>
+<span class="nc" id="L625">        }</span>
+
+        public void setInjectFlushException(boolean setValue, long ledgerId) {
+<span class="nc" id="L628">            injectFlushException.set(setValue);</span>
+<span class="nc" id="L629">            injectFlushExceptionForLedger.set(ledgerId);</span>
+<span class="nc" id="L630">        }</span>
+
+        public void incrementNumOfTimesFlushSnapshotCalled() {
+<span class="nc" id="L633">            numOfTimesFlushSnapshotCalled.incrementAndGet();</span>
+<span class="nc" id="L634">        }</span>
+
+        public int getNumOfTimesFlushSnapshotCalled() {
+<span class="nc" id="L637">            return numOfTimesFlushSnapshotCalled.get();</span>
+        }
+
+        @Override
+        public void initialize(ServerConfiguration conf,
+                               LedgerManager ledgerManager,
+                               LedgerDirsManager ledgerDirsManager,
+                               LedgerDirsManager indexDirsManager,
+                               StateManager stateManager,
+                               CheckpointSource checkpointSource,
+                               Checkpointer checkpointer,
+                               StatsLogger statsLogger,
+                               ByteBufAllocator allocator) throws IOException {
+<span class="nc" id="L650">            super.initialize(</span>
+                conf,
+                ledgerManager,
+                ledgerDirsManager,
+                indexDirsManager,
+                stateManager,
+                checkpointSource,
+                checkpointer,
+                statsLogger,
+                allocator);
+<span class="nc bnc" id="L660" title="All 2 branches missed.">            if (this.memTable instanceof EntryMemTableWithParallelFlusher) {</span>
+<span class="nc" id="L661">                this.memTable = new EntryMemTableWithParallelFlusher(conf, checkpointSource, statsLogger) {</span>
+                    @Override
+                    boolean isSizeLimitReached() {
+<span class="nc bnc" id="L664" title="All 4 branches missed.">                        return (injectMemTableSizeLimitReached.get() || super.isSizeLimitReached());</span>
+                    }
+
+                    @Override
+                    long flushSnapshot(final SkipListFlusher flusher, Checkpoint checkpoint) throws IOException {
+<span class="nc" id="L669">                        incrementNumOfTimesFlushSnapshotCalled();</span>
+<span class="nc" id="L670">                        return super.flushSnapshot(flusher, checkpoint);</span>
+                    }
+                };
+            } else {
+<span class="nc" id="L674">                this.memTable = new EntryMemTable(conf, checkpointSource, statsLogger) {</span>
+                    @Override
+                    boolean isSizeLimitReached() {
+<span class="nc bnc" id="L677" title="All 4 branches missed.">                        return (injectMemTableSizeLimitReached.get() || super.isSizeLimitReached());</span>
+                    }
+
+                    @Override
+                    long flushSnapshot(final SkipListFlusher flusher, Checkpoint checkpoint) throws IOException {
+<span class="nc" id="L682">                        incrementNumOfTimesFlushSnapshotCalled();</span>
+<span class="nc" id="L683">                        return super.flushSnapshot(flusher, checkpoint);</span>
+                    }
+                };
+            }
+<span class="nc" id="L687">        }</span>
+
+        @Override
+        public void process(long ledgerId, long entryId, ByteBuf buffer) throws IOException {
+<span class="nc bnc" id="L691" title="All 4 branches missed.">            if (injectFlushException.get() &amp;&amp; ((injectFlushExceptionForLedger.get() == FORALLLEDGERS)</span>
+<span class="nc bnc" id="L692" title="All 2 branches missed.">                    || (injectFlushExceptionForLedger.get() == ledgerId))) {</span>
+<span class="nc" id="L693">                throw new IOException(&quot;Injected Exception&quot;);</span>
+            }
+<span class="nc" id="L695">            super.process(ledgerId, entryId, buffer);</span>
+<span class="nc" id="L696">        }</span>
+
+        // simplified memTable full callback.
+        @Override
+        public void onSizeLimitReached(final CheckpointSource.Checkpoint cp) throws IOException {
+<span class="nc" id="L701">            LOG.info(&quot;Reached size {}&quot;, cp);</span>
+            // use synchronous way
+            try {
+<span class="nc" id="L704">                LOG.info(&quot;Started flushing mem table.&quot;);</span>
+<span class="nc" id="L705">                memTable.flush(FlushTestSortedLedgerStorage.this);</span>
+<span class="nc" id="L706">            } catch (IOException e) {</span>
+<span class="nc" id="L707">                getStateManager().doTransitionToReadOnlyMode();</span>
+<span class="nc" id="L708">                LOG.error(&quot;Exception thrown while flushing skip list cache.&quot;, e);</span>
+<span class="nc" id="L709">         }</span>
+<span class="nc" id="L710">         }</span>
+
+    }
+
+    @Test
+    public void testEntryMemTableFlushFailure() throws Exception {
+<span class="nc" id="L716">        File tmpDir = createTempDir(&quot;bkTest&quot;, &quot;.dir&quot;);</span>
+<span class="nc" id="L717">        File curDir = Bookie.getCurrentDirectory(tmpDir);</span>
+<span class="nc" id="L718">        Bookie.checkDirectoryStructure(curDir);</span>
+
+<span class="nc" id="L720">        int gcWaitTime = 1000;</span>
+<span class="nc" id="L721">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L722">        conf.setGcWaitTime(gcWaitTime);</span>
+<span class="nc" id="L723">        conf.setLedgerDirNames(new String[] { tmpDir.toString() });</span>
+<span class="nc" id="L724">        conf.setLedgerStorageClass(FlushTestSortedLedgerStorage.class.getName());</span>
+
+<span class="nc" id="L726">        Bookie bookie = new Bookie(conf);</span>
+<span class="nc" id="L727">        FlushTestSortedLedgerStorage flushTestSortedLedgerStorage = (FlushTestSortedLedgerStorage) bookie.ledgerStorage;</span>
+<span class="nc" id="L728">        EntryMemTable memTable = flushTestSortedLedgerStorage.memTable;</span>
+
+        // this bookie.addEntry call is required. FileInfo for Ledger 1 would be created with this call.
+        // without the fileinfo, 'flushTestSortedLedgerStorage.addEntry' calls will fail
+        // because of BOOKKEEPER-965 change.
+<span class="nc" id="L733">        bookie.addEntry(generateEntry(1, 1), false, new Bookie.NopWriteCallback(), null, &quot;passwd&quot;.getBytes());</span>
+
+<span class="nc" id="L735">        flushTestSortedLedgerStorage.addEntry(generateEntry(1, 2));</span>
+<span class="nc" id="L736">        assertFalse(&quot;Bookie is expected to be in ReadWrite mode&quot;, bookie.isReadOnly());</span>
+<span class="nc" id="L737">        assertTrue(&quot;EntryMemTable SnapShot is expected to be empty&quot;, memTable.snapshot.isEmpty());</span>
+
+        // set flags, so that FlushTestSortedLedgerStorage simulates FlushFailure scenario
+<span class="nc" id="L740">        flushTestSortedLedgerStorage.setInjectMemTableSizeLimitReached(true);</span>
+<span class="nc" id="L741">        flushTestSortedLedgerStorage.setInjectFlushException(true, FlushTestSortedLedgerStorage.FORALLLEDGERS);</span>
+<span class="nc" id="L742">        flushTestSortedLedgerStorage.addEntry(generateEntry(1, 2));</span>
+
+        // since we simulated sizeLimitReached, snapshot shouldn't be empty
+<span class="nc" id="L745">        assertFalse(&quot;EntryMemTable SnapShot is not expected to be empty&quot;, memTable.snapshot.isEmpty());</span>
+<span class="nc" id="L746">        assertEquals(&quot;Flusher called&quot;, 1, flushTestSortedLedgerStorage.getNumOfTimesFlushSnapshotCalled());</span>
+
+        // set the flags to false, so flush will succeed this time
+<span class="nc" id="L749">        flushTestSortedLedgerStorage.setInjectMemTableSizeLimitReached(false);</span>
+<span class="nc" id="L750">        flushTestSortedLedgerStorage.setInjectFlushException(false, FlushTestSortedLedgerStorage.FORALLLEDGERS);</span>
+
+<span class="nc" id="L752">        flushTestSortedLedgerStorage.addEntry(generateEntry(1, 3));</span>
+        // since we expect memtable flush to succeed, memtable snapshot should be empty
+<span class="nc" id="L754">        assertTrue(&quot;EntryMemTable SnapShot is expected to be empty, because of successful flush&quot;,</span>
+<span class="nc" id="L755">                memTable.snapshot.isEmpty());</span>
+<span class="nc" id="L756">    }</span>
+
+    @Test
+    public void testSortedLedgerFlushFailure() throws Exception {
+        // most of the code is same to the testEntryMemTableFlushFailure
+<span class="nc" id="L761">        File tmpDir = createTempDir(&quot;bkTest&quot;, &quot;.dir&quot;);</span>
+<span class="nc" id="L762">        File curDir = Bookie.getCurrentDirectory(tmpDir);</span>
+<span class="nc" id="L763">        Bookie.checkDirectoryStructure(curDir);</span>
+
+<span class="nc" id="L765">        int gcWaitTime = 1000;</span>
+<span class="nc" id="L766">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L767">        conf.setGcWaitTime(gcWaitTime)</span>
+<span class="nc" id="L768">            .setLedgerDirNames(new String[] { tmpDir.toString() })</span>
+<span class="nc" id="L769">            .setJournalDirName(tmpDir.toString())</span>
+<span class="nc" id="L770">            .setLedgerStorageClass(FlushTestSortedLedgerStorage.class.getName());</span>
+
+<span class="nc" id="L772">        Bookie bookie = new Bookie(conf);</span>
+<span class="nc" id="L773">        bookie.start();</span>
+<span class="nc" id="L774">        FlushTestSortedLedgerStorage flushTestSortedLedgerStorage = (FlushTestSortedLedgerStorage) bookie.ledgerStorage;</span>
+<span class="nc" id="L775">        EntryMemTable memTable = flushTestSortedLedgerStorage.memTable;</span>
+
+<span class="nc" id="L777">        bookie.addEntry(generateEntry(1, 1), false, new Bookie.NopWriteCallback(), null, &quot;passwd&quot;.getBytes());</span>
+<span class="nc" id="L778">        flushTestSortedLedgerStorage.addEntry(generateEntry(1, 2));</span>
+<span class="nc" id="L779">        assertFalse(&quot;Bookie is expected to be in ReadWrite mode&quot;, bookie.isReadOnly());</span>
+<span class="nc" id="L780">        assertTrue(&quot;EntryMemTable SnapShot is expected to be empty&quot;, memTable.snapshot.isEmpty());</span>
+
+        // set flags, so that FlushTestSortedLedgerStorage simulates FlushFailure scenario
+<span class="nc" id="L783">        flushTestSortedLedgerStorage.setInjectMemTableSizeLimitReached(true);</span>
+<span class="nc" id="L784">        flushTestSortedLedgerStorage.setInjectFlushException(true, FlushTestSortedLedgerStorage.FORALLLEDGERS);</span>
+<span class="nc" id="L785">        flushTestSortedLedgerStorage.addEntry(generateEntry(1, 2));</span>
+
+        // since we simulated sizeLimitReached, snapshot shouldn't be empty
+<span class="nc" id="L788">        assertFalse(&quot;EntryMemTable SnapShot is not expected to be empty&quot;, memTable.snapshot.isEmpty());</span>
+        // after flush failure, the bookie is set to readOnly
+<span class="nc" id="L790">        assertTrue(&quot;Bookie is expected to be in Read mode&quot;, bookie.isReadOnly());</span>
+        // write fail
+<span class="nc" id="L792">        bookie.addEntry(generateEntry(1, 3), false, new BookkeeperInternalCallbacks.WriteCallback(){</span>
+            public void writeComplete(int rc, long ledgerId, long entryId, BookieSocketAddress addr, Object ctx){
+<span class="nc" id="L794">                LOG.info(&quot;fail write to bk&quot;);</span>
+<span class="nc bnc" id="L795" title="All 2 branches missed.">                assertTrue(rc != OK);</span>
+<span class="nc" id="L796">            }</span>
+
+<span class="nc" id="L798">        }, null, &quot;passwd&quot;.getBytes());</span>
+<span class="nc" id="L799">        bookie.shutdown();</span>
+
+<span class="nc" id="L801">    }</span>
+
+    private ByteBuf generateEntry(long ledger, long entry) {
+<span class="nc" id="L804">        byte[] data = (&quot;ledger-&quot; + ledger + &quot;-&quot; + entry).getBytes();</span>
+<span class="nc" id="L805">        ByteBuf bb = Unpooled.buffer(8 + 8 + data.length);</span>
+<span class="nc" id="L806">        bb.writeLong(ledger);</span>
+<span class="nc" id="L807">        bb.writeLong(entry);</span>
+<span class="nc" id="L808">        bb.writeBytes(data);</span>
+<span class="nc" id="L809">        return bb;</span>
+    }
+
+    @Test
+    public void testEntryMemTableParallelFlush() throws Exception {
+<span class="nc" id="L814">        int gcWaitTime = 1000;</span>
+<span class="nc" id="L815">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L816">        conf.setGcWaitTime(gcWaitTime);</span>
+<span class="nc" id="L817">        conf.setLedgerDirNames(createAndGetLedgerDirs(1));</span>
+<span class="nc" id="L818">        conf.setLedgerStorageClass(FlushTestSortedLedgerStorage.class.getName());</span>
+        // enable entrylog per ledger
+<span class="nc" id="L820">        conf.setEntryLogPerLedgerEnabled(true);</span>
+
+<span class="nc" id="L822">        Bookie bookie = new Bookie(conf);</span>
+<span class="nc" id="L823">        FlushTestSortedLedgerStorage flushTestSortedLedgerStorage = (FlushTestSortedLedgerStorage) bookie.ledgerStorage;</span>
+<span class="nc" id="L824">        EntryMemTable memTable = flushTestSortedLedgerStorage.memTable;</span>
+
+        /*
+         * this bookie.addEntry call is required. FileInfo for Ledger 1, 2, 3
+         * would be created with this call. without the fileinfo,
+         * 'flushTestSortedLedgerStorage.addEntry' calls will fail because of
+         * BOOKKEEPER-965 change.
+         */
+<span class="nc" id="L832">        bookie.addEntry(generateEntry(1, 1), false, new Bookie.NopWriteCallback(), null, &quot;passwd&quot;.getBytes());</span>
+<span class="nc" id="L833">        bookie.addEntry(generateEntry(2, 1), false, new Bookie.NopWriteCallback(), null, &quot;passwd&quot;.getBytes());</span>
+<span class="nc" id="L834">        bookie.addEntry(generateEntry(3, 1), false, new Bookie.NopWriteCallback(), null, &quot;passwd&quot;.getBytes());</span>
+
+<span class="nc" id="L836">        flushTestSortedLedgerStorage.addEntry(generateEntry(1, 2));</span>
+<span class="nc" id="L837">        flushTestSortedLedgerStorage.addEntry(generateEntry(2, 2));</span>
+<span class="nc" id="L838">        flushTestSortedLedgerStorage.addEntry(generateEntry(3, 2));</span>
+
+<span class="nc" id="L840">        assertTrue(&quot;EntryMemTable SnapShot is expected to be empty&quot;, memTable.snapshot.isEmpty());</span>
+<span class="nc" id="L841">        assertFalse(&quot;EntryMemTable is not expected to be empty&quot;, memTable.isEmpty());</span>
+
+        // inject MemTableSizeLimitReached, so entrymemtable will be flushed
+<span class="nc" id="L844">        flushTestSortedLedgerStorage.setInjectMemTableSizeLimitReached(true);</span>
+<span class="nc" id="L845">        flushTestSortedLedgerStorage.addEntry(generateEntry(1, 3));</span>
+
+        // since we simulated sizeLimitReached, snapshot should have been created and flushed
+<span class="nc" id="L848">        assertTrue(&quot;EntryMemTable SnapShot is expected to be empty&quot;, memTable.snapshot.isEmpty());</span>
+<span class="nc" id="L849">        assertEquals(&quot;Flusher called&quot;, 1, flushTestSortedLedgerStorage.getNumOfTimesFlushSnapshotCalled());</span>
+<span class="nc" id="L850">    }</span>
+
+    @Test
+    public void testEntryMemTableParallelFlushWithFlushException() throws Exception {
+<span class="nc" id="L854">        int gcWaitTime = 1000;</span>
+<span class="nc" id="L855">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L856">        conf.setGcWaitTime(gcWaitTime);</span>
+<span class="nc" id="L857">        conf.setLedgerDirNames(createAndGetLedgerDirs(1));</span>
+<span class="nc" id="L858">        conf.setLedgerStorageClass(FlushTestSortedLedgerStorage.class.getName());</span>
+        // enable entrylog per ledger
+<span class="nc" id="L860">        conf.setEntryLogPerLedgerEnabled(true);</span>
+
+<span class="nc" id="L862">        Bookie bookie = new Bookie(conf);</span>
+<span class="nc" id="L863">        FlushTestSortedLedgerStorage flushTestSortedLedgerStorage = (FlushTestSortedLedgerStorage) bookie.ledgerStorage;</span>
+<span class="nc" id="L864">        EntryMemTable memTable = flushTestSortedLedgerStorage.memTable;</span>
+
+        /*
+         * this bookie.addEntry call is required. FileInfo for Ledger 1, 2, 3
+         * would be created with this call. without the fileinfo,
+         * 'flushTestSortedLedgerStorage.addEntry' calls will fail because of
+         * BOOKKEEPER-965 change.
+         */
+<span class="nc" id="L872">        bookie.addEntry(generateEntry(1, 1), false, new Bookie.NopWriteCallback(), null, &quot;passwd&quot;.getBytes());</span>
+<span class="nc" id="L873">        bookie.addEntry(generateEntry(2, 1), false, new Bookie.NopWriteCallback(), null, &quot;passwd&quot;.getBytes());</span>
+<span class="nc" id="L874">        bookie.addEntry(generateEntry(3, 1), false, new Bookie.NopWriteCallback(), null, &quot;passwd&quot;.getBytes());</span>
+
+<span class="nc" id="L876">        flushTestSortedLedgerStorage.addEntry(generateEntry(1, 4));</span>
+<span class="nc" id="L877">        flushTestSortedLedgerStorage.addEntry(generateEntry(2, 4));</span>
+<span class="nc" id="L878">        flushTestSortedLedgerStorage.addEntry(generateEntry(3, 4));</span>
+
+        // inject MemTableSizeLimitReached and FlushException, so entrymemtable flush will fail
+<span class="nc" id="L881">        flushTestSortedLedgerStorage.setInjectMemTableSizeLimitReached(true);</span>
+<span class="nc" id="L882">        flushTestSortedLedgerStorage.setInjectFlushException(true, 1L);</span>
+
+<span class="nc" id="L884">        flushTestSortedLedgerStorage.addEntry(generateEntry(1, 5));</span>
+        // since we simulate FlushException, memtable snapshot should not be empty
+<span class="nc" id="L886">        assertFalse(&quot;EntryMemTable SnapShot is not expected to be empty&quot;, memTable.snapshot.isEmpty());</span>
+<span class="nc" id="L887">        assertEquals(&quot;Flusher called&quot;, 1, flushTestSortedLedgerStorage.getNumOfTimesFlushSnapshotCalled());</span>
+
+<span class="nc" id="L889">        flushTestSortedLedgerStorage.setInjectFlushException(false, FlushTestSortedLedgerStorage.FORALLLEDGERS);</span>
+<span class="nc" id="L890">        flushTestSortedLedgerStorage.addEntry(generateEntry(1, 5));</span>
+        /*
+         * since MemTableSizeLimitReached is already set to true, and flush
+         * exception is disabled, this time memtable snapshot should be flushed
+         */
+<span class="nc" id="L895">        assertTrue(&quot;EntryMemTable SnapShot is expected to be empty&quot;, memTable.snapshot.isEmpty());</span>
+<span class="nc" id="L896">        assertEquals(&quot;Flusher called&quot;, 2, flushTestSortedLedgerStorage.getNumOfTimesFlushSnapshotCalled());</span>
+<span class="nc" id="L897">    }</span>
+
+    String[] createAndGetLedgerDirs(int numOfLedgerDirs) throws IOException {
+        File ledgerDir;
+        File curDir;
+<span class="nc" id="L902">        String[] ledgerDirsPath = new String[numOfLedgerDirs];</span>
+<span class="nc bnc" id="L903" title="All 2 branches missed.">        for (int i = 0; i &lt; numOfLedgerDirs; i++) {</span>
+<span class="nc" id="L904">            ledgerDir = createTempDir(&quot;bkTest&quot;, &quot;.dir&quot;);</span>
+<span class="nc" id="L905">            curDir = Bookie.getCurrentDirectory(ledgerDir);</span>
+<span class="nc" id="L906">            Bookie.checkDirectoryStructure(curDir);</span>
+<span class="nc" id="L907">            ledgerDirsPath[i] = ledgerDir.getAbsolutePath();</span>
+        }
+<span class="nc" id="L909">        return ledgerDirsPath;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

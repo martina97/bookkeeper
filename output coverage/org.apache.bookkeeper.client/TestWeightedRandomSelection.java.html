@@ -1,0 +1,343 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TestWeightedRandomSelection.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">TestWeightedRandomSelection.java</span></div><h1>TestWeightedRandomSelection.java</h1><pre class="source lang-java linenums">/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.bookkeeper.client;
+
+import static org.junit.Assert.assertTrue;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import org.apache.bookkeeper.client.WeightedRandomSelection.WeightedObject;
+import org.apache.commons.configuration.CompositeConfiguration;
+import org.apache.commons.configuration.Configuration;
+import org.junit.After;
+import org.junit.Assume;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameters;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Test weighted random selection methods.
+ */
+@RunWith(Parameterized.class)
+public class TestWeightedRandomSelection {
+
+<span class="nc" id="L52">    static final Logger LOG = LoggerFactory.getLogger(TestWeightedRandomSelection.class);</span>
+
+    static class TestObj implements WeightedObject {
+        long val;
+
+<span class="nc" id="L57">        TestObj(long value) {</span>
+<span class="nc" id="L58">            this.val = value;</span>
+<span class="nc" id="L59">        }</span>
+
+        @Override
+        public long getWeight() {
+<span class="nc" id="L63">            return val;</span>
+        }
+    }
+
+    Class&lt;? extends WeightedRandomSelection&gt; weightedRandomSelectionClass;
+    WeightedRandomSelection&lt;String&gt; wRS;
+<span class="nc" id="L69">    Configuration conf = new CompositeConfiguration();</span>
+<span class="nc" id="L70">    int multiplier = 3;</span>
+
+    @Parameters
+    public static Collection&lt;Object[]&gt; weightedRandomSelectionClass() {
+<span class="nc" id="L74">        return Arrays.asList(</span>
+                new Object[][] { { WeightedRandomSelectionImpl.class }, { DynamicWeightedRandomSelectionImpl.class } });
+    }
+
+<span class="nc" id="L78">    public TestWeightedRandomSelection(Class&lt;? extends WeightedRandomSelection&gt; weightedRandomSelectionClass) {</span>
+<span class="nc" id="L79">        this.weightedRandomSelectionClass = weightedRandomSelectionClass;</span>
+<span class="nc" id="L80">    }</span>
+
+    @Before
+    public void setUp() throws Exception {
+<span class="nc bnc" id="L84" title="All 2 branches missed.">        if (weightedRandomSelectionClass.equals(WeightedRandomSelectionImpl.class)) {</span>
+<span class="nc" id="L85">            wRS = new WeightedRandomSelectionImpl&lt;String&gt;();</span>
+        } else {
+<span class="nc" id="L87">            wRS = new DynamicWeightedRandomSelectionImpl&lt;String&gt;();</span>
+        }
+<span class="nc" id="L89">    }</span>
+
+    @After
+    public void tearDown() throws Exception {
+<span class="nc" id="L93">    }</span>
+
+    @Test
+    public void testSelectionWithEqualWeights() throws Exception {
+<span class="nc" id="L97">        Map&lt;String, WeightedObject&gt; map = new HashMap&lt;String, WeightedObject&gt;();</span>
+
+<span class="nc" id="L99">        Long val = 100L;</span>
+<span class="nc" id="L100">        int numKeys = 50, totalTries = 1000000;</span>
+<span class="nc" id="L101">        Map&lt;String, Integer&gt; randomSelection = new HashMap&lt;String, Integer&gt;();</span>
+<span class="nc bnc" id="L102" title="All 2 branches missed.">        for (Integer i = 0; i &lt; numKeys; i++) {</span>
+<span class="nc" id="L103">            map.put(i.toString(), new TestObj(val));</span>
+<span class="nc" id="L104">            randomSelection.put(i.toString(), 0);</span>
+        }
+
+<span class="nc" id="L107">        wRS.updateMap(map);</span>
+<span class="nc bnc" id="L108" title="All 2 branches missed.">        for (int i = 0; i &lt; totalTries; i++) {</span>
+<span class="nc" id="L109">            String key = wRS.getNextRandom();</span>
+<span class="nc" id="L110">            randomSelection.put(key, randomSelection.get(key) + 1);</span>
+        }
+
+        // there should be uniform distribution
+<span class="nc" id="L114">        double expectedPct = ((double) 1 / (double) numKeys) * 100;</span>
+<span class="nc bnc" id="L115" title="All 2 branches missed.">        for (Map.Entry&lt;String, Integer&gt; e : randomSelection.entrySet()) {</span>
+<span class="nc" id="L116">            double actualPct = ((double) e.getValue() / (double) totalTries) * 100;</span>
+<span class="nc" id="L117">            double delta = (Math.abs(expectedPct - actualPct) / expectedPct) * 100;</span>
+<span class="nc" id="L118">            System.out.println(&quot;Key:&quot; + e.getKey() + &quot; Value:&quot; + e.getValue() + &quot; Expected: &quot; + expectedPct</span>
+                    + &quot; Actual: &quot; + actualPct + &quot; delta: &quot; + delta);
+            // should be within 5% of expected
+<span class="nc bnc" id="L121" title="All 2 branches missed.">            assertTrue(&quot;Not doing uniform selection when weights are equal&quot;, delta &lt; 5);</span>
+<span class="nc" id="L122">        }</span>
+<span class="nc" id="L123">    }</span>
+
+    @Test
+    public void testSelectionWithAllZeroWeights() throws Exception {
+<span class="nc" id="L127">        Map&lt;String, WeightedObject&gt; map = new HashMap&lt;String, WeightedObject&gt;();</span>
+
+<span class="nc" id="L129">        int numKeys = 50, totalTries = 1000000;</span>
+<span class="nc" id="L130">        Map&lt;String, Integer&gt; randomSelection = new HashMap&lt;String, Integer&gt;();</span>
+<span class="nc bnc" id="L131" title="All 2 branches missed.">        for (Integer i = 0; i &lt; numKeys; i++) {</span>
+<span class="nc" id="L132">            map.put(i.toString(), new TestObj(0L));</span>
+<span class="nc" id="L133">            randomSelection.put(i.toString(), 0);</span>
+        }
+
+<span class="nc" id="L136">        wRS.updateMap(map);</span>
+<span class="nc bnc" id="L137" title="All 2 branches missed.">        for (int i = 0; i &lt; totalTries; i++) {</span>
+<span class="nc" id="L138">            String key = wRS.getNextRandom();</span>
+<span class="nc" id="L139">            randomSelection.put(key, randomSelection.get(key) + 1);</span>
+        }
+
+        // when all the values are zeros, there should be uniform distribution
+<span class="nc" id="L143">        double expectedPct = ((double) 1 / (double) numKeys) * 100;</span>
+<span class="nc bnc" id="L144" title="All 2 branches missed.">        for (Map.Entry&lt;String, Integer&gt; e : randomSelection.entrySet()) {</span>
+<span class="nc" id="L145">            double actualPct = ((double) e.getValue() / (double) totalTries) * 100;</span>
+<span class="nc" id="L146">            double delta = (Math.abs(expectedPct - actualPct) / expectedPct) * 100;</span>
+<span class="nc" id="L147">            System.out.println(&quot;Key:&quot; + e.getKey() + &quot; Value:&quot; + e.getValue() + &quot; Expected: &quot; + expectedPct</span>
+                    + &quot; Actual: &quot; + actualPct);
+            // should be within 5% of expected
+<span class="nc bnc" id="L150" title="All 2 branches missed.">            assertTrue(&quot;Not doing uniform selection when weights are equal&quot;, delta &lt; 5);</span>
+<span class="nc" id="L151">        }</span>
+<span class="nc" id="L152">    }</span>
+
+    void verifyResult(Map&lt;String, WeightedObject&gt; map, Map&lt;String, Integer&gt; randomSelection, int multiplier,
+            long minWeight, long medianWeight, long totalWeight, int totalTries) {
+<span class="nc" id="L156">        List&lt;Integer&gt; values = new ArrayList&lt;Integer&gt;(randomSelection.values());</span>
+<span class="nc" id="L157">        Collections.sort(values);</span>
+        double medianObserved, medianObservedWeight, medianExpectedWeight;
+<span class="nc" id="L159">        int mid = values.size() / 2;</span>
+<span class="nc bnc" id="L160" title="All 2 branches missed.">        if ((values.size() % 2) == 1) {</span>
+<span class="nc" id="L161">            medianObserved = values.get(mid);</span>
+        } else {
+<span class="nc" id="L163">            medianObserved = (double) (values.get(mid - 1) + values.get(mid)) / 2;</span>
+        }
+
+<span class="nc" id="L166">        medianObservedWeight = (double) medianObserved / (double) totalTries;</span>
+<span class="nc" id="L167">        medianExpectedWeight = (double) medianWeight / totalWeight;</span>
+
+<span class="nc bnc" id="L169" title="All 2 branches missed.">        for (Map.Entry&lt;String, Integer&gt; e : randomSelection.entrySet()) {</span>
+<span class="nc" id="L170">            double observed = (((double) e.getValue() / (double) totalTries));</span>
+
+            double expected;
+<span class="nc bnc" id="L173" title="All 2 branches missed.">            if (map.get(e.getKey()).getWeight() == 0) {</span>
+                // if the value is 0 for any key, we make it equal to the first
+                // non zero value
+<span class="nc" id="L176">                expected = (double) minWeight / (double) totalWeight;</span>
+            } else {
+<span class="nc" id="L178">                expected = (double) map.get(e.getKey()).getWeight() / (double) totalWeight;</span>
+            }
+<span class="nc bnc" id="L180" title="All 4 branches missed.">            if (multiplier &gt; 0 &amp;&amp; expected &gt; multiplier * medianExpectedWeight) {</span>
+<span class="nc" id="L181">                expected = multiplier * medianExpectedWeight;</span>
+            }
+            // We can't compare these weights because they are derived from
+            // different
+            // values. But if we express them as a multiple of the min in each,
+            // then
+            // they should be comparable
+<span class="nc" id="L188">            double expectedMultiple = expected / medianExpectedWeight;</span>
+<span class="nc" id="L189">            double observedMultiple = observed / medianObservedWeight;</span>
+<span class="nc" id="L190">            double delta = (Math.abs(expectedMultiple - observedMultiple) / expectedMultiple) * 100;</span>
+<span class="nc" id="L191">            System.out.println(&quot;Key:&quot; + e.getKey() + &quot; Value:&quot; + e.getValue() + &quot; Expected &quot; + expectedMultiple</span>
+                    + &quot; actual &quot; + observedMultiple + &quot; delta &quot; + delta + &quot;%&quot;);
+
+            // the observed should be within 5% of expected
+<span class="nc bnc" id="L195" title="All 2 branches missed.">            assertTrue(&quot;Not doing uniform selection when weights are equal&quot;, delta &lt; 5);</span>
+<span class="nc" id="L196">        }</span>
+<span class="nc" id="L197">    }</span>
+
+    @Test
+    public void testSelectionWithSomeZeroWeights() throws Exception {
+<span class="nc" id="L201">        Map&lt;String, WeightedObject&gt; map = new HashMap&lt;String, WeightedObject&gt;();</span>
+<span class="nc" id="L202">        Map&lt;String, Integer&gt; randomSelection = new HashMap&lt;String, Integer&gt;();</span>
+<span class="nc" id="L203">        int numKeys = 50;</span>
+<span class="nc" id="L204">        multiplier = 3;</span>
+<span class="nc" id="L205">        long val = 0L, total = 0L, minWeight = 100L, medianWeight = minWeight;</span>
+<span class="nc" id="L206">        wRS.setMaxProbabilityMultiplier(multiplier);</span>
+<span class="nc bnc" id="L207" title="All 2 branches missed.">        for (Integer i = 0; i &lt; numKeys; i++) {</span>
+<span class="nc bnc" id="L208" title="All 2 branches missed.">            if (i &lt; numKeys / 3) {</span>
+<span class="nc" id="L209">                val = 0L;</span>
+<span class="nc bnc" id="L210" title="All 2 branches missed.">            } else if (i &lt; 2 * (numKeys / 3)) {</span>
+<span class="nc" id="L211">                val = minWeight;</span>
+            } else {
+<span class="nc" id="L213">                val = 2 * minWeight;</span>
+            }
+<span class="nc" id="L215">            total += val;</span>
+<span class="nc" id="L216">            map.put(i.toString(), new TestObj(val));</span>
+<span class="nc" id="L217">            randomSelection.put(i.toString(), 0);</span>
+        }
+
+<span class="nc" id="L220">        wRS.updateMap(map);</span>
+<span class="nc" id="L221">        int totalTries = 1000000;</span>
+<span class="nc bnc" id="L222" title="All 2 branches missed.">        for (int i = 0; i &lt; totalTries; i++) {</span>
+<span class="nc" id="L223">            String key = wRS.getNextRandom();</span>
+<span class="nc" id="L224">            randomSelection.put(key, randomSelection.get(key) + 1);</span>
+        }
+<span class="nc" id="L226">        verifyResult(map, randomSelection, multiplier, minWeight, medianWeight, total, totalTries);</span>
+<span class="nc" id="L227">    }</span>
+
+    @Test
+    public void testSelectionWithUnequalWeights() throws Exception {
+<span class="nc" id="L231">        Map&lt;String, WeightedObject&gt; map = new HashMap&lt;String, WeightedObject&gt;();</span>
+<span class="nc" id="L232">        Map&lt;String, Integer&gt; randomSelection = new HashMap&lt;String, Integer&gt;();</span>
+<span class="nc" id="L233">        int numKeys = 50;</span>
+<span class="nc" id="L234">        multiplier = 4;</span>
+<span class="nc" id="L235">        long val = 0L, total = 0L, minWeight = 100L, medianWeight = 2 * minWeight;</span>
+<span class="nc" id="L236">        wRS.setMaxProbabilityMultiplier(multiplier);</span>
+<span class="nc bnc" id="L237" title="All 2 branches missed.">        for (Integer i = 0; i &lt; numKeys; i++) {</span>
+<span class="nc bnc" id="L238" title="All 2 branches missed.">            if (i &lt; numKeys / 3) {</span>
+<span class="nc" id="L239">                val = minWeight;</span>
+<span class="nc bnc" id="L240" title="All 2 branches missed.">            } else if (i &lt; 2 * (numKeys / 3)) {</span>
+<span class="nc" id="L241">                val = 2 * minWeight;</span>
+            } else {
+<span class="nc" id="L243">                val = 10 * minWeight;</span>
+            }
+<span class="nc" id="L245">            total += val;</span>
+<span class="nc" id="L246">            map.put(i.toString(), new TestObj(val));</span>
+<span class="nc" id="L247">            randomSelection.put(i.toString(), 0);</span>
+        }
+
+<span class="nc" id="L250">        wRS.updateMap(map);</span>
+<span class="nc" id="L251">        int totalTries = 1000000;</span>
+<span class="nc bnc" id="L252" title="All 2 branches missed.">        for (int i = 0; i &lt; totalTries; i++) {</span>
+<span class="nc" id="L253">            String key = wRS.getNextRandom();</span>
+<span class="nc" id="L254">            randomSelection.put(key, randomSelection.get(key) + 1);</span>
+        }
+<span class="nc" id="L256">        verifyResult(map, randomSelection, multiplier, minWeight, medianWeight, total, totalTries);</span>
+<span class="nc" id="L257">    }</span>
+
+    @Test
+    public void testSelectionWithHotNode() throws Exception {
+<span class="nc" id="L261">        Map&lt;String, WeightedObject&gt; map = new HashMap&lt;String, WeightedObject&gt;();</span>
+<span class="nc" id="L262">        Map&lt;String, Integer&gt; randomSelection = new HashMap&lt;String, Integer&gt;();</span>
+
+<span class="nc" id="L264">        multiplier = 3; // no max</span>
+<span class="nc" id="L265">        int numKeys = 50;</span>
+<span class="nc" id="L266">        long total = 0L, minWeight = 100L, val = minWeight, medianWeight = minWeight;</span>
+<span class="nc" id="L267">        wRS.setMaxProbabilityMultiplier(multiplier);</span>
+<span class="nc bnc" id="L268" title="All 2 branches missed.">        for (Integer i = 0; i &lt; numKeys; i++) {</span>
+<span class="nc bnc" id="L269" title="All 2 branches missed.">            if (i == numKeys - 1) {</span>
+                // last one has 10X more weight than the rest put together
+<span class="nc" id="L271">                val = 10 * (numKeys - 1) * 100L;</span>
+            }
+<span class="nc" id="L273">            total += val;</span>
+<span class="nc" id="L274">            map.put(i.toString(), new TestObj(val));</span>
+<span class="nc" id="L275">            randomSelection.put(i.toString(), 0);</span>
+        }
+
+<span class="nc" id="L278">        wRS.updateMap(map);</span>
+<span class="nc" id="L279">        int totalTries = 1000000;</span>
+<span class="nc bnc" id="L280" title="All 2 branches missed.">        for (int i = 0; i &lt; totalTries; i++) {</span>
+<span class="nc" id="L281">            String key = wRS.getNextRandom();</span>
+<span class="nc" id="L282">            randomSelection.put(key, randomSelection.get(key) + 1);</span>
+        }
+<span class="nc" id="L284">        verifyResult(map, randomSelection, multiplier, minWeight, medianWeight, total, totalTries);</span>
+<span class="nc" id="L285">    }</span>
+
+    @Test
+    public void testSelectionWithHotNodeWithLimit() throws Exception {
+<span class="nc" id="L289">        Map&lt;String, WeightedObject&gt; map = new HashMap&lt;String, WeightedObject&gt;();</span>
+<span class="nc" id="L290">        Map&lt;String, Integer&gt; randomSelection = new HashMap&lt;String, Integer&gt;();</span>
+
+<span class="nc" id="L292">        multiplier = 3; // limit the max load on hot node to be 3X</span>
+<span class="nc" id="L293">        int numKeys = 50;</span>
+<span class="nc" id="L294">        long total = 0L, minWeight = 100L, val = minWeight, medianWeight = minWeight;</span>
+<span class="nc" id="L295">        wRS.setMaxProbabilityMultiplier(multiplier);</span>
+<span class="nc bnc" id="L296" title="All 2 branches missed.">        for (Integer i = 0; i &lt; numKeys; i++) {</span>
+<span class="nc bnc" id="L297" title="All 2 branches missed.">            if (i == numKeys - 1) {</span>
+                // last one has 10X more weight than the rest put together
+<span class="nc" id="L299">                val = 10 * (numKeys - 1) * 100L;</span>
+            }
+<span class="nc" id="L301">            total += val;</span>
+<span class="nc" id="L302">            map.put(i.toString(), new TestObj(val));</span>
+<span class="nc" id="L303">            randomSelection.put(i.toString(), 0);</span>
+        }
+
+<span class="nc" id="L306">        wRS.updateMap(map);</span>
+<span class="nc" id="L307">        int totalTries = 1000000;</span>
+<span class="nc bnc" id="L308" title="All 2 branches missed.">        for (int i = 0; i &lt; totalTries; i++) {</span>
+<span class="nc" id="L309">            String key = wRS.getNextRandom();</span>
+<span class="nc" id="L310">            randomSelection.put(key, randomSelection.get(key) + 1);</span>
+        }
+<span class="nc" id="L312">        verifyResult(map, randomSelection, multiplier, minWeight, medianWeight, total, totalTries);</span>
+<span class="nc" id="L313">    }</span>
+
+    @Test
+    public void testSelectionFromSelectedNodesWithEqualWeights() throws Exception {
+        /*
+         * this testcase is for only DynamicWeightedRandomSelectionImpl
+         */
+<span class="nc" id="L320">        Assume.assumeTrue(weightedRandomSelectionClass.equals(DynamicWeightedRandomSelectionImpl.class));</span>
+<span class="nc" id="L321">        Map&lt;String, WeightedObject&gt; map = new HashMap&lt;String, WeightedObject&gt;();</span>
+
+<span class="nc" id="L323">        Long val = 100L;</span>
+<span class="nc" id="L324">        int numKeys = 50, totalTries = 1000;</span>
+<span class="nc" id="L325">        Map&lt;String, Integer&gt; randomSelection = new HashMap&lt;String, Integer&gt;();</span>
+<span class="nc bnc" id="L326" title="All 2 branches missed.">        for (Integer i = 0; i &lt; numKeys; i++) {</span>
+<span class="nc" id="L327">            map.put(i.toString(), new TestObj(val));</span>
+<span class="nc" id="L328">            randomSelection.put(i.toString(), 0);</span>
+        }
+
+<span class="nc" id="L331">        Set&lt;String&gt; selectFrom = new HashSet&lt;String&gt;();</span>
+<span class="nc bnc" id="L332" title="All 2 branches missed.">        for (int i = 0; i &lt; numKeys / 2; i++) {</span>
+<span class="nc" id="L333">            selectFrom.add(Integer.toString(i));</span>
+        }
+
+<span class="nc" id="L336">        wRS.updateMap(map);</span>
+<span class="nc bnc" id="L337" title="All 2 branches missed.">        for (int i = 0; i &lt; totalTries; i++) {</span>
+<span class="nc" id="L338">            String selectedKey = wRS.getNextRandom(selectFrom);</span>
+<span class="nc" id="L339">            assertTrue(&quot;NextRandom key should be from selected list&quot;, selectFrom.contains(selectedKey));</span>
+        }
+<span class="nc" id="L341">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

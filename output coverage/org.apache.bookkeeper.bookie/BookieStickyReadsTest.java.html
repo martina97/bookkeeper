@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>BookieStickyReadsTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$myBookieFenceLedgerTest.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.bookie</a> &gt; <span class="el_source">BookieStickyReadsTest.java</span></div><h1>BookieStickyReadsTest.java</h1><pre class="source lang-java linenums">/*
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.bookie;
+
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+import com.beust.jcommander.internal.Lists;
+
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+
+import lombok.Cleanup;
+import lombok.extern.slf4j.Slf4j;
+
+import org.apache.bookkeeper.client.BookKeeper;
+import org.apache.bookkeeper.client.api.LedgerEntries;
+import org.apache.bookkeeper.client.api.ReadHandle;
+import org.apache.bookkeeper.client.api.WriteHandle;
+import org.apache.bookkeeper.conf.ClientConfiguration;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.junit.Test;
+
+/**
+ * Tests of the main BookKeeper client.
+ */
+<span class="nc" id="L49">@Slf4j</span>
+public class BookieStickyReadsTest extends BookKeeperClusterTestCase {
+
+    private static final int NUM_BOOKIES = 3;
+
+    private static final String READ_ENTRY_REQUEST_METRIC = &quot;bookkeeper_server.READ_ENTRY_REQUEST&quot;;
+
+    public BookieStickyReadsTest() {
+<span class="nc" id="L57">        super(NUM_BOOKIES);</span>
+<span class="nc" id="L58">    }</span>
+
+    @Test
+    public void testNormalReads() throws Exception {
+<span class="nc" id="L62">        ClientConfiguration conf = new ClientConfiguration(baseClientConf);</span>
+
+        // Default should already be set to false
+        // conf.setStickyReadsEnabled(false);
+
+<span class="nc" id="L67">        writeAndReadEntries(conf, 3, 3, 3);</span>
+
+        // All bookies should have received at least some read request
+<span class="nc bnc" id="L70" title="All 2 branches missed.">        getBookieReadRequestStats().values().forEach(readRequests -&gt; assertTrue(readRequests &gt; 0));</span>
+<span class="nc" id="L71">    }</span>
+
+    @Test
+    public void testStickyFlagWithStriping() throws Exception {
+<span class="nc" id="L75">        ClientConfiguration conf = new ClientConfiguration(baseClientConf);</span>
+<span class="nc" id="L76">        conf.setStickyReadsEnabled(true);</span>
+
+<span class="nc" id="L78">        writeAndReadEntries(conf, 3, 2, 2);</span>
+
+        // All bookies should have received at least some read request since we
+        // don't enable sticky reads when striping is enabled
+<span class="nc bnc" id="L82" title="All 2 branches missed.">        getBookieReadRequestStats().values().forEach(readRequests -&gt; assertTrue(readRequests &gt; 0));</span>
+<span class="nc" id="L83">    }</span>
+
+    @Test
+    public void stickyReadsWithNoFailures() throws Exception {
+<span class="nc" id="L87">        ClientConfiguration conf = new ClientConfiguration(baseClientConf);</span>
+<span class="nc" id="L88">        conf.setStickyReadsEnabled(true);</span>
+
+<span class="nc" id="L90">        writeAndReadEntries(conf, 3, 3, 3);</span>
+
+        // All read requests should have been made to a single bookie
+<span class="nc" id="L93">        Map&lt;Integer, Long&gt; stats = getBookieReadRequestStats();</span>
+<span class="nc" id="L94">        boolean foundBookieWithRequests = false;</span>
+<span class="nc bnc" id="L95" title="All 2 branches missed.">        for (long readRequests : stats.values()) {</span>
+<span class="nc bnc" id="L96" title="All 2 branches missed.">            if (readRequests &gt; 0) {</span>
+<span class="nc" id="L97">                assertFalse(&quot;Another bookie already had received requests&quot;, foundBookieWithRequests);</span>
+<span class="nc" id="L98">                foundBookieWithRequests = true;</span>
+            }
+<span class="nc" id="L100">        }</span>
+<span class="nc" id="L101">    }</span>
+
+    @Test
+    public void stickyReadsWithFailures() throws Exception {
+<span class="nc" id="L105">        ClientConfiguration conf = new ClientConfiguration(baseClientConf);</span>
+<span class="nc" id="L106">        conf.setStickyReadsEnabled(true);</span>
+
+<span class="nc bnc" id="L108" title="All 2 branches missed.">        @Cleanup</span>
+<span class="nc" id="L109">        BookKeeper bkc = new BookKeeper(conf);</span>
+
+<span class="nc" id="L111">        final int n = 10;</span>
+        long ledgerId;
+
+<span class="nc" id="L114">        try (WriteHandle wh = bkc.newCreateLedgerOp()</span>
+<span class="nc" id="L115">                .withEnsembleSize(3)</span>
+<span class="nc" id="L116">                .withWriteQuorumSize(3)</span>
+<span class="nc" id="L117">                .withAckQuorumSize(3)</span>
+<span class="nc" id="L118">                .withPassword(&quot;&quot;.getBytes())</span>
+<span class="nc" id="L119">                .execute()</span>
+<span class="nc" id="L120">                .join()) {</span>
+<span class="nc" id="L121">            ledgerId = wh.getId();</span>
+
+<span class="nc bnc" id="L123" title="All 2 branches missed.">            for (int i = 0; i &lt; n; i++) {</span>
+<span class="nc" id="L124">                wh.append((&quot;entry-&quot; + i).getBytes());</span>
+            }
+        }
+
+<span class="nc bnc" id="L128" title="All 2 branches missed.">        @Cleanup</span>
+<span class="nc" id="L129">        ReadHandle rh = bkc.newOpenLedgerOp()</span>
+<span class="nc" id="L130">                .withLedgerId(ledgerId)</span>
+<span class="nc" id="L131">                .withPassword(&quot;&quot;.getBytes())</span>
+<span class="nc" id="L132">                .execute()</span>
+<span class="nc" id="L133">                .join();</span>
+
+        // Read 1 entry and detect which bookie was being used
+<span class="nc bnc" id="L136" title="All 2 branches missed.">        @Cleanup</span>
+<span class="nc" id="L137">        LedgerEntries entry0 = rh.read(0, 0);</span>
+<span class="nc" id="L138">        assertArrayEquals(&quot;entry-0&quot;.getBytes(), entry0.getEntry(0).getEntryBytes());</span>
+
+        // All read requests should have been made to a single bookie
+<span class="nc" id="L141">        int bookieWithRequests = -1;</span>
+<span class="nc bnc" id="L142" title="All 2 branches missed.">        for (int i = 0; i &lt; NUM_BOOKIES; i++) {</span>
+<span class="nc" id="L143">            long requests = getStatsProvider(i).getOpStatsLogger(READ_ENTRY_REQUEST_METRIC)</span>
+<span class="nc" id="L144">                    .getSuccessCount();</span>
+
+<span class="nc" id="L146">            log.info(&quot;Bookie {} --- requests: {}&quot;, i, requests);</span>
+
+<span class="nc bnc" id="L148" title="All 2 branches missed.">            if (requests &gt; 0) {</span>
+<span class="nc bnc" id="L149" title="All 2 branches missed.">                assertTrue(&quot;Another bookie already had received requests&quot;, bookieWithRequests == -1);</span>
+<span class="nc" id="L150">                bookieWithRequests = i;</span>
+            }
+        }
+
+        // Suspend the sticky bookie. Reads should now go to a different sticky
+        // bookie
+<span class="nc" id="L156">        bs.get(bookieWithRequests).suspendProcessing();</span>
+
+<span class="nc bnc" id="L158" title="All 2 branches missed.">        for (int i = 0; i &lt; n; i++) {</span>
+<span class="nc bnc" id="L159" title="All 2 branches missed.">            @Cleanup</span>
+<span class="nc" id="L160">            LedgerEntries entries = rh.read(i, i);</span>
+
+<span class="nc" id="L162">            assertArrayEquals((&quot;entry-&quot; + i).getBytes(), entries.getEntry(i).getEntryBytes());</span>
+        }
+
+        // At this point, we should have 1 bookie with 1 request (the initial
+        // request), and a second bookie with 10 requests. The 3rd bookie should
+        // have no requests
+<span class="nc" id="L168">        List&lt;Long&gt; requestCounts = Lists.newArrayList(getBookieReadRequestStats().values());</span>
+<span class="nc" id="L169">        Collections.sort(requestCounts);</span>
+
+<span class="nc" id="L171">        assertEquals(0, requestCounts.get(0).longValue());</span>
+<span class="nc" id="L172">        assertEquals(1, requestCounts.get(1).longValue());</span>
+<span class="nc" id="L173">        assertEquals(10, requestCounts.get(2).longValue());</span>
+<span class="nc" id="L174">    }</span>
+
+    private Map&lt;Integer, Long&gt; getBookieReadRequestStats() throws Exception {
+<span class="nc" id="L177">        Map&lt;Integer, Long&gt; stats = new TreeMap&lt;&gt;();</span>
+<span class="nc bnc" id="L178" title="All 2 branches missed.">        for (int i = 0; i &lt; NUM_BOOKIES; i++) {</span>
+<span class="nc" id="L179">            stats.put(i, getStatsProvider(i).getOpStatsLogger(READ_ENTRY_REQUEST_METRIC)</span>
+<span class="nc" id="L180">                    .getSuccessCount());</span>
+        }
+
+<span class="nc" id="L183">        return stats;</span>
+    }
+
+    private void writeAndReadEntries(ClientConfiguration conf, int ensembleSize, int writeQuorum, int ackQuorum)
+            throws Exception {
+<span class="nc bnc" id="L188" title="All 2 branches missed.">        @Cleanup</span>
+<span class="nc" id="L189">        BookKeeper bkc = new BookKeeper(conf);</span>
+
+<span class="nc bnc" id="L191" title="All 2 branches missed.">        @Cleanup</span>
+<span class="nc" id="L192">        WriteHandle wh = bkc.newCreateLedgerOp()</span>
+<span class="nc" id="L193">                .withEnsembleSize(ensembleSize)</span>
+<span class="nc" id="L194">                .withWriteQuorumSize(writeQuorum)</span>
+<span class="nc" id="L195">                .withAckQuorumSize(ackQuorum)</span>
+<span class="nc" id="L196">                .withPassword(&quot;&quot;.getBytes())</span>
+<span class="nc" id="L197">                .execute()</span>
+<span class="nc" id="L198">                .join();</span>
+
+<span class="nc" id="L200">        final int n = 10;</span>
+
+<span class="nc bnc" id="L202" title="All 2 branches missed.">        for (int i = 0; i &lt; n; i++) {</span>
+<span class="nc" id="L203">            wh.append((&quot;entry-&quot; + i).getBytes());</span>
+        }
+
+<span class="nc bnc" id="L206" title="All 2 branches missed.">        for (int i = 0; i &lt; n; i++) {</span>
+<span class="nc bnc" id="L207" title="All 2 branches missed.">            @Cleanup</span>
+<span class="nc" id="L208">            LedgerEntries entries = wh.read(i, i);</span>
+
+<span class="nc" id="L210">            assertArrayEquals((&quot;entry-&quot; + i).getBytes(), entries.getEntry(i).getEntryBytes());</span>
+        }
+<span class="nc" id="L212">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

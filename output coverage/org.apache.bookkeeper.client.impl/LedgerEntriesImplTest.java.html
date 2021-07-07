@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>LedgerEntriesImplTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$MyLedgerEntriesImplCreateTest.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client.impl</a> &gt; <span class="el_source">LedgerEntriesImplTest.java</span></div><h1>LedgerEntriesImplTest.java</h1><pre class="source lang-java linenums">/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+package org.apache.bookkeeper.client.impl;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
+
+import com.google.common.collect.Lists;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import org.apache.bookkeeper.client.api.LedgerEntry;
+import org.junit.After;
+import org.junit.Test;
+
+/**
+ * Unit test for {@link LedgerEntriesImpl}.
+ */
+public class LedgerEntriesImplTest {
+<span class="nc" id="L41">    private final int entryNumber = 7;</span>
+    private LedgerEntriesImpl ledgerEntriesImpl;
+<span class="nc" id="L43">    private final List&lt;LedgerEntry&gt; entryList = Lists.newArrayList();</span>
+
+    // content for each entry
+<span class="nc" id="L46">    private final long ledgerId = 1234L;</span>
+<span class="nc" id="L47">    private final long entryId = 5678L;</span>
+<span class="nc" id="L48">    private final long length = 9876L;</span>
+<span class="nc" id="L49">    private final byte[] dataBytes = &quot;test-ledger-entry-impl&quot;.getBytes(UTF_8);</span>
+<span class="nc" id="L50">    private final ArrayList&lt;ByteBuf&gt; bufs = Lists.newArrayListWithExpectedSize(entryNumber);</span>
+
+<span class="nc" id="L52">    public LedgerEntriesImplTest () {</span>
+<span class="nc bnc" id="L53" title="All 2 branches missed.">        for (int i = 0; i &lt; entryNumber; i++) {</span>
+<span class="nc" id="L54">            ByteBuf buf = Unpooled.wrappedBuffer(dataBytes);</span>
+<span class="nc" id="L55">            bufs.add(buf);</span>
+
+<span class="nc" id="L57">            entryList.add(LedgerEntryImpl.create(ledgerId + i,</span>
+                entryId + i,
+                length + i,
+                buf));
+        }
+
+<span class="nc" id="L63">        ledgerEntriesImpl = LedgerEntriesImpl.create(entryList);</span>
+<span class="nc" id="L64">    }</span>
+
+    @After
+    public void tearDown() {
+<span class="nc" id="L68">        ledgerEntriesImpl.close();</span>
+
+        // References should be released after close.
+<span class="nc" id="L71">        bufs.forEach(byteBuf -&gt; assertEquals(0, byteBuf.refCnt()));</span>
+
+        try {
+<span class="nc" id="L74">            ledgerEntriesImpl.getEntry(entryId);</span>
+<span class="nc" id="L75">            fail(&quot;should fail getEntry after close&quot;);</span>
+<span class="nc" id="L76">        } catch (NullPointerException e) {</span>
+            // expected behavior
+<span class="nc" id="L78">        }</span>
+
+        try {
+<span class="nc" id="L81">            ledgerEntriesImpl.iterator();</span>
+<span class="nc" id="L82">            fail(&quot;should fail iterator after close&quot;);</span>
+<span class="nc" id="L83">        } catch (NullPointerException e) {</span>
+            // expected behavior
+<span class="nc" id="L85">        }</span>
+<span class="nc" id="L86">    }</span>
+
+    @Test
+    public void testGetEntry() {
+<span class="nc bnc" id="L90" title="All 2 branches missed.">        for (int i = 0; i &lt; entryNumber; i++) {</span>
+<span class="nc" id="L91">            LedgerEntry entry = ledgerEntriesImpl.getEntry(entryId + i);</span>
+<span class="nc" id="L92">            assertEquals(entryList.get(i).getLedgerId(),  entry.getLedgerId());</span>
+<span class="nc" id="L93">            assertEquals(entryList.get(i).getEntryId(),  entry.getEntryId());</span>
+<span class="nc" id="L94">            assertEquals(entryList.get(i).getLength(),  entry.getLength());</span>
+
+<span class="nc" id="L96">            ByteBuf buf = entry.getEntryBuffer();</span>
+<span class="nc" id="L97">            byte[]  content = new byte[buf.readableBytes()];</span>
+<span class="nc" id="L98">            buf.readBytes(content);</span>
+<span class="nc" id="L99">            assertArrayEquals(dataBytes, content);</span>
+
+<span class="nc" id="L101">            assertEquals(1, entry.getEntryBuffer().refCnt());</span>
+        }
+
+        try {
+<span class="nc" id="L105">            LedgerEntry entry = ledgerEntriesImpl.getEntry(entryId - 1);</span>
+<span class="nc" id="L106">            fail(&quot;Should get IndexOutOfBoundsException&quot;);</span>
+<span class="nc" id="L107">        } catch (IndexOutOfBoundsException e) {</span>
+            // expected behavior
+<span class="nc" id="L109">        }</span>
+
+        try {
+<span class="nc" id="L112">            LedgerEntry entry = ledgerEntriesImpl.getEntry(entryId + entryNumber);</span>
+<span class="nc" id="L113">            fail(&quot;Should get IndexOutOfBoundsException&quot;);</span>
+<span class="nc" id="L114">        } catch (IndexOutOfBoundsException e) {</span>
+            // expected behavior
+<span class="nc" id="L116">        }</span>
+<span class="nc" id="L117">    }</span>
+
+    @Test
+    public void testIterator() {
+<span class="nc" id="L121">        Iterator&lt;LedgerEntry&gt; entryIterator = ledgerEntriesImpl.iterator();</span>
+<span class="nc" id="L122">        entryIterator.forEachRemaining(ledgerEntry -&gt; assertEquals(1, ledgerEntry.getEntryBuffer().refCnt()));</span>
+<span class="nc" id="L123">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

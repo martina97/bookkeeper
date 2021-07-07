@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TestBookieHealthCheck.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">TestBookieHealthCheck.java</span></div><h1>TestBookieHealthCheck.java</h1><pre class="source lang-java linenums">/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+
+package org.apache.bookkeeper.client;
+
+import java.util.concurrent.TimeUnit;
+
+import org.apache.bookkeeper.client.AsyncCallback.AddCallback;
+import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.junit.Assert;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Test the BookieHealthCheck.
+ */
+public class TestBookieHealthCheck extends BookKeeperClusterTestCase {
+<span class="nc" id="L37">    private static final Logger LOG = LoggerFactory.getLogger(TestBookieHealthCheck.class);</span>
+
+    public TestBookieHealthCheck() {
+<span class="nc" id="L40">        super(4);</span>
+<span class="nc" id="L41">        baseClientConf.setAddEntryTimeout(1);</span>
+<span class="nc" id="L42">        baseClientConf.enableBookieHealthCheck();</span>
+<span class="nc" id="L43">        baseClientConf.setBookieHealthCheckInterval(1, TimeUnit.SECONDS);</span>
+<span class="nc" id="L44">        baseClientConf.setBookieErrorThresholdPerInterval(1);</span>
+<span class="nc" id="L45">        baseClientConf.setBookieQuarantineTime(5, TimeUnit.SECONDS);</span>
+<span class="nc" id="L46">    }</span>
+
+    @Test
+    public void testBkQuarantine() throws Exception {
+<span class="nc" id="L50">        LedgerHandle lh = bkc.createLedger(2, 2, 2, BookKeeper.DigestType.CRC32, new byte[] {});</span>
+
+<span class="nc" id="L52">        final int numEntries = 10;</span>
+<span class="nc bnc" id="L53" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L54">            byte[] msg = (&quot;msg-&quot; + i).getBytes();</span>
+<span class="nc" id="L55">            lh.addEntry(msg);</span>
+        }
+
+<span class="nc" id="L58">        BookieSocketAddress bookieToQuarantine = lh.getLedgerMetadata().getEnsembleAt(numEntries).get(0);</span>
+<span class="nc" id="L59">        sleepBookie(bookieToQuarantine, baseClientConf.getAddEntryTimeout() * 2).await();</span>
+
+<span class="nc" id="L61">        byte[] tempMsg = &quot;temp-msg&quot;.getBytes();</span>
+<span class="nc" id="L62">        lh.asyncAddEntry(tempMsg, new AddCallback() {</span>
+
+            @Override
+            public void addComplete(int rc, LedgerHandle lh, long entryId, Object ctx) {
+                // no-op
+<span class="nc" id="L67">            }</span>
+        }, null);
+
+        // make sure the add entry timeouts
+<span class="nc" id="L71">        Thread.sleep(baseClientConf.getAddEntryTimeout() * 2 * 1000);</span>
+
+        // make sure the health check runs once after the timeout
+<span class="nc" id="L74">        Thread.sleep(baseClientConf.getBookieHealthCheckIntervalSeconds() * 2 * 1000);</span>
+
+        // the bookie watcher should contain the bookieToQuarantine in the quarantine set
+<span class="nc" id="L77">        Assert.assertTrue(bkc.bookieWatcher.quarantinedBookies.asMap().containsKey(bookieToQuarantine));</span>
+
+        // the bookie to be left out of the ensemble should always be the quarantined bookie
+<span class="nc" id="L80">        LedgerHandle lh1 = bkc.createLedger(2, 2, 2, BookKeeper.DigestType.CRC32, new byte[] {});</span>
+<span class="nc" id="L81">        LedgerHandle lh2 = bkc.createLedger(3, 3, 3, BookKeeper.DigestType.CRC32, new byte[] {});</span>
+<span class="nc" id="L82">        Assert.assertFalse(lh1.getLedgerMetadata().getEnsembleAt(0).contains(bookieToQuarantine));</span>
+<span class="nc" id="L83">        Assert.assertFalse(lh2.getLedgerMetadata().getEnsembleAt(0).contains(bookieToQuarantine));</span>
+
+        // the quarantined bookie can still be in the ensemble if we do not have enough healthy bookies
+<span class="nc" id="L86">        LedgerHandle lh3 = bkc.createLedger(4, 4, 4, BookKeeper.DigestType.CRC32, new byte[] {});</span>
+<span class="nc" id="L87">        Assert.assertTrue(lh3.getLedgerMetadata().getEnsembleAt(0).contains(bookieToQuarantine));</span>
+
+        // make sure faulty bookie is out of quarantine
+<span class="nc" id="L90">        Thread.sleep(baseClientConf.getBookieQuarantineTimeSeconds() * 1000);</span>
+
+        // the bookie should not be quarantined anymore
+<span class="nc" id="L93">        Assert.assertFalse(bkc.bookieWatcher.quarantinedBookies.asMap().containsKey(bookieToQuarantine));</span>
+<span class="nc" id="L94">    }</span>
+
+    @Test
+    public void testNoQuarantineOnBkRestart() throws Exception {
+<span class="nc" id="L98">        final LedgerHandle lh = bkc.createLedger(2, 2, 2, BookKeeper.DigestType.CRC32, new byte[] {});</span>
+<span class="nc" id="L99">        final int numEntries = 20;</span>
+<span class="nc" id="L100">        BookieSocketAddress bookieToRestart = lh.getLedgerMetadata().getEnsembleAt(0).get(0);</span>
+
+        // we add entries on a separate thread so that we can restart a bookie on the current thread
+<span class="nc" id="L103">        Thread addEntryThread = new Thread() {</span>
+            public void run() {
+<span class="nc bnc" id="L105" title="All 2 branches missed.">                for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L106">                    byte[] msg = (&quot;msg-&quot; + i).getBytes();</span>
+                    try {
+<span class="nc" id="L108">                        lh.addEntry(msg);</span>
+                        // we add sufficient sleep to make sure all entries are not added before we restart the bookie
+<span class="nc" id="L110">                        Thread.sleep(100);</span>
+<span class="nc" id="L111">                    } catch (Exception e) {</span>
+<span class="nc" id="L112">                        LOG.error(&quot;Error sending msg&quot;);</span>
+<span class="nc" id="L113">                    }</span>
+                }
+<span class="nc" id="L115">            }</span>
+        };
+<span class="nc" id="L117">        addEntryThread.start();</span>
+<span class="nc" id="L118">        restartBookie(bookieToRestart);</span>
+
+        // make sure the health check runs once
+<span class="nc" id="L121">        Thread.sleep(baseClientConf.getBookieHealthCheckIntervalSeconds() * 2 * 1000);</span>
+
+        // the bookie watcher should not contain the bookieToRestart in the quarantine set
+<span class="nc" id="L124">        Assert.assertFalse(bkc.bookieWatcher.quarantinedBookies.asMap().containsKey(bookieToRestart));</span>
+<span class="nc" id="L125">    }</span>
+
+    @Test
+    public void testNoQuarantineOnExpectedBkErrors() throws Exception {
+<span class="nc" id="L129">        final LedgerHandle lh = bkc.createLedger(2, 2, 2, BookKeeper.DigestType.CRC32, new byte[] {});</span>
+<span class="nc" id="L130">        final int numEntries = 10;</span>
+<span class="nc bnc" id="L131" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L132">            byte[] msg = (&quot;msg-&quot; + i).getBytes();</span>
+<span class="nc" id="L133">            lh.addEntry(msg);</span>
+        }
+<span class="nc" id="L135">        BookieSocketAddress bookie1 = lh.getLedgerMetadata().getEnsembleAt(0).get(0);</span>
+<span class="nc" id="L136">        BookieSocketAddress bookie2 = lh.getLedgerMetadata().getEnsembleAt(0).get(1);</span>
+        try {
+            // we read an entry that is not added
+<span class="nc" id="L139">            lh.readEntries(10, 10);</span>
+<span class="nc" id="L140">        } catch (BKException e) {</span>
+            // ok
+<span class="nc" id="L142">        }</span>
+
+        // make sure the health check runs once
+<span class="nc" id="L145">        Thread.sleep(baseClientConf.getBookieHealthCheckIntervalSeconds() * 2 * 1000);</span>
+
+        // the bookie watcher should not contain the bookieToRestart in the quarantine set
+<span class="nc" id="L148">        Assert.assertFalse(bkc.bookieWatcher.quarantinedBookies.asMap().containsKey(bookie1));</span>
+<span class="nc" id="L149">        Assert.assertFalse(bkc.bookieWatcher.quarantinedBookies.asMap().containsKey(bookie2));</span>
+<span class="nc" id="L150">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

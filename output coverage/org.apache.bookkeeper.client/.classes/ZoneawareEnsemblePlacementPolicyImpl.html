@@ -1,0 +1,1142 @@
+
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html id="htmlId">
+<head>
+  <title>Coverage Report :: ZoneawareEnsemblePlacementPolicyImpl</title>
+  <style type="text/css">
+    @import "../../.css/coverage.css";
+  </style>
+</head>
+
+<body>
+<div class="header"></div>
+
+<div class="content">
+<div class="breadCrumbs">
+    [ <a href="../../index.html">all classes</a> ]
+    [ <a href="../index.html">org.apache.bookkeeper.client</a> ]
+</div>
+
+<h1>Coverage Summary for Class: ZoneawareEnsemblePlacementPolicyImpl (org.apache.bookkeeper.client)</h1>
+
+<table class="coverageStats">
+
+<tr>
+  <th class="name">Class</th>
+<th class="coverageStat 
+">
+  Method, %
+</th>
+<th class="coverageStat 
+">
+  Line, %
+</th>
+</tr>
+<tr>
+  <td class="name">ZoneawareEnsemblePlacementPolicyImpl</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 36)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 395)
+  </span>
+</td>
+</tr>
+  <tr>
+    <td class="name">ZoneawareEnsemblePlacementPolicyImpl$1</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 3)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 5)
+  </span>
+</td>
+  </tr>
+  <tr>
+    <td class="name">ZoneawareEnsemblePlacementPolicyImpl$2</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 2)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 2)
+  </span>
+</td>
+  </tr>
+  <tr>
+    <td class="name">ZoneawareEnsemblePlacementPolicyImpl$ZoneAwareNodeLocation</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 5)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 10)
+  </span>
+</td>
+  </tr>
+<tr>
+  <td class="name"><strong>total</strong></td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 46)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 412)
+  </span>
+</td>
+</tr>
+</table>
+
+<br/>
+<br/>
+
+
+<div class="sourceCode"><i>1</i>&nbsp;/**
+<i>2</i>&nbsp; * Licensed to the Apache Software Foundation (ASF) under one
+<i>3</i>&nbsp; * or more contributor license agreements.  See the NOTICE file
+<i>4</i>&nbsp; * distributed with this work for additional information
+<i>5</i>&nbsp; * regarding copyright ownership.  The ASF licenses this file
+<i>6</i>&nbsp; * to you under the Apache License, Version 2.0 (the
+<i>7</i>&nbsp; * &quot;License&quot;); you may not use this file except in compliance
+<i>8</i>&nbsp; * with the License.  You may obtain a copy of the License at
+<i>9</i>&nbsp; *
+<i>10</i>&nbsp; *     http://www.apache.org/licenses/LICENSE-2.0
+<i>11</i>&nbsp; *
+<i>12</i>&nbsp; * Unless required by applicable law or agreed to in writing, software
+<i>13</i>&nbsp; * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+<i>14</i>&nbsp; * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+<i>15</i>&nbsp; * See the License for the specific language governing permissions and
+<i>16</i>&nbsp; * limitations under the License.
+<i>17</i>&nbsp; */
+<i>18</i>&nbsp;package org.apache.bookkeeper.client;
+<i>19</i>&nbsp;
+<i>20</i>&nbsp;import static com.google.common.base.Preconditions.checkNotNull;
+<i>21</i>&nbsp;import static org.apache.bookkeeper.bookie.BookKeeperServerStats.BOOKIES_JOINED;
+<i>22</i>&nbsp;import static org.apache.bookkeeper.bookie.BookKeeperServerStats.BOOKIES_LEFT;
+<i>23</i>&nbsp;import static org.apache.bookkeeper.bookie.BookKeeperServerStats.FAILED_TO_RESOLVE_NETWORK_LOCATION_COUNTER;
+<i>24</i>&nbsp;import static org.apache.bookkeeper.client.BookKeeperClientStats.NUM_WRITABLE_BOOKIES_IN_DEFAULT_FAULTDOMAIN;
+<i>25</i>&nbsp;
+<i>26</i>&nbsp;import com.google.common.cache.Cache;
+<i>27</i>&nbsp;import com.google.common.cache.CacheBuilder;
+<i>28</i>&nbsp;import com.google.common.cache.CacheLoader;
+<i>29</i>&nbsp;
+<i>30</i>&nbsp;import io.netty.util.HashedWheelTimer;
+<i>31</i>&nbsp;
+<i>32</i>&nbsp;import java.net.InetAddress;
+<i>33</i>&nbsp;import java.net.UnknownHostException;
+<i>34</i>&nbsp;import java.util.ArrayList;
+<i>35</i>&nbsp;import java.util.Collection;
+<i>36</i>&nbsp;import java.util.Collections;
+<i>37</i>&nbsp;import java.util.HashMap;
+<i>38</i>&nbsp;import java.util.HashSet;
+<i>39</i>&nbsp;import java.util.List;
+<i>40</i>&nbsp;import java.util.Map;
+<i>41</i>&nbsp;import java.util.Map.Entry;
+<i>42</i>&nbsp;import java.util.Optional;
+<i>43</i>&nbsp;import java.util.Random;
+<i>44</i>&nbsp;import java.util.Set;
+<i>45</i>&nbsp;import java.util.concurrent.ConcurrentHashMap;
+<i>46</i>&nbsp;import java.util.concurrent.ConcurrentMap;
+<i>47</i>&nbsp;import java.util.concurrent.TimeUnit;
+<i>48</i>&nbsp;import java.util.concurrent.locks.ReentrantReadWriteLock;
+<i>49</i>&nbsp;
+<i>50</i>&nbsp;import org.apache.bookkeeper.client.BKException.BKNotEnoughBookiesException;
+<i>51</i>&nbsp;import org.apache.bookkeeper.common.util.ReflectionUtils;
+<i>52</i>&nbsp;import org.apache.bookkeeper.conf.ClientConfiguration;
+<i>53</i>&nbsp;import org.apache.bookkeeper.conf.Configurable;
+<i>54</i>&nbsp;import org.apache.bookkeeper.feature.FeatureProvider;
+<i>55</i>&nbsp;import org.apache.bookkeeper.net.BookieNode;
+<i>56</i>&nbsp;import org.apache.bookkeeper.net.BookieSocketAddress;
+<i>57</i>&nbsp;import org.apache.bookkeeper.net.DNSToSwitchMapping;
+<i>58</i>&nbsp;import org.apache.bookkeeper.net.NetworkTopology;
+<i>59</i>&nbsp;import org.apache.bookkeeper.net.NetworkTopologyImpl;
+<i>60</i>&nbsp;import org.apache.bookkeeper.net.Node;
+<i>61</i>&nbsp;import org.apache.bookkeeper.net.NodeBase;
+<i>62</i>&nbsp;import org.apache.bookkeeper.net.ScriptBasedMapping;
+<i>63</i>&nbsp;import org.apache.bookkeeper.net.StabilizeNetworkTopology;
+<i>64</i>&nbsp;import org.apache.bookkeeper.stats.Counter;
+<i>65</i>&nbsp;import org.apache.bookkeeper.stats.Gauge;
+<i>66</i>&nbsp;import org.apache.bookkeeper.stats.StatsLogger;
+<i>67</i>&nbsp;import org.apache.bookkeeper.stats.annotations.StatsDoc;
+<i>68</i>&nbsp;import org.apache.commons.lang3.StringUtils;
+<i>69</i>&nbsp;import org.slf4j.Logger;
+<i>70</i>&nbsp;import org.slf4j.LoggerFactory;
+<i>71</i>&nbsp;
+<i>72</i>&nbsp;/**
+<i>73</i>&nbsp; * Simple zoneaware ensemble placement policy.
+<i>74</i>&nbsp; */
+<i>75</i>&nbsp;public class ZoneawareEnsemblePlacementPolicyImpl extends TopologyAwareEnsemblePlacementPolicy {
+<i>76</i>&nbsp;
+<b class="nc"><i>77</i>&nbsp;    static final Logger LOG = LoggerFactory.getLogger(ZoneawareEnsemblePlacementPolicyImpl.class);</b>
+<i>78</i>&nbsp;
+<i>79</i>&nbsp;    public static final String UNKNOWN_ZONE = &quot;UnknownZone&quot;;
+<i>80</i>&nbsp;    /*
+<i>81</i>&nbsp;     * this defaultFaultDomain is used as placeholder network location for
+<i>82</i>&nbsp;     * bookies for which network location can&#39;t be resolved. In
+<i>83</i>&nbsp;     * ZoneawareEnsemblePlacementPolicyImpl zone is the fault domain and upgrade
+<i>84</i>&nbsp;     * domain is logical concept to enable parallel patching by bringing down
+<i>85</i>&nbsp;     * all the bookies in the upgrade domain.
+<i>86</i>&nbsp;     */
+<b class="nc"><i>87</i>&nbsp;    private String defaultFaultDomain = NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN;</b>
+<b class="nc"><i>88</i>&nbsp;    protected ZoneAwareNodeLocation unresolvedNodeLocation = new ZoneAwareNodeLocation(</b>
+<i>89</i>&nbsp;            NetworkTopology.DEFAULT_ZONE, NetworkTopology.DEFAULT_UPGRADEDOMAIN);
+<i>90</i>&nbsp;    private final Random rand;
+<b class="nc"><i>91</i>&nbsp;    protected StatsLogger statsLogger = null;</b>
+<i>92</i>&nbsp;    // Use a loading cache so slow bookies are expired. Use entryId as values.
+<i>93</i>&nbsp;    protected Cache&lt;BookieSocketAddress, Long&gt; slowBookies;
+<b class="nc"><i>94</i>&nbsp;    protected BookieNode myNode = null;</b>
+<b class="nc"><i>95</i>&nbsp;    protected String myZone = null;</b>
+<b class="nc"><i>96</i>&nbsp;    protected boolean reorderReadsRandom = false;</b>
+<b class="nc"><i>97</i>&nbsp;    protected int stabilizePeriodSeconds = 0;</b>
+<b class="nc"><i>98</i>&nbsp;    protected int reorderThresholdPendingRequests = 0;</b>
+<i>99</i>&nbsp;    protected int maxWeightMultiple;
+<i>100</i>&nbsp;    protected int minNumZonesPerWriteQuorum;
+<i>101</i>&nbsp;    protected int desiredNumZonesPerWriteQuorum;
+<i>102</i>&nbsp;    protected boolean enforceStrictZoneawarePlacement;
+<i>103</i>&nbsp;    protected HashedWheelTimer timer;
+<i>104</i>&nbsp;    protected final ConcurrentMap&lt;BookieSocketAddress, ZoneAwareNodeLocation&gt; address2NodePlacement;
+<i>105</i>&nbsp;
+<b class="nc"><i>106</i>&nbsp;    @StatsDoc(name = FAILED_TO_RESOLVE_NETWORK_LOCATION_COUNTER, help = &quot;Counter for number of times&quot;</b>
+<i>107</i>&nbsp;            + &quot; DNSResolverDecorator failed to resolve Network Location&quot;)
+<i>108</i>&nbsp;    protected Counter failedToResolveNetworkLocationCounter = null;
+<i>109</i>&nbsp;    @StatsDoc(name = NUM_WRITABLE_BOOKIES_IN_DEFAULT_FAULTDOMAIN, help = &quot;Gauge for the number of writable&quot;
+<i>110</i>&nbsp;            + &quot; Bookies in default fault domain&quot;)
+<i>111</i>&nbsp;    protected Gauge&lt;Integer&gt; numWritableBookiesInDefaultFaultDomain;
+<i>112</i>&nbsp;
+<i>113</i>&nbsp;    /**
+<i>114</i>&nbsp;     * Zone and UpgradeDomain pair of a node.
+<i>115</i>&nbsp;     */
+<i>116</i>&nbsp;    public static class ZoneAwareNodeLocation {
+<i>117</i>&nbsp;        private final String zone;
+<i>118</i>&nbsp;        private final String upgradeDomain;
+<i>119</i>&nbsp;        private final String repString;
+<i>120</i>&nbsp;
+<b class="nc"><i>121</i>&nbsp;        public ZoneAwareNodeLocation(String zone, String upgradeDomain) {</b>
+<b class="nc"><i>122</i>&nbsp;            this.zone = zone;</b>
+<b class="nc"><i>123</i>&nbsp;            this.upgradeDomain = upgradeDomain;</b>
+<b class="nc"><i>124</i>&nbsp;            repString = zone + upgradeDomain;</b>
+<b class="nc"><i>125</i>&nbsp;        }</b>
+<i>126</i>&nbsp;
+<i>127</i>&nbsp;        public String getZone() {
+<b class="nc"><i>128</i>&nbsp;            return zone;</b>
+<i>129</i>&nbsp;        }
+<i>130</i>&nbsp;
+<i>131</i>&nbsp;        public String getUpgradeDomain() {
+<b class="nc"><i>132</i>&nbsp;            return upgradeDomain;</b>
+<i>133</i>&nbsp;        }
+<i>134</i>&nbsp;
+<i>135</i>&nbsp;        @Override
+<i>136</i>&nbsp;        public int hashCode() {
+<b class="nc"><i>137</i>&nbsp;            return repString.hashCode();</b>
+<i>138</i>&nbsp;        }
+<i>139</i>&nbsp;
+<i>140</i>&nbsp;        @Override
+<i>141</i>&nbsp;        public boolean equals(Object obj) {
+<b class="nc"><i>142</i>&nbsp;            return ((obj instanceof ZoneAwareNodeLocation)</b>
+<b class="nc"><i>143</i>&nbsp;                    &amp;&amp; repString.equals(((ZoneAwareNodeLocation) obj).repString));</b>
+<i>144</i>&nbsp;        }
+<i>145</i>&nbsp;    }
+<i>146</i>&nbsp;
+<i>147</i>&nbsp;
+<i>148</i>&nbsp;    ZoneawareEnsemblePlacementPolicyImpl() {
+<b class="nc"><i>149</i>&nbsp;        super();</b>
+<b class="nc"><i>150</i>&nbsp;        address2NodePlacement = new ConcurrentHashMap&lt;BookieSocketAddress, ZoneAwareNodeLocation&gt;();</b>
+<b class="nc"><i>151</i>&nbsp;        rand = new Random(System.currentTimeMillis());</b>
+<b class="nc"><i>152</i>&nbsp;    }</b>
+<i>153</i>&nbsp;
+<i>154</i>&nbsp;    protected ZoneAwareNodeLocation getZoneAwareNodeLocation(BookieSocketAddress addr) {
+<b class="nc"><i>155</i>&nbsp;        ZoneAwareNodeLocation nodeLocation = address2NodePlacement.get(addr);</b>
+<b class="nc"><i>156</i>&nbsp;        if (null == nodeLocation) {</b>
+<b class="nc"><i>157</i>&nbsp;            String networkLocation = resolveNetworkLocation(addr);</b>
+<b class="nc"><i>158</i>&nbsp;            if (getDefaultFaultDomain().equals(networkLocation)) {</b>
+<b class="nc"><i>159</i>&nbsp;                nodeLocation = unresolvedNodeLocation;</b>
+<i>160</i>&nbsp;            } else {
+<b class="nc"><i>161</i>&nbsp;                String[] parts = StringUtils.split(NodeBase.normalize(networkLocation), NodeBase.PATH_SEPARATOR);</b>
+<b class="nc"><i>162</i>&nbsp;                if (parts.length != 2) {</b>
+<b class="nc"><i>163</i>&nbsp;                    nodeLocation = unresolvedNodeLocation;</b>
+<i>164</i>&nbsp;                } else {
+<b class="nc"><i>165</i>&nbsp;                    nodeLocation = new ZoneAwareNodeLocation(NodeBase.PATH_SEPARATOR_STR + parts[0],</b>
+<i>166</i>&nbsp;                            NodeBase.PATH_SEPARATOR_STR + parts[1]);
+<i>167</i>&nbsp;                }
+<i>168</i>&nbsp;            }
+<b class="nc"><i>169</i>&nbsp;            address2NodePlacement.putIfAbsent(addr, nodeLocation);</b>
+<i>170</i>&nbsp;        }
+<b class="nc"><i>171</i>&nbsp;        return nodeLocation;</b>
+<i>172</i>&nbsp;    }
+<i>173</i>&nbsp;
+<i>174</i>&nbsp;    protected ZoneAwareNodeLocation getZoneAwareNodeLocation(BookieNode node) {
+<b class="nc"><i>175</i>&nbsp;        if (null == node || null == node.getAddr()) {</b>
+<b class="nc"><i>176</i>&nbsp;            return unresolvedNodeLocation;</b>
+<i>177</i>&nbsp;        }
+<b class="nc"><i>178</i>&nbsp;        return getZoneAwareNodeLocation(node.getAddr());</b>
+<i>179</i>&nbsp;    }
+<i>180</i>&nbsp;
+<i>181</i>&nbsp;    @Override
+<i>182</i>&nbsp;    public EnsemblePlacementPolicy initialize(ClientConfiguration conf,
+<i>183</i>&nbsp;            Optional&lt;DNSToSwitchMapping&gt; optionalDnsResolver, HashedWheelTimer timer, FeatureProvider featureProvider,
+<i>184</i>&nbsp;            StatsLogger statsLogger) {
+<b class="nc"><i>185</i>&nbsp;        this.statsLogger = statsLogger;</b>
+<b class="nc"><i>186</i>&nbsp;        this.timer = timer;</b>
+<b class="nc"><i>187</i>&nbsp;        this.bookiesJoinedCounter = statsLogger.getOpStatsLogger(BOOKIES_JOINED);</b>
+<b class="nc"><i>188</i>&nbsp;        this.bookiesLeftCounter = statsLogger.getOpStatsLogger(BOOKIES_LEFT);</b>
+<b class="nc"><i>189</i>&nbsp;        this.failedToResolveNetworkLocationCounter = statsLogger.getCounter(FAILED_TO_RESOLVE_NETWORK_LOCATION_COUNTER);</b>
+<b class="nc"><i>190</i>&nbsp;        this.numWritableBookiesInDefaultFaultDomain = new Gauge&lt;Integer&gt;() {</b>
+<i>191</i>&nbsp;            @Override
+<i>192</i>&nbsp;            public Integer getDefaultValue() {
+<b class="nc"><i>193</i>&nbsp;                return 0;</b>
+<i>194</i>&nbsp;            }
+<i>195</i>&nbsp;
+<i>196</i>&nbsp;            @Override
+<i>197</i>&nbsp;            public Integer getSample() {
+<b class="nc"><i>198</i>&nbsp;                rwLock.readLock().lock();</b>
+<i>199</i>&nbsp;                try {
+<b class="nc"><i>200</i>&nbsp;                    return topology.countNumOfAvailableNodes(getDefaultFaultDomain(), Collections.emptySet());</b>
+<i>201</i>&nbsp;                } finally {
+<b class="nc"><i>202</i>&nbsp;                    rwLock.readLock().unlock();</b>
+<i>203</i>&nbsp;                }
+<i>204</i>&nbsp;            }
+<i>205</i>&nbsp;        };
+<b class="nc"><i>206</i>&nbsp;        this.statsLogger.registerGauge(NUM_WRITABLE_BOOKIES_IN_DEFAULT_FAULTDOMAIN,</b>
+<i>207</i>&nbsp;                numWritableBookiesInDefaultFaultDomain);
+<b class="nc"><i>208</i>&nbsp;        this.reorderThresholdPendingRequests = conf.getReorderThresholdPendingRequests();</b>
+<b class="nc"><i>209</i>&nbsp;        this.isWeighted = conf.getDiskWeightBasedPlacementEnabled();</b>
+<b class="nc"><i>210</i>&nbsp;        if (this.isWeighted) {</b>
+<b class="nc"><i>211</i>&nbsp;            this.maxWeightMultiple = conf.getBookieMaxWeightMultipleForWeightBasedPlacement();</b>
+<b class="nc"><i>212</i>&nbsp;            this.weightedSelection = new DynamicWeightedRandomSelectionImpl&lt;BookieNode&gt;(this.maxWeightMultiple);</b>
+<b class="nc"><i>213</i>&nbsp;            LOG.info(&quot;Weight based placement with max multiple of {}&quot;, this.maxWeightMultiple);</b>
+<i>214</i>&nbsp;        } else {
+<b class="nc"><i>215</i>&nbsp;            LOG.info(&quot;Not weighted&quot;);</b>
+<i>216</i>&nbsp;        }
+<b class="nc"><i>217</i>&nbsp;        this.minNumZonesPerWriteQuorum = conf.getMinNumZonesPerWriteQuorum();</b>
+<b class="nc"><i>218</i>&nbsp;        this.desiredNumZonesPerWriteQuorum = conf.getDesiredNumZonesPerWriteQuorum();</b>
+<b class="nc"><i>219</i>&nbsp;        this.enforceStrictZoneawarePlacement = conf.getEnforceStrictZoneawarePlacement();</b>
+<b class="nc"><i>220</i>&nbsp;        if (minNumZonesPerWriteQuorum &gt; desiredNumZonesPerWriteQuorum) {</b>
+<b class="nc"><i>221</i>&nbsp;            LOG.error(</b>
+<i>222</i>&nbsp;                    &quot;It is misconfigured, for ZoneawareEnsemblePlacementPolicy, minNumZonesPerWriteQuorum: {} cann&#39;t be&quot;
+<i>223</i>&nbsp;                            + &quot; greater than desiredNumZonesPerWriteQuorum: {}&quot;,
+<b class="nc"><i>224</i>&nbsp;                    minNumZonesPerWriteQuorum, desiredNumZonesPerWriteQuorum);</b>
+<b class="nc"><i>225</i>&nbsp;            throw new IllegalArgumentException(&quot;minNumZonesPerWriteQuorum: &quot; + minNumZonesPerWriteQuorum</b>
+<i>226</i>&nbsp;                    + &quot; cann&#39;t be greater than desiredNumZonesPerWriteQuorum: &quot; + desiredNumZonesPerWriteQuorum);
+<i>227</i>&nbsp;        }
+<i>228</i>&nbsp;        DNSToSwitchMapping actualDNSResolver;
+<b class="nc"><i>229</i>&nbsp;        if (optionalDnsResolver.isPresent()) {</b>
+<b class="nc"><i>230</i>&nbsp;            actualDNSResolver = optionalDnsResolver.get();</b>
+<i>231</i>&nbsp;        } else {
+<b class="nc"><i>232</i>&nbsp;            String dnsResolverName = conf.getString(REPP_DNS_RESOLVER_CLASS, ScriptBasedMapping.class.getName());</b>
+<b class="nc"><i>233</i>&nbsp;            actualDNSResolver = ReflectionUtils.newInstance(dnsResolverName, DNSToSwitchMapping.class);</b>
+<b class="nc"><i>234</i>&nbsp;            if (actualDNSResolver instanceof Configurable) {</b>
+<b class="nc"><i>235</i>&nbsp;                ((Configurable) actualDNSResolver).setConf(conf);</b>
+<i>236</i>&nbsp;            }
+<i>237</i>&nbsp;        }
+<i>238</i>&nbsp;
+<b class="nc"><i>239</i>&nbsp;        this.dnsResolver = new DNSResolverDecorator(actualDNSResolver, () -&gt; this.getDefaultFaultDomain(),</b>
+<i>240</i>&nbsp;                failedToResolveNetworkLocationCounter);
+<b class="nc"><i>241</i>&nbsp;        this.stabilizePeriodSeconds = conf.getNetworkTopologyStabilizePeriodSeconds();</b>
+<i>242</i>&nbsp;        // create the network topology
+<b class="nc"><i>243</i>&nbsp;        if (stabilizePeriodSeconds &gt; 0) {</b>
+<b class="nc"><i>244</i>&nbsp;            this.topology = new StabilizeNetworkTopology(timer, stabilizePeriodSeconds);</b>
+<i>245</i>&nbsp;        } else {
+<b class="nc"><i>246</i>&nbsp;            this.topology = new NetworkTopologyImpl();</b>
+<i>247</i>&nbsp;        }
+<i>248</i>&nbsp;        try {
+<b class="nc"><i>249</i>&nbsp;            myNode = createBookieNode(new BookieSocketAddress(InetAddress.getLocalHost().getHostAddress(), 0));</b>
+<b class="nc"><i>250</i>&nbsp;            myZone = getZoneAwareNodeLocation(myNode).getZone();</b>
+<b class="nc"><i>251</i>&nbsp;        } catch (UnknownHostException e) {</b>
+<b class="nc"><i>252</i>&nbsp;            LOG.error(&quot;Failed to get local host address : &quot;, e);</b>
+<b class="nc"><i>253</i>&nbsp;            throw new RuntimeException(e);</b>
+<b class="nc"><i>254</i>&nbsp;        }</b>
+<b class="nc"><i>255</i>&nbsp;        LOG.info(&quot;Initialized zoneaware ensemble placement policy @ {} @ {} : {}.&quot;, myNode,</b>
+<b class="nc"><i>256</i>&nbsp;                myNode.getNetworkLocation(), dnsResolver.getClass().getName());</b>
+<i>257</i>&nbsp;
+<b class="nc"><i>258</i>&nbsp;        slowBookies = CacheBuilder.newBuilder()</b>
+<b class="nc"><i>259</i>&nbsp;                .expireAfterWrite(conf.getBookieFailureHistoryExpirationMSec(), TimeUnit.MILLISECONDS)</b>
+<b class="nc"><i>260</i>&nbsp;                .build(new CacheLoader&lt;BookieSocketAddress, Long&gt;() {</b>
+<i>261</i>&nbsp;                    @Override
+<i>262</i>&nbsp;                    public Long load(BookieSocketAddress key) throws Exception {
+<b class="nc"><i>263</i>&nbsp;                        return -1L;</b>
+<i>264</i>&nbsp;                    }
+<i>265</i>&nbsp;                });
+<b class="nc"><i>266</i>&nbsp;        return this;</b>
+<i>267</i>&nbsp;    }
+<i>268</i>&nbsp;
+<i>269</i>&nbsp;    public ZoneawareEnsemblePlacementPolicyImpl withDefaultFaultDomain(String defaultFaultDomain) {
+<b class="nc"><i>270</i>&nbsp;        checkNotNull(defaultFaultDomain, &quot;Default fault domain cannot be null&quot;);</b>
+<i>271</i>&nbsp;
+<b class="nc"><i>272</i>&nbsp;        String[] parts = StringUtils.split(NodeBase.normalize(defaultFaultDomain), NodeBase.PATH_SEPARATOR);</b>
+<b class="nc"><i>273</i>&nbsp;        if (parts.length != 2) {</b>
+<b class="nc"><i>274</i>&nbsp;            LOG.error(&quot;provided defaultFaultDomain: {} is not valid&quot;, defaultFaultDomain);</b>
+<b class="nc"><i>275</i>&nbsp;            throw new IllegalArgumentException(&quot;invalid defaultFaultDomain&quot;);</b>
+<i>276</i>&nbsp;        } else {
+<b class="nc"><i>277</i>&nbsp;            unresolvedNodeLocation = new ZoneAwareNodeLocation(NodeBase.PATH_SEPARATOR_STR + parts[0],</b>
+<i>278</i>&nbsp;                    NodeBase.PATH_SEPARATOR_STR + parts[1]);
+<i>279</i>&nbsp;        }
+<i>280</i>&nbsp;
+<b class="nc"><i>281</i>&nbsp;        this.defaultFaultDomain = defaultFaultDomain;</b>
+<b class="nc"><i>282</i>&nbsp;        return this;</b>
+<i>283</i>&nbsp;    }
+<i>284</i>&nbsp;
+<i>285</i>&nbsp;    public String getDefaultFaultDomain() {
+<b class="nc"><i>286</i>&nbsp;        return defaultFaultDomain;</b>
+<i>287</i>&nbsp;    }
+<i>288</i>&nbsp;
+<i>289</i>&nbsp;    @Override
+<i>290</i>&nbsp;    public PlacementResult&lt;List&lt;BookieSocketAddress&gt;&gt; newEnsemble(int ensembleSize, int writeQuorumSize,
+<i>291</i>&nbsp;            int ackQuorumSize, Set&lt;BookieSocketAddress&gt; excludeBookies,
+<i>292</i>&nbsp;            org.apache.bookkeeper.client.ITopologyAwareEnsemblePlacementPolicy.Ensemble&lt;BookieNode&gt; parentEnsemble,
+<i>293</i>&nbsp;            org.apache.bookkeeper.client.ITopologyAwareEnsemblePlacementPolicy.Predicate&lt;BookieNode&gt; parentPredicate)
+<i>294</i>&nbsp;            throws BKNotEnoughBookiesException {
+<b class="nc"><i>295</i>&nbsp;        throw new UnsupportedOperationException(</b>
+<i>296</i>&nbsp;                &quot;newEnsemble method with parentEnsemble and parentPredicate is not supported for &quot;
+<i>297</i>&nbsp;                        + &quot;ZoneawareEnsemblePlacementPolicyImpl&quot;);
+<i>298</i>&nbsp;    }
+<i>299</i>&nbsp;
+<i>300</i>&nbsp;    @Override
+<i>301</i>&nbsp;    public BookieNode selectFromNetworkLocation(String networkLoc, Set&lt;Node&gt; excludeBookies,
+<i>302</i>&nbsp;            org.apache.bookkeeper.client.ITopologyAwareEnsemblePlacementPolicy.Predicate&lt;BookieNode&gt; predicate,
+<i>303</i>&nbsp;            org.apache.bookkeeper.client.ITopologyAwareEnsemblePlacementPolicy.Ensemble&lt;BookieNode&gt; ensemble,
+<i>304</i>&nbsp;            boolean fallbackToRandom) throws BKNotEnoughBookiesException {
+<b class="nc"><i>305</i>&nbsp;        throw new UnsupportedOperationException(</b>
+<i>306</i>&nbsp;                &quot;selectFromNetworkLocation is not supported for ZoneawareEnsemblePlacementPolicyImpl&quot;);
+<i>307</i>&nbsp;    }
+<i>308</i>&nbsp;
+<i>309</i>&nbsp;    @Override
+<i>310</i>&nbsp;    public BookieNode selectFromNetworkLocation(Set&lt;String&gt; excludeRacks, Set&lt;Node&gt; excludeBookies,
+<i>311</i>&nbsp;            org.apache.bookkeeper.client.ITopologyAwareEnsemblePlacementPolicy.Predicate&lt;BookieNode&gt; predicate,
+<i>312</i>&nbsp;            org.apache.bookkeeper.client.ITopologyAwareEnsemblePlacementPolicy.Ensemble&lt;BookieNode&gt; ensemble,
+<i>313</i>&nbsp;            boolean fallbackToRandom) throws BKNotEnoughBookiesException {
+<b class="nc"><i>314</i>&nbsp;        throw new UnsupportedOperationException(</b>
+<i>315</i>&nbsp;                &quot;selectFromNetworkLocation is not supported for ZoneawareEnsemblePlacementPolicyImpl&quot;);
+<i>316</i>&nbsp;    }
+<i>317</i>&nbsp;
+<i>318</i>&nbsp;    @Override
+<i>319</i>&nbsp;    public BookieNode selectFromNetworkLocation(String networkLoc, Set&lt;String&gt; excludeRacks, Set&lt;Node&gt; excludeBookies,
+<i>320</i>&nbsp;            org.apache.bookkeeper.client.ITopologyAwareEnsemblePlacementPolicy.Predicate&lt;BookieNode&gt; predicate,
+<i>321</i>&nbsp;            org.apache.bookkeeper.client.ITopologyAwareEnsemblePlacementPolicy.Ensemble&lt;BookieNode&gt; ensemble,
+<i>322</i>&nbsp;            boolean fallbackToRandom) throws BKNotEnoughBookiesException {
+<b class="nc"><i>323</i>&nbsp;        throw new UnsupportedOperationException(</b>
+<i>324</i>&nbsp;                &quot;selectFromNetworkLocation is not supported for ZoneawareEnsemblePlacementPolicyImpl&quot;);
+<i>325</i>&nbsp;    }
+<i>326</i>&nbsp;
+<i>327</i>&nbsp;    @Override
+<i>328</i>&nbsp;    public void uninitalize() {
+<b class="nc"><i>329</i>&nbsp;    }</b>
+<i>330</i>&nbsp;
+<i>331</i>&nbsp;    @Override
+<i>332</i>&nbsp;    public PlacementResult&lt;List&lt;BookieSocketAddress&gt;&gt; newEnsemble(int ensembleSize, int writeQuorumSize,
+<i>333</i>&nbsp;            int ackQuorumSize, Map&lt;String, byte[]&gt; customMetadata, Set&lt;BookieSocketAddress&gt; excludeBookies)
+<i>334</i>&nbsp;            throws BKNotEnoughBookiesException {
+<b class="nc"><i>335</i>&nbsp;        if (enforceStrictZoneawarePlacement) {</b>
+<b class="nc"><i>336</i>&nbsp;            if (ensembleSize % writeQuorumSize != 0) {</b>
+<i>337</i>&nbsp;                /*
+<i>338</i>&nbsp;                 * if ensembleSize is not multiple of writeQuorumSize, then the
+<i>339</i>&nbsp;                 * write quorums which are wrapped will have bookies from just
+<i>340</i>&nbsp;                 * minNumberOfZones though bookies are available from
+<i>341</i>&nbsp;                 * desiredNumZones.
+<i>342</i>&nbsp;                 *
+<i>343</i>&nbsp;                 * lets say for example - desiredZones = 3, minZones = 2,
+<i>344</i>&nbsp;                 * ensembleSize = 5, writeQuorumSize = 3, ackQuorumSize = 2
+<i>345</i>&nbsp;                 *
+<i>346</i>&nbsp;                 * z1, z2, z3, z1, z2 is a legal ensemble. (lets assume here z1
+<i>347</i>&nbsp;                 * represents a node belonging to zone z1)
+<i>348</i>&nbsp;                 *
+<i>349</i>&nbsp;                 * the writeQuorum for entry 3 will be z1, z2 and z1, since
+<i>350</i>&nbsp;                 * ackQuorumSize is 2, an entry could be written just to two
+<i>351</i>&nbsp;                 * bookies that belong to z1. If the zone z1 goes down then the
+<i>352</i>&nbsp;                 * entry could potentially be unavailable until the zone z1 has
+<i>353</i>&nbsp;                 * come back.
+<i>354</i>&nbsp;                 *
+<i>355</i>&nbsp;                 * Also, it is not ideal to allow combination which fallsback to
+<i>356</i>&nbsp;                 * minZones, when bookies are available from desiredNumZones.
+<i>357</i>&nbsp;                 *
+<i>358</i>&nbsp;                 * So prohibiting this combination of configuration.
+<i>359</i>&nbsp;                 */
+<b class="nc"><i>360</i>&nbsp;                LOG.error(&quot;It is illegal for ensembleSize to be not multiple of&quot;</b>
+<i>361</i>&nbsp;                        + &quot; writeQuorumSize When StrictZoneawarePlacement is enabled&quot;);
+<b class="nc"><i>362</i>&nbsp;                throw new IllegalArgumentException(&quot;It is illegal for ensembleSize to be not multiple of&quot;</b>
+<i>363</i>&nbsp;                        + &quot; writeQuorumSize When StrictZoneawarePlacement is enabled&quot;);
+<i>364</i>&nbsp;            }
+<b class="nc"><i>365</i>&nbsp;            if (writeQuorumSize &lt;= minNumZonesPerWriteQuorum) {</b>
+<i>366</i>&nbsp;                /*
+<i>367</i>&nbsp;                 * if we allow writeQuorumSize &lt;= minNumZonesPerWriteQuorum,
+<i>368</i>&nbsp;                 * then replaceBookie may fail to find a candidate to replace a
+<i>369</i>&nbsp;                 * node when a zone goes down.
+<i>370</i>&nbsp;                 *
+<i>371</i>&nbsp;                 * lets say for example - desiredZones = 3, minZones = 2,
+<i>372</i>&nbsp;                 * ensembleSize = 6, writeQuorumSize = 2, ackQuorumSize = 2
+<i>373</i>&nbsp;                 *
+<i>374</i>&nbsp;                 * z1, z2, z3, z1, z2, z3 is a legal ensemble. (lets assume here
+<i>375</i>&nbsp;                 * z1 represents a node belonging to zone z1)
+<i>376</i>&nbsp;                 *
+<i>377</i>&nbsp;                 * Now if Zone z2 goes down, you need to replace Index 1 and 4.
+<i>378</i>&nbsp;                 * To replace index 1, you need to find a zone that is not z1
+<i>379</i>&nbsp;                 * and Z3 which is not possible.
+<i>380</i>&nbsp;                 *
+<i>381</i>&nbsp;                 * So prohibiting this combination of configuration.
+<i>382</i>&nbsp;                 */
+<b class="nc"><i>383</i>&nbsp;                LOG.error(&quot;It is illegal for writeQuorumSize to be lesser than or equal&quot;</b>
+<i>384</i>&nbsp;                        + &quot; to minNumZonesPerWriteQuorum When StrictZoneawarePlacement is enabled&quot;);
+<b class="nc"><i>385</i>&nbsp;                throw new IllegalArgumentException(&quot;It is illegal for writeQuorumSize to be lesser than or equal&quot;</b>
+<i>386</i>&nbsp;                        + &quot; to minNumZonesPerWriteQuorum When StrictZoneawarePlacement is enabled&quot;);
+<i>387</i>&nbsp;            }
+<i>388</i>&nbsp;        }
+<b class="nc"><i>389</i>&nbsp;        int desiredNumZonesPerWriteQuorumForThisEnsemble = Math.min(writeQuorumSize, desiredNumZonesPerWriteQuorum);</b>
+<b class="nc"><i>390</i>&nbsp;        List&lt;BookieSocketAddress&gt; newEnsemble = new ArrayList&lt;BookieSocketAddress&gt;(</b>
+<b class="nc"><i>391</i>&nbsp;                Collections.nCopies(ensembleSize, null));</b>
+<b class="nc"><i>392</i>&nbsp;        rwLock.readLock().lock();</b>
+<i>393</i>&nbsp;        try {
+<b class="nc"><i>394</i>&nbsp;            if (!enforceStrictZoneawarePlacement) {</b>
+<b class="nc"><i>395</i>&nbsp;                return createNewEnsembleRandomly(newEnsemble, writeQuorumSize, ackQuorumSize, customMetadata,</b>
+<i>396</i>&nbsp;                        excludeBookies);
+<i>397</i>&nbsp;            }
+<b class="nc"><i>398</i>&nbsp;            Set&lt;BookieSocketAddress&gt; comprehensiveExclusionBookiesSet = addDefaultFaultDomainBookies(excludeBookies);</b>
+<b class="nc"><i>399</i>&nbsp;            for (int index = 0; index &lt; ensembleSize; index++) {</b>
+<b class="nc"><i>400</i>&nbsp;                BookieSocketAddress selectedBookie = setBookieInTheEnsemble(ensembleSize, writeQuorumSize, newEnsemble,</b>
+<i>401</i>&nbsp;                        newEnsemble, index, desiredNumZonesPerWriteQuorumForThisEnsemble,
+<i>402</i>&nbsp;                        comprehensiveExclusionBookiesSet);
+<b class="nc"><i>403</i>&nbsp;                comprehensiveExclusionBookiesSet.add(selectedBookie);</b>
+<i>404</i>&nbsp;            }
+<b class="nc"><i>405</i>&nbsp;            return PlacementResult.of(newEnsemble,</b>
+<b class="nc"><i>406</i>&nbsp;                    isEnsembleAdheringToPlacementPolicy(newEnsemble, writeQuorumSize, ackQuorumSize));</b>
+<i>407</i>&nbsp;        } finally {
+<b class="nc"><i>408</i>&nbsp;            rwLock.readLock().unlock();</b>
+<i>409</i>&nbsp;        }
+<i>410</i>&nbsp;    }
+<i>411</i>&nbsp;
+<i>412</i>&nbsp;    @Override
+<i>413</i>&nbsp;    public PlacementResult&lt;BookieSocketAddress&gt; replaceBookie(int ensembleSize, int writeQuorumSize, int ackQuorumSize,
+<i>414</i>&nbsp;            Map&lt;String, byte[]&gt; customMetadata, List&lt;BookieSocketAddress&gt; currentEnsemble,
+<i>415</i>&nbsp;            BookieSocketAddress bookieToReplace, Set&lt;BookieSocketAddress&gt; excludeBookies)
+<i>416</i>&nbsp;            throws BKNotEnoughBookiesException {
+<b class="nc"><i>417</i>&nbsp;        int bookieToReplaceIndex = currentEnsemble.indexOf(bookieToReplace);</b>
+<b class="nc"><i>418</i>&nbsp;        int desiredNumZonesPerWriteQuorumForThisEnsemble = (writeQuorumSize &lt; desiredNumZonesPerWriteQuorum)</b>
+<i>419</i>&nbsp;                ? writeQuorumSize : desiredNumZonesPerWriteQuorum;
+<b class="nc"><i>420</i>&nbsp;        List&lt;BookieSocketAddress&gt; newEnsemble = new ArrayList&lt;BookieSocketAddress&gt;(currentEnsemble);</b>
+<b class="nc"><i>421</i>&nbsp;        rwLock.readLock().lock();</b>
+<i>422</i>&nbsp;        try {
+<b class="nc"><i>423</i>&nbsp;            if (!enforceStrictZoneawarePlacement) {</b>
+<b class="nc"><i>424</i>&nbsp;                return selectBookieRandomly(newEnsemble, bookieToReplace, excludeBookies, writeQuorumSize,</b>
+<i>425</i>&nbsp;                        ackQuorumSize);
+<i>426</i>&nbsp;            }
+<b class="nc"><i>427</i>&nbsp;            Set&lt;BookieSocketAddress&gt; comprehensiveExclusionBookiesSet = addDefaultFaultDomainBookies(excludeBookies);</b>
+<b class="nc"><i>428</i>&nbsp;            comprehensiveExclusionBookiesSet.addAll(currentEnsemble);</b>
+<b class="nc"><i>429</i>&nbsp;            BookieSocketAddress candidateAddr = setBookieInTheEnsemble(ensembleSize, writeQuorumSize, currentEnsemble,</b>
+<i>430</i>&nbsp;                    newEnsemble, bookieToReplaceIndex, desiredNumZonesPerWriteQuorumForThisEnsemble,
+<i>431</i>&nbsp;                    comprehensiveExclusionBookiesSet);
+<b class="nc"><i>432</i>&nbsp;            return PlacementResult.of(candidateAddr,</b>
+<b class="nc"><i>433</i>&nbsp;                    isEnsembleAdheringToPlacementPolicy(newEnsemble, writeQuorumSize, ackQuorumSize));</b>
+<i>434</i>&nbsp;        } finally {
+<b class="nc"><i>435</i>&nbsp;            rwLock.readLock().unlock();</b>
+<i>436</i>&nbsp;        }
+<i>437</i>&nbsp;    }
+<i>438</i>&nbsp;
+<i>439</i>&nbsp;    private PlacementResult&lt;List&lt;BookieSocketAddress&gt;&gt; createNewEnsembleRandomly(List&lt;BookieSocketAddress&gt; newEnsemble,
+<i>440</i>&nbsp;            int writeQuorumSize, int ackQuorumSize, Map&lt;String, byte[]&gt; customMetadata,
+<i>441</i>&nbsp;            Set&lt;BookieSocketAddress&gt; excludeBookies) throws BKNotEnoughBookiesException {
+<b class="nc"><i>442</i>&nbsp;        int ensembleSize = newEnsemble.size();</b>
+<b class="nc"><i>443</i>&nbsp;        Set&lt;BookieNode&gt; bookiesToConsider = getBookiesToConsider(excludeBookies);</b>
+<b class="nc"><i>444</i>&nbsp;        if (bookiesToConsider.size() &lt; newEnsemble.size()) {</b>
+<b class="nc"><i>445</i>&nbsp;            LOG.error(&quot;Not enough bookies are available to form ensemble of size: {}&quot;, newEnsemble.size());</b>
+<b class="nc"><i>446</i>&nbsp;            throw new BKNotEnoughBookiesException();</b>
+<i>447</i>&nbsp;        }
+<i>448</i>&nbsp;
+<b class="nc"><i>449</i>&nbsp;        for (int i = 0; i &lt; ensembleSize; i++) {</b>
+<b class="nc"><i>450</i>&nbsp;            BookieNode candidateNode = selectCandidateNode(bookiesToConsider);</b>
+<b class="nc"><i>451</i>&nbsp;            newEnsemble.set(i, candidateNode.getAddr());</b>
+<b class="nc"><i>452</i>&nbsp;            bookiesToConsider.remove(candidateNode);</b>
+<i>453</i>&nbsp;        }
+<b class="nc"><i>454</i>&nbsp;        return PlacementResult.of(newEnsemble,</b>
+<b class="nc"><i>455</i>&nbsp;                isEnsembleAdheringToPlacementPolicy(newEnsemble, writeQuorumSize, ackQuorumSize));</b>
+<i>456</i>&nbsp;    }
+<i>457</i>&nbsp;
+<i>458</i>&nbsp;    private PlacementResult&lt;BookieSocketAddress&gt; selectBookieRandomly(List&lt;BookieSocketAddress&gt; newEnsemble,
+<i>459</i>&nbsp;            BookieSocketAddress bookieToReplace, Set&lt;BookieSocketAddress&gt; excludeBookies, int writeQuorumSize,
+<i>460</i>&nbsp;            int ackQuorumSize) throws BKNotEnoughBookiesException {
+<b class="nc"><i>461</i>&nbsp;        Set&lt;BookieSocketAddress&gt; bookiesToExcludeIncludingEnsemble = new HashSet&lt;BookieSocketAddress&gt;(excludeBookies);</b>
+<b class="nc"><i>462</i>&nbsp;        bookiesToExcludeIncludingEnsemble.addAll(newEnsemble);</b>
+<b class="nc"><i>463</i>&nbsp;        Set&lt;BookieNode&gt; bookiesToConsider = getBookiesToConsider(bookiesToExcludeIncludingEnsemble);</b>
+<b class="nc"><i>464</i>&nbsp;        int bookieToReplaceIndex = newEnsemble.indexOf(bookieToReplace);</b>
+<i>465</i>&nbsp;
+<b class="nc"><i>466</i>&nbsp;        if (bookiesToConsider.isEmpty()) {</b>
+<b class="nc"><i>467</i>&nbsp;            LOG.error(&quot;There is no bookie available to replace a bookie&quot;);</b>
+<b class="nc"><i>468</i>&nbsp;            throw new BKNotEnoughBookiesException();</b>
+<i>469</i>&nbsp;        }
+<b class="nc"><i>470</i>&nbsp;        BookieSocketAddress candidateAddr = (selectCandidateNode(bookiesToConsider)).getAddr();</b>
+<b class="nc"><i>471</i>&nbsp;        newEnsemble.set(bookieToReplaceIndex, candidateAddr);</b>
+<b class="nc"><i>472</i>&nbsp;        return PlacementResult.of(candidateAddr,</b>
+<b class="nc"><i>473</i>&nbsp;                isEnsembleAdheringToPlacementPolicy(newEnsemble, writeQuorumSize, ackQuorumSize));</b>
+<i>474</i>&nbsp;    }
+<i>475</i>&nbsp;
+<i>476</i>&nbsp;    private Set&lt;BookieNode&gt; getBookiesToConsider(Set&lt;BookieSocketAddress&gt; excludeBookies) {
+<b class="nc"><i>477</i>&nbsp;        Set&lt;Node&gt; leaves = topology.getLeaves(NodeBase.ROOT);</b>
+<b class="nc"><i>478</i>&nbsp;        Set&lt;BookieNode&gt; bookiesToConsider = new HashSet&lt;BookieNode&gt;();</b>
+<i>479</i>&nbsp;        BookieNode bookieNode;
+<b class="nc"><i>480</i>&nbsp;        for (Node leaf : leaves) {</b>
+<b class="nc"><i>481</i>&nbsp;            if (leaf instanceof BookieNode) {</b>
+<b class="nc"><i>482</i>&nbsp;                bookieNode = ((BookieNode) leaf);</b>
+<b class="nc"><i>483</i>&nbsp;                if (excludeBookies.contains(bookieNode.getAddr())) {</b>
+<b class="nc"><i>484</i>&nbsp;                    continue;</b>
+<i>485</i>&nbsp;                }
+<b class="nc"><i>486</i>&nbsp;                bookiesToConsider.add(bookieNode);</b>
+<i>487</i>&nbsp;            }
+<b class="nc"><i>488</i>&nbsp;        }</b>
+<b class="nc"><i>489</i>&nbsp;        return bookiesToConsider;</b>
+<i>490</i>&nbsp;    }
+<i>491</i>&nbsp;
+<i>492</i>&nbsp;    /*
+<i>493</i>&nbsp;     * This method finds the appropriate bookie for newEnsemble by finding
+<i>494</i>&nbsp;     * bookie to replace at bookieToReplaceIndex in the currentEnsemble.
+<i>495</i>&nbsp;     *
+<i>496</i>&nbsp;     * It goes through following filtering process 1) Exclude zones of
+<i>497</i>&nbsp;     * desiredNumZonesPerWriteQuorumForThisEnsemble neighboring nodes 2) Find
+<i>498</i>&nbsp;     * bookies to consider by excluding zones (found from previous step) and
+<i>499</i>&nbsp;     * excluding UDs of the zones to consider. 3) If it can&#39;t find eligible
+<i>500</i>&nbsp;     * bookie, then keep reducing the number of neighboring nodes to
+<i>501</i>&nbsp;     * minNumZonesPerWriteQuorum and repeat step 2. 4) If it still can&#39;t find
+<i>502</i>&nbsp;     * eligible bookies then find the zones to exclude such that in a writeset
+<i>503</i>&nbsp;     * there will be bookies from atleast minNumZonesPerWriteQuorum zones and
+<i>504</i>&nbsp;     * repeat step 2 5) After getting the list of eligible candidates select a
+<i>505</i>&nbsp;     * node randomly. 6) If step-4 couldn&#39;t find eligible candidates then throw
+<i>506</i>&nbsp;     * BKNotEnoughBookiesException.
+<i>507</i>&nbsp;     *
+<i>508</i>&nbsp;     * Example: Ensemble:6 Qw:6 desiredNumZonesPerWriteQuorumForThisEnsemble:3
+<i>509</i>&nbsp;     * minNumZonesPerWriteQuorum:2 The selection process is as follows:
+<i>510</i>&nbsp;     *
+<i>511</i>&nbsp;     * 1) Find bookies by excluding zones of
+<i>512</i>&nbsp;     * (desiredNumZonesPerWriteQuorumForThisEnsemble -1) neighboring bookies on
+<i>513</i>&nbsp;     * the left and and the right side of the bookieToReplaceIndex. i.e Zones of
+<i>514</i>&nbsp;     * 2 bookies(3-1) on both sides of the index in question will be excluded to
+<i>515</i>&nbsp;     * find bookies. 2) Get the set of zones of the bookies selected above. 3)
+<i>516</i>&nbsp;     * Get the UpgradeDomains to exclude of the each zone selected above to make
+<i>517</i>&nbsp;     * sure bookies of writeSets containing bookieToReplaceIndex are from
+<i>518</i>&nbsp;     * different UD if they belong to same zone. 4) now from the zones selected
+<i>519</i>&nbsp;     * in step 2, apply the filter of UDs to exclude found in previous step and
+<i>520</i>&nbsp;     * get the eligible bookies. 5) If no bookie matches this filter, then
+<i>521</i>&nbsp;     * instead of aiming for unique UDs, fallback to UDs to exclude such that if
+<i>522</i>&nbsp;     * bookies are from same zone in the writeSets containing
+<i>523</i>&nbsp;     * bookieToReplaceIndex then they must be atleast from 2 different UDs. 6)
+<i>524</i>&nbsp;     * now from the zones selected in step 2, apply the filter of UDs to exclude
+<i>525</i>&nbsp;     * found in previous step and get the eligible bookies. 7) If no bookie
+<i>526</i>&nbsp;     * matches this filter, repeat from Step1 to Step6 by decreasing neighboring
+<i>527</i>&nbsp;     * exclude zones from (desiredNumZonesPerWriteQuorumForThisEnsemble - 1),
+<i>528</i>&nbsp;     * which is 2 to (minNumZonesPerWriteQuorum - 1), which is 1 8) If even
+<i>529</i>&nbsp;     * after this, bookies are not found matching the criteria fallback to
+<i>530</i>&nbsp;     * minNumZonesPerWriteQuorum, for this find the zones to exclude such that
+<i>531</i>&nbsp;     * in writesets containing this bookieToReplaceIndex there will be bookies
+<i>532</i>&nbsp;     * from atleast minNumZonesPerWriteQuorum zones, which is 2. 9) Get the set
+<i>533</i>&nbsp;     * of the zones of the bookies by excluding zones selected above. 10) repeat
+<i>534</i>&nbsp;     * Step3 to Step6. 11) After getting the list of eligible candidates select
+<i>535</i>&nbsp;     * a node randomly. 12) If even after Step10 there are no eligible
+<i>536</i>&nbsp;     * candidates then throw BKNotEnoughBookiesException.
+<i>537</i>&nbsp;     */
+<i>538</i>&nbsp;    private BookieSocketAddress setBookieInTheEnsemble(int ensembleSize, int writeQuorumSize,
+<i>539</i>&nbsp;            List&lt;BookieSocketAddress&gt; currentEnsemble, List&lt;BookieSocketAddress&gt; newEnsemble, int bookieToReplaceIndex,
+<i>540</i>&nbsp;            int desiredNumZonesPerWriteQuorumForThisEnsemble, Set&lt;BookieSocketAddress&gt; excludeBookies)
+<i>541</i>&nbsp;                    throws BKNotEnoughBookiesException {
+<b class="nc"><i>542</i>&nbsp;        BookieSocketAddress bookieToReplace = currentEnsemble.get(bookieToReplaceIndex);</b>
+<b class="nc"><i>543</i>&nbsp;        Set&lt;String&gt; zonesToExclude = null;</b>
+<b class="nc"><i>544</i>&nbsp;        Set&lt;BookieNode&gt; bookiesToConsiderAfterExcludingZonesAndUDs = null;</b>
+<b class="nc"><i>545</i>&nbsp;        for (int numberOfNeighborsToConsider = (desiredNumZonesPerWriteQuorumForThisEnsemble</b>
+<b class="nc"><i>546</i>&nbsp;                - 1); numberOfNeighborsToConsider &gt;= (minNumZonesPerWriteQuorum - 1); numberOfNeighborsToConsider--) {</b>
+<b class="nc"><i>547</i>&nbsp;            zonesToExclude = getZonesOfNeighboringNodesInEnsemble(currentEnsemble, bookieToReplaceIndex,</b>
+<i>548</i>&nbsp;                    (numberOfNeighborsToConsider));
+<b class="nc"><i>549</i>&nbsp;            bookiesToConsiderAfterExcludingZonesAndUDs = getBookiesToConsiderAfterExcludingZonesAndUDs(ensembleSize,</b>
+<i>550</i>&nbsp;                    writeQuorumSize, currentEnsemble, bookieToReplaceIndex, excludeBookies, zonesToExclude);
+<b class="nc"><i>551</i>&nbsp;            if (!bookiesToConsiderAfterExcludingZonesAndUDs.isEmpty()) {</b>
+<b class="nc"><i>552</i>&nbsp;                break;</b>
+<i>553</i>&nbsp;            }
+<i>554</i>&nbsp;        }
+<b class="nc"><i>555</i>&nbsp;        if (bookiesToConsiderAfterExcludingZonesAndUDs.isEmpty()) {</b>
+<b class="nc"><i>556</i>&nbsp;            zonesToExclude = getZonesToExcludeToMaintainMinZones(currentEnsemble, bookieToReplaceIndex,</b>
+<i>557</i>&nbsp;                    writeQuorumSize);
+<b class="nc"><i>558</i>&nbsp;            bookiesToConsiderAfterExcludingZonesAndUDs = getBookiesToConsiderAfterExcludingZonesAndUDs(ensembleSize,</b>
+<i>559</i>&nbsp;                    writeQuorumSize, currentEnsemble, bookieToReplaceIndex, excludeBookies, zonesToExclude);
+<i>560</i>&nbsp;        }
+<b class="nc"><i>561</i>&nbsp;        if (bookiesToConsiderAfterExcludingZonesAndUDs.isEmpty()) {</b>
+<b class="nc"><i>562</i>&nbsp;            LOG.error(&quot;Not enough bookies are available to replaceBookie : {} in ensemble : {} with excludeBookies {}.&quot;,</b>
+<i>563</i>&nbsp;                    bookieToReplace, currentEnsemble, excludeBookies);
+<b class="nc"><i>564</i>&nbsp;            throw new BKNotEnoughBookiesException();</b>
+<i>565</i>&nbsp;        }
+<i>566</i>&nbsp;
+<b class="nc"><i>567</i>&nbsp;        BookieSocketAddress candidateAddr = selectCandidateNode(bookiesToConsiderAfterExcludingZonesAndUDs).getAddr();</b>
+<b class="nc"><i>568</i>&nbsp;        newEnsemble.set(bookieToReplaceIndex, candidateAddr);</b>
+<b class="nc"><i>569</i>&nbsp;        return candidateAddr;</b>
+<i>570</i>&nbsp;    }
+<i>571</i>&nbsp;
+<i>572</i>&nbsp;    /*
+<i>573</i>&nbsp;     * this method should be called in readlock scope of &#39;rwLock&#39;. This method
+<i>574</i>&nbsp;     * returns a new set, by adding excludedBookies and bookies in
+<i>575</i>&nbsp;     * defaultfaultdomain.
+<i>576</i>&nbsp;     */
+<i>577</i>&nbsp;    protected Set&lt;BookieSocketAddress&gt; addDefaultFaultDomainBookies(Set&lt;BookieSocketAddress&gt; excludeBookies) {
+<b class="nc"><i>578</i>&nbsp;        Set&lt;BookieSocketAddress&gt; comprehensiveExclusionBookiesSet = new HashSet&lt;BookieSocketAddress&gt;(excludeBookies);</b>
+<b class="nc"><i>579</i>&nbsp;        Set&lt;Node&gt; defaultFaultDomainLeaves = topology.getLeaves(getDefaultFaultDomain());</b>
+<b class="nc"><i>580</i>&nbsp;        for (Node node : defaultFaultDomainLeaves) {</b>
+<b class="nc"><i>581</i>&nbsp;            if (node instanceof BookieNode) {</b>
+<b class="nc"><i>582</i>&nbsp;                comprehensiveExclusionBookiesSet.add(((BookieNode) node).getAddr());</b>
+<i>583</i>&nbsp;            } else {
+<b class="nc"><i>584</i>&nbsp;                LOG.error(&quot;found non-BookieNode: {} as leaf of defaultFaultDomain: {}&quot;, node, getDefaultFaultDomain());</b>
+<i>585</i>&nbsp;            }
+<b class="nc"><i>586</i>&nbsp;        }</b>
+<b class="nc"><i>587</i>&nbsp;        return comprehensiveExclusionBookiesSet;</b>
+<i>588</i>&nbsp;    }
+<i>589</i>&nbsp;
+<i>590</i>&nbsp;    /*
+<i>591</i>&nbsp;     * Select bookie randomly from the bookiesToConsiderAfterExcludingUDs set.
+<i>592</i>&nbsp;     * If diskWeightBasedPlacement is enabled then it will select node randomly
+<i>593</i>&nbsp;     * based on node weight.
+<i>594</i>&nbsp;     */
+<i>595</i>&nbsp;    private BookieNode selectCandidateNode(Set&lt;BookieNode&gt; bookiesToConsiderAfterExcludingUDs) {
+<b class="nc"><i>596</i>&nbsp;        BookieNode candidate = null;</b>
+<b class="nc"><i>597</i>&nbsp;        if (!this.isWeighted) {</b>
+<b class="nc"><i>598</i>&nbsp;            int randSelIndex = rand.nextInt(bookiesToConsiderAfterExcludingUDs.size());</b>
+<b class="nc"><i>599</i>&nbsp;            int ind = 0;</b>
+<b class="nc"><i>600</i>&nbsp;            for (BookieNode bookieNode : bookiesToConsiderAfterExcludingUDs) {</b>
+<b class="nc"><i>601</i>&nbsp;                if (ind == randSelIndex) {</b>
+<b class="nc"><i>602</i>&nbsp;                    candidate = bookieNode;</b>
+<b class="nc"><i>603</i>&nbsp;                    break;</b>
+<i>604</i>&nbsp;                }
+<b class="nc"><i>605</i>&nbsp;                ind++;</b>
+<b class="nc"><i>606</i>&nbsp;            }</b>
+<b class="nc"><i>607</i>&nbsp;        } else {</b>
+<b class="nc"><i>608</i>&nbsp;            candidate = weightedSelection.getNextRandom(bookiesToConsiderAfterExcludingUDs);</b>
+<i>609</i>&nbsp;        }
+<b class="nc"><i>610</i>&nbsp;        return candidate;</b>
+<i>611</i>&nbsp;    }
+<i>612</i>&nbsp;
+<i>613</i>&nbsp;    private String getExcludedZonesString(Set&lt;String&gt; excludeZones) {
+<b class="nc"><i>614</i>&nbsp;        if (excludeZones.isEmpty()) {</b>
+<b class="nc"><i>615</i>&nbsp;            return &quot;&quot;;</b>
+<i>616</i>&nbsp;        }
+<b class="nc"><i>617</i>&nbsp;        StringBuilder excludedZonesString = new StringBuilder(&quot;~&quot;);</b>
+<b class="nc"><i>618</i>&nbsp;        boolean firstZone = true;</b>
+<b class="nc"><i>619</i>&nbsp;        for (String excludeZone : excludeZones) {</b>
+<b class="nc"><i>620</i>&nbsp;            if (!firstZone) {</b>
+<b class="nc"><i>621</i>&nbsp;                excludedZonesString.append(NetworkTopologyImpl.NODE_SEPARATOR);</b>
+<i>622</i>&nbsp;            }
+<b class="nc"><i>623</i>&nbsp;            excludedZonesString.append(excludeZone);</b>
+<b class="nc"><i>624</i>&nbsp;            firstZone = false;</b>
+<b class="nc"><i>625</i>&nbsp;        }</b>
+<b class="nc"><i>626</i>&nbsp;        return excludedZonesString.toString();</b>
+<i>627</i>&nbsp;    }
+<i>628</i>&nbsp;
+<i>629</i>&nbsp;    private Set&lt;BookieNode&gt; getBookiesToConsider(String excludedZonesString, Set&lt;BookieSocketAddress&gt; excludeBookies) {
+<b class="nc"><i>630</i>&nbsp;        Set&lt;BookieNode&gt; bookiesToConsider = new HashSet&lt;BookieNode&gt;();</b>
+<b class="nc"><i>631</i>&nbsp;        Set&lt;Node&gt; leaves = topology.getLeaves(excludedZonesString);</b>
+<b class="nc"><i>632</i>&nbsp;        for (Node leaf : leaves) {</b>
+<b class="nc"><i>633</i>&nbsp;            BookieNode bookieNode = ((BookieNode) leaf);</b>
+<b class="nc"><i>634</i>&nbsp;            if (excludeBookies.contains(bookieNode.getAddr())) {</b>
+<b class="nc"><i>635</i>&nbsp;                continue;</b>
+<i>636</i>&nbsp;            }
+<b class="nc"><i>637</i>&nbsp;            bookiesToConsider.add(bookieNode);</b>
+<b class="nc"><i>638</i>&nbsp;        }</b>
+<b class="nc"><i>639</i>&nbsp;        return bookiesToConsider;</b>
+<i>640</i>&nbsp;    }
+<i>641</i>&nbsp;
+<i>642</i>&nbsp;    /*
+<i>643</i>&nbsp;     * For the position of &#39;bookieToReplaceIndex&#39; in currentEnsemble, get the
+<i>644</i>&nbsp;     * set of bookies eligible by excluding the &#39;excludeZones&#39; and
+<i>645</i>&nbsp;     * &#39;excludeBookies&#39;. After excluding excludeZones and excludeBookies, it
+<i>646</i>&nbsp;     * would first try to exclude upgrade domains of neighboring nodes
+<i>647</i>&nbsp;     * (writeset) so the bookie would be from completely new upgrade domain
+<i>648</i>&nbsp;     * of a zone, if a writeset contains bookie from the zone. If Bookie is
+<i>649</i>&nbsp;     * not found matching this criteria, then it will fallback to maintain min
+<i>650</i>&nbsp;     * upgrade domains (two) from a zone, such that if multiple bookies in a
+<i>651</i>&nbsp;     * write quorum are from the same zone then they will be spread across two
+<i>652</i>&nbsp;     * upgrade domains.
+<i>653</i>&nbsp;     */
+<i>654</i>&nbsp;    private Set&lt;BookieNode&gt; getBookiesToConsiderAfterExcludingZonesAndUDs(int ensembleSize, int writeQuorumSize,
+<i>655</i>&nbsp;            List&lt;BookieSocketAddress&gt; currentEnsemble, int bookieToReplaceIndex,
+<i>656</i>&nbsp;            Set&lt;BookieSocketAddress&gt; excludeBookies, Set&lt;String&gt; excludeZones) {
+<b class="nc"><i>657</i>&nbsp;        Set&lt;BookieNode&gt; bookiesToConsiderAfterExcludingZonesAndUDs = new HashSet&lt;BookieNode&gt;();</b>
+<b class="nc"><i>658</i>&nbsp;        HashMap&lt;String, Set&lt;String&gt;&gt; excludingUDsOfZonesToConsider = new HashMap&lt;String, Set&lt;String&gt;&gt;();</b>
+<b class="nc"><i>659</i>&nbsp;        Set&lt;BookieNode&gt; bookiesToConsiderAfterExcludingZones = getBookiesToConsider(</b>
+<b class="nc"><i>660</i>&nbsp;                getExcludedZonesString(excludeZones), excludeBookies);</b>
+<i>661</i>&nbsp;
+<b class="nc"><i>662</i>&nbsp;        if (!bookiesToConsiderAfterExcludingZones.isEmpty()) {</b>
+<b class="nc"><i>663</i>&nbsp;            Set&lt;String&gt; zonesToConsider = getZonesOfBookies(bookiesToConsiderAfterExcludingZones);</b>
+<b class="nc"><i>664</i>&nbsp;            for (String zoneToConsider : zonesToConsider) {</b>
+<b class="nc"><i>665</i>&nbsp;                Set&lt;String&gt; upgradeDomainsOfAZoneInNeighboringNodes = getUpgradeDomainsOfAZoneInNeighboringNodes(</b>
+<i>666</i>&nbsp;                        currentEnsemble, bookieToReplaceIndex, writeQuorumSize, zoneToConsider);
+<b class="nc"><i>667</i>&nbsp;                excludingUDsOfZonesToConsider.put(zoneToConsider, upgradeDomainsOfAZoneInNeighboringNodes);</b>
+<b class="nc"><i>668</i>&nbsp;            }</b>
+<i>669</i>&nbsp;
+<b class="nc"><i>670</i>&nbsp;            updateBookiesToConsiderAfterExcludingZonesAndUDs(bookiesToConsiderAfterExcludingZonesAndUDs,</b>
+<i>671</i>&nbsp;                    bookiesToConsiderAfterExcludingZones, excludingUDsOfZonesToConsider);
+<i>672</i>&nbsp;
+<i>673</i>&nbsp;            /*
+<i>674</i>&nbsp;             * If no eligible bookie is found, then instead of aiming for unique
+<i>675</i>&nbsp;             * UDs, fallback to UDs to exclude such that if bookies are from
+<i>676</i>&nbsp;             * same zone in the writeSets containing bookieToReplaceIndex then
+<i>677</i>&nbsp;             * they must be atleast from 2 different UDs
+<i>678</i>&nbsp;             */
+<b class="nc"><i>679</i>&nbsp;            if (bookiesToConsiderAfterExcludingZonesAndUDs.isEmpty()) {</b>
+<b class="nc"><i>680</i>&nbsp;                excludingUDsOfZonesToConsider.clear();</b>
+<b class="nc"><i>681</i>&nbsp;                for (String zoneToConsider : zonesToConsider) {</b>
+<b class="nc"><i>682</i>&nbsp;                    Set&lt;String&gt; udsToExcludeToMaintainMinUDsInWriteQuorums =</b>
+<b class="nc"><i>683</i>&nbsp;                            getUDsToExcludeToMaintainMinUDsInWriteQuorums(currentEnsemble, bookieToReplaceIndex,</b>
+<i>684</i>&nbsp;                                    writeQuorumSize, zoneToConsider);
+<b class="nc"><i>685</i>&nbsp;                    excludingUDsOfZonesToConsider.put(zoneToConsider, udsToExcludeToMaintainMinUDsInWriteQuorums);</b>
+<b class="nc"><i>686</i>&nbsp;                }</b>
+<i>687</i>&nbsp;
+<b class="nc"><i>688</i>&nbsp;                updateBookiesToConsiderAfterExcludingZonesAndUDs(bookiesToConsiderAfterExcludingZonesAndUDs,</b>
+<i>689</i>&nbsp;                        bookiesToConsiderAfterExcludingZones, excludingUDsOfZonesToConsider);
+<i>690</i>&nbsp;            }
+<i>691</i>&nbsp;        }
+<b class="nc"><i>692</i>&nbsp;        return bookiesToConsiderAfterExcludingZonesAndUDs;</b>
+<i>693</i>&nbsp;    }
+<i>694</i>&nbsp;
+<i>695</i>&nbsp;    /*
+<i>696</i>&nbsp;     * Filter bookies which belong to excludingUDs of zones to consider from
+<i>697</i>&nbsp;     * &#39;bookiesToConsider&#39; set and add them to
+<i>698</i>&nbsp;     * &#39;bookiesToConsiderAfterExcludingUDs&#39; set.
+<i>699</i>&nbsp;     */
+<i>700</i>&nbsp;    private void updateBookiesToConsiderAfterExcludingZonesAndUDs(Set&lt;BookieNode&gt; bookiesToConsiderAfterExcludingUDs,
+<i>701</i>&nbsp;            Set&lt;BookieNode&gt; bookiesToConsider, HashMap&lt;String, Set&lt;String&gt;&gt; excludingUDsOfZonesToConsider) {
+<b class="nc"><i>702</i>&nbsp;        for (BookieNode bookieToConsider : bookiesToConsider) {</b>
+<b class="nc"><i>703</i>&nbsp;            ZoneAwareNodeLocation nodeLocation = getZoneAwareNodeLocation(bookieToConsider);</b>
+<b class="nc"><i>704</i>&nbsp;            if (excludingUDsOfZonesToConsider.get(nodeLocation.getZone()).contains(nodeLocation.getUpgradeDomain())) {</b>
+<b class="nc"><i>705</i>&nbsp;                continue;</b>
+<i>706</i>&nbsp;            }
+<b class="nc"><i>707</i>&nbsp;            bookiesToConsiderAfterExcludingUDs.add(bookieToConsider);</b>
+<b class="nc"><i>708</i>&nbsp;        }</b>
+<b class="nc"><i>709</i>&nbsp;    }</b>
+<i>710</i>&nbsp;
+<i>711</i>&nbsp;    /*
+<i>712</i>&nbsp;     * Gets the set of zones of neighboring nodes.
+<i>713</i>&nbsp;     */
+<i>714</i>&nbsp;    private Set&lt;String&gt; getZonesOfNeighboringNodesInEnsemble(List&lt;BookieSocketAddress&gt; currentEnsemble, int indexOfNode,
+<i>715</i>&nbsp;            int numOfNeighboringNodes) {
+<b class="nc"><i>716</i>&nbsp;        Set&lt;String&gt; zonesOfNeighboringNodes = new HashSet&lt;String&gt;();</b>
+<b class="nc"><i>717</i>&nbsp;        int ensembleSize = currentEnsemble.size();</b>
+<b class="nc"><i>718</i>&nbsp;        for (int i = (-1 * numOfNeighboringNodes); i &lt;= numOfNeighboringNodes; i++) {</b>
+<b class="nc"><i>719</i>&nbsp;            if (i == 0) {</b>
+<b class="nc"><i>720</i>&nbsp;                continue;</b>
+<i>721</i>&nbsp;            }
+<b class="nc"><i>722</i>&nbsp;            int index = (indexOfNode + i + ensembleSize) % ensembleSize;</b>
+<b class="nc"><i>723</i>&nbsp;            BookieSocketAddress addrofNode = currentEnsemble.get(index);</b>
+<b class="nc"><i>724</i>&nbsp;            if (addrofNode == null) {</b>
+<b class="nc"><i>725</i>&nbsp;                continue;</b>
+<i>726</i>&nbsp;            }
+<b class="nc"><i>727</i>&nbsp;            String zoneOfNode = getZoneAwareNodeLocation(addrofNode).getZone();</b>
+<b class="nc"><i>728</i>&nbsp;            zonesOfNeighboringNodes.add(zoneOfNode);</b>
+<i>729</i>&nbsp;        }
+<b class="nc"><i>730</i>&nbsp;        return zonesOfNeighboringNodes;</b>
+<i>731</i>&nbsp;    }
+<i>732</i>&nbsp;
+<i>733</i>&nbsp;    /*
+<i>734</i>&nbsp;     * This method returns set of zones to exclude for the position of
+<i>735</i>&nbsp;     * &#39;indexOfNode&#39;, so that writequorums, containing this index, would have
+<i>736</i>&nbsp;     * atleast minNumZonesPerWriteQuorum.
+<i>737</i>&nbsp;     */
+<i>738</i>&nbsp;    private Set&lt;String&gt; getZonesToExcludeToMaintainMinZones(List&lt;BookieSocketAddress&gt; currentEnsemble, int indexOfNode,
+<i>739</i>&nbsp;            int writeQuorumSize) {
+<b class="nc"><i>740</i>&nbsp;        int ensSize = currentEnsemble.size();</b>
+<b class="nc"><i>741</i>&nbsp;        Set&lt;String&gt; zonesToExclude = new HashSet&lt;String&gt;();</b>
+<b class="nc"><i>742</i>&nbsp;        Set&lt;String&gt; zonesInWriteQuorum = new HashSet&lt;String&gt;();</b>
+<b class="nc"><i>743</i>&nbsp;        for (int i = -(writeQuorumSize - 1); i &lt;= 0; i++) {</b>
+<b class="nc"><i>744</i>&nbsp;            zonesInWriteQuorum.clear();</b>
+<b class="nc"><i>745</i>&nbsp;            for (int j = 0; j &lt; writeQuorumSize; j++) {</b>
+<b class="nc"><i>746</i>&nbsp;                int indexInEnsemble = (i + j + indexOfNode + ensSize) % ensSize;</b>
+<b class="nc"><i>747</i>&nbsp;                if (indexInEnsemble == indexOfNode) {</b>
+<b class="nc"><i>748</i>&nbsp;                    continue;</b>
+<i>749</i>&nbsp;                }
+<b class="nc"><i>750</i>&nbsp;                BookieSocketAddress bookieAddr = currentEnsemble.get(indexInEnsemble);</b>
+<b class="nc"><i>751</i>&nbsp;                if (bookieAddr == null) {</b>
+<b class="nc"><i>752</i>&nbsp;                    continue;</b>
+<i>753</i>&nbsp;                }
+<b class="nc"><i>754</i>&nbsp;                ZoneAwareNodeLocation nodeLocation = getZoneAwareNodeLocation(bookieAddr);</b>
+<b class="nc"><i>755</i>&nbsp;                zonesInWriteQuorum.add(nodeLocation.getZone());</b>
+<i>756</i>&nbsp;            }
+<b class="nc"><i>757</i>&nbsp;            if (zonesInWriteQuorum.size() &lt;= (minNumZonesPerWriteQuorum - 1)) {</b>
+<b class="nc"><i>758</i>&nbsp;                zonesToExclude.addAll(zonesInWriteQuorum);</b>
+<i>759</i>&nbsp;            }
+<i>760</i>&nbsp;        }
+<b class="nc"><i>761</i>&nbsp;        return zonesToExclude;</b>
+<i>762</i>&nbsp;    }
+<i>763</i>&nbsp;
+<i>764</i>&nbsp;    private Set&lt;String&gt; getZonesOfBookies(Collection&lt;BookieNode&gt; bookieNodes) {
+<b class="nc"><i>765</i>&nbsp;        Set&lt;String&gt; zonesOfBookies = new HashSet&lt;String&gt;();</b>
+<b class="nc"><i>766</i>&nbsp;        for (BookieNode bookieNode : bookieNodes) {</b>
+<b class="nc"><i>767</i>&nbsp;            ZoneAwareNodeLocation nodeLocation = getZoneAwareNodeLocation(bookieNode);</b>
+<b class="nc"><i>768</i>&nbsp;            zonesOfBookies.add(nodeLocation.getZone());</b>
+<b class="nc"><i>769</i>&nbsp;        }</b>
+<b class="nc"><i>770</i>&nbsp;        return zonesOfBookies;</b>
+<i>771</i>&nbsp;    }
+<i>772</i>&nbsp;
+<i>773</i>&nbsp;    /*
+<i>774</i>&nbsp;     * Gets the set of upgradedomains of neighboring nodes (writeQuorumSize)
+<i>775</i>&nbsp;     * which belong to this &#39;zone&#39;.
+<i>776</i>&nbsp;     */
+<i>777</i>&nbsp;    private Set&lt;String&gt; getUpgradeDomainsOfAZoneInNeighboringNodes(List&lt;BookieSocketAddress&gt; currentEnsemble,
+<i>778</i>&nbsp;            int indexOfNode, int writeQuorumSize, String zone) {
+<b class="nc"><i>779</i>&nbsp;        int ensSize = currentEnsemble.size();</b>
+<b class="nc"><i>780</i>&nbsp;        Set&lt;String&gt; upgradeDomainsOfAZoneInNeighboringNodes = new HashSet&lt;String&gt;();</b>
+<b class="nc"><i>781</i>&nbsp;        for (int i = -(writeQuorumSize - 1); i &lt;= (writeQuorumSize - 1); i++) {</b>
+<b class="nc"><i>782</i>&nbsp;            if (i == 0) {</b>
+<b class="nc"><i>783</i>&nbsp;                continue;</b>
+<i>784</i>&nbsp;            }
+<b class="nc"><i>785</i>&nbsp;            int indexInEnsemble = (indexOfNode + i + ensSize) % ensSize;</b>
+<b class="nc"><i>786</i>&nbsp;            BookieSocketAddress bookieAddr = currentEnsemble.get(indexInEnsemble);</b>
+<b class="nc"><i>787</i>&nbsp;            if (bookieAddr == null) {</b>
+<b class="nc"><i>788</i>&nbsp;                continue;</b>
+<i>789</i>&nbsp;            }
+<b class="nc"><i>790</i>&nbsp;            ZoneAwareNodeLocation nodeLocation = getZoneAwareNodeLocation(bookieAddr);</b>
+<b class="nc"><i>791</i>&nbsp;            if (nodeLocation.getZone().equals(zone)) {</b>
+<b class="nc"><i>792</i>&nbsp;                upgradeDomainsOfAZoneInNeighboringNodes.add(nodeLocation.getUpgradeDomain());</b>
+<i>793</i>&nbsp;            }
+<i>794</i>&nbsp;        }
+<b class="nc"><i>795</i>&nbsp;        return upgradeDomainsOfAZoneInNeighboringNodes;</b>
+<i>796</i>&nbsp;    }
+<i>797</i>&nbsp;
+<i>798</i>&nbsp;    /*
+<i>799</i>&nbsp;     * This method returns set of UpgradeDomains to exclude if a bookie from
+<i>800</i>&nbsp;     * the &#39;zone&#39; has to be selected for the position of &#39;indexOfNode&#39;, then if
+<i>801</i>&nbsp;     * there are multiple bookies from the &#39;zone&#39; in a write quorum then they
+<i>802</i>&nbsp;     * will be atleast from minimum of two upgrade domains.
+<i>803</i>&nbsp;     */
+<i>804</i>&nbsp;    private Set&lt;String&gt; getUDsToExcludeToMaintainMinUDsInWriteQuorums(List&lt;BookieSocketAddress&gt; currentEnsemble,
+<i>805</i>&nbsp;            int indexOfNode, int writeQuorumSize, String zone) {
+<b class="nc"><i>806</i>&nbsp;        int ensSize = currentEnsemble.size();</b>
+<b class="nc"><i>807</i>&nbsp;        Set&lt;String&gt; upgradeDomainsToExclude = new HashSet&lt;String&gt;();</b>
+<b class="nc"><i>808</i>&nbsp;        Set&lt;String&gt; upgradeDomainsOfThisZoneInWriteQuorum = new HashSet&lt;String&gt;();</b>
+<b class="nc"><i>809</i>&nbsp;        for (int i = -(writeQuorumSize - 1); i &lt;= 0; i++) {</b>
+<b class="nc"><i>810</i>&nbsp;            upgradeDomainsOfThisZoneInWriteQuorum.clear();</b>
+<b class="nc"><i>811</i>&nbsp;            for (int j = 0; j &lt; writeQuorumSize; j++) {</b>
+<b class="nc"><i>812</i>&nbsp;                int indexInEnsemble = (i + j + indexOfNode + ensSize) % ensSize;</b>
+<b class="nc"><i>813</i>&nbsp;                if (indexInEnsemble == indexOfNode) {</b>
+<b class="nc"><i>814</i>&nbsp;                    continue;</b>
+<i>815</i>&nbsp;                }
+<b class="nc"><i>816</i>&nbsp;                BookieSocketAddress bookieAddr = currentEnsemble.get(indexInEnsemble);</b>
+<b class="nc"><i>817</i>&nbsp;                if (bookieAddr == null) {</b>
+<b class="nc"><i>818</i>&nbsp;                    continue;</b>
+<i>819</i>&nbsp;                }
+<b class="nc"><i>820</i>&nbsp;                ZoneAwareNodeLocation nodeLocation = getZoneAwareNodeLocation(bookieAddr);</b>
+<b class="nc"><i>821</i>&nbsp;                if (nodeLocation.getZone().equals(zone)) {</b>
+<b class="nc"><i>822</i>&nbsp;                    upgradeDomainsOfThisZoneInWriteQuorum.add(nodeLocation.getUpgradeDomain());</b>
+<i>823</i>&nbsp;                }
+<i>824</i>&nbsp;            }
+<b class="nc"><i>825</i>&nbsp;            if (upgradeDomainsOfThisZoneInWriteQuorum.size() == 1) {</b>
+<b class="nc"><i>826</i>&nbsp;                upgradeDomainsToExclude.addAll(upgradeDomainsOfThisZoneInWriteQuorum);</b>
+<i>827</i>&nbsp;            }
+<i>828</i>&nbsp;        }
+<b class="nc"><i>829</i>&nbsp;        return upgradeDomainsToExclude;</b>
+<i>830</i>&nbsp;    }
+<i>831</i>&nbsp;
+<i>832</i>&nbsp;    @Override
+<i>833</i>&nbsp;    public void registerSlowBookie(BookieSocketAddress bookieSocketAddress, long entryId) {
+<i>834</i>&nbsp;        // TODO Auto-generated method stub
+<b class="nc"><i>835</i>&nbsp;    }</b>
+<i>836</i>&nbsp;
+<i>837</i>&nbsp;    @Override
+<i>838</i>&nbsp;    public DistributionSchedule.WriteSet reorderReadSequence(List&lt;BookieSocketAddress&gt; ensemble,
+<i>839</i>&nbsp;            BookiesHealthInfo bookiesHealthInfo, DistributionSchedule.WriteSet writeSet) {
+<b class="nc"><i>840</i>&nbsp;        return writeSet;</b>
+<i>841</i>&nbsp;    }
+<i>842</i>&nbsp;
+<i>843</i>&nbsp;    @Override
+<i>844</i>&nbsp;    public DistributionSchedule.WriteSet reorderReadLACSequence(List&lt;BookieSocketAddress&gt; ensemble,
+<i>845</i>&nbsp;            BookiesHealthInfo bookiesHealthInfo, DistributionSchedule.WriteSet writeSet) {
+<b class="nc"><i>846</i>&nbsp;        DistributionSchedule.WriteSet retList = reorderReadSequence(ensemble, bookiesHealthInfo, writeSet);</b>
+<b class="nc"><i>847</i>&nbsp;        retList.addMissingIndices(ensemble.size());</b>
+<b class="nc"><i>848</i>&nbsp;        return retList;</b>
+<i>849</i>&nbsp;    }
+<i>850</i>&nbsp;
+<i>851</i>&nbsp;    /*
+<i>852</i>&nbsp;     * In ZoneAwareEnsemblePlacementPolicy if bookies in the writeset are from
+<i>853</i>&nbsp;     * &#39;desiredNumOfZones&#39; then it is considered as MEETS_STRICT if they are
+<i>854</i>&nbsp;     * from &#39;minNumOfZones&#39; then it is considered as MEETS_SOFT otherwise
+<i>855</i>&nbsp;     * considered as FAIL. Also in a writeset if there are multiple bookies from
+<i>856</i>&nbsp;     * the same zone then they are expected to be from different upgrade
+<i>857</i>&nbsp;     * domains.
+<i>858</i>&nbsp;     */
+<i>859</i>&nbsp;    @Override
+<i>860</i>&nbsp;    public PlacementPolicyAdherence isEnsembleAdheringToPlacementPolicy(List&lt;BookieSocketAddress&gt; ensembleList,
+<i>861</i>&nbsp;            int writeQuorumSize, int ackQuorumSize) {
+<b class="nc"><i>862</i>&nbsp;        PlacementPolicyAdherence placementPolicyAdherence = PlacementPolicyAdherence.MEETS_STRICT;</b>
+<b class="nc"><i>863</i>&nbsp;        rwLock.readLock().lock();</b>
+<i>864</i>&nbsp;        try {
+<b class="nc"><i>865</i>&nbsp;            HashMap&lt;String, Set&lt;String&gt;&gt; bookiesLocationInWriteSet = new HashMap&lt;String, Set&lt;String&gt;&gt;();</b>
+<b class="nc"><i>866</i>&nbsp;            HashMap&lt;String, Integer&gt; numOfBookiesInZones = new HashMap&lt;String, Integer&gt;();</b>
+<i>867</i>&nbsp;            BookieSocketAddress bookieNode;
+<b class="nc"><i>868</i>&nbsp;            if (ensembleList.size() % writeQuorumSize != 0) {</b>
+<b class="nc"><i>869</i>&nbsp;                placementPolicyAdherence = PlacementPolicyAdherence.FAIL;</b>
+<b class="nc"><i>870</i>&nbsp;                if (LOG.isDebugEnabled()) {</b>
+<b class="nc"><i>871</i>&nbsp;                    LOG.debug(</b>
+<i>872</i>&nbsp;                            &quot;For ensemble: {}, ensembleSize: {} is not a multiple of writeQuorumSize: {}&quot;,
+<b class="nc"><i>873</i>&nbsp;                            ensembleList, ensembleList.size(), writeQuorumSize);</b>
+<i>874</i>&nbsp;                }
+<b class="nc"><i>875</i>&nbsp;                return placementPolicyAdherence;</b>
+<i>876</i>&nbsp;            }
+<b class="nc"><i>877</i>&nbsp;            if (writeQuorumSize &lt;= minNumZonesPerWriteQuorum) {</b>
+<b class="nc"><i>878</i>&nbsp;                placementPolicyAdherence = PlacementPolicyAdherence.FAIL;</b>
+<b class="nc"><i>879</i>&nbsp;                if (LOG.isDebugEnabled()) {</b>
+<b class="nc"><i>880</i>&nbsp;                    LOG.debug(</b>
+<i>881</i>&nbsp;                            &quot;For ensemble: {}, writeQuorumSize: {} is less than or equal to&quot;
+<i>882</i>&nbsp;                            + &quot; minNumZonesPerWriteQuorum: {}&quot;,
+<b class="nc"><i>883</i>&nbsp;                            ensembleList, writeQuorumSize, minNumZonesPerWriteQuorum);</b>
+<i>884</i>&nbsp;                }
+<b class="nc"><i>885</i>&nbsp;                return placementPolicyAdherence;</b>
+<i>886</i>&nbsp;            }
+<b class="nc"><i>887</i>&nbsp;            int desiredNumZonesPerWriteQuorumForThisEnsemble = Math.min(writeQuorumSize, desiredNumZonesPerWriteQuorum);</b>
+<b class="nc"><i>888</i>&nbsp;            for (int i = 0; i &lt; ensembleList.size(); i++) {</b>
+<b class="nc"><i>889</i>&nbsp;                bookiesLocationInWriteSet.clear();</b>
+<b class="nc"><i>890</i>&nbsp;                numOfBookiesInZones.clear();</b>
+<b class="nc"><i>891</i>&nbsp;                for (int j = 0; j &lt; writeQuorumSize; j++) {</b>
+<b class="nc"><i>892</i>&nbsp;                    int indexOfNode = (i + j) % ensembleList.size();</b>
+<b class="nc"><i>893</i>&nbsp;                    bookieNode = ensembleList.get(indexOfNode);</b>
+<b class="nc"><i>894</i>&nbsp;                    ZoneAwareNodeLocation nodeLocation = getZoneAwareNodeLocation(bookieNode);</b>
+<b class="nc"><i>895</i>&nbsp;                    if (nodeLocation.equals(unresolvedNodeLocation)) {</b>
+<b class="nc"><i>896</i>&nbsp;                        placementPolicyAdherence = PlacementPolicyAdherence.FAIL;</b>
+<b class="nc"><i>897</i>&nbsp;                        if (LOG.isDebugEnabled()) {</b>
+<b class="nc"><i>898</i>&nbsp;                            LOG.debug(&quot;ensemble: {}, contains bookie: {} for which network location is unresolvable&quot;,</b>
+<i>899</i>&nbsp;                                    ensembleList, bookieNode);
+<i>900</i>&nbsp;                        }
+<b class="nc"><i>901</i>&nbsp;                        return placementPolicyAdherence;</b>
+<i>902</i>&nbsp;                    }
+<b class="nc"><i>903</i>&nbsp;                    String zone = nodeLocation.getZone();</b>
+<b class="nc"><i>904</i>&nbsp;                    String upgradeDomain = nodeLocation.getUpgradeDomain();</b>
+<b class="nc"><i>905</i>&nbsp;                    Set&lt;String&gt; udsOfThisZoneInThisWriteSet = bookiesLocationInWriteSet.get(zone);</b>
+<b class="nc"><i>906</i>&nbsp;                    if (udsOfThisZoneInThisWriteSet == null) {</b>
+<b class="nc"><i>907</i>&nbsp;                        udsOfThisZoneInThisWriteSet = new HashSet&lt;String&gt;();</b>
+<b class="nc"><i>908</i>&nbsp;                        udsOfThisZoneInThisWriteSet.add(upgradeDomain);</b>
+<b class="nc"><i>909</i>&nbsp;                        bookiesLocationInWriteSet.put(zone, udsOfThisZoneInThisWriteSet);</b>
+<b class="nc"><i>910</i>&nbsp;                        numOfBookiesInZones.put(zone, 1);</b>
+<i>911</i>&nbsp;                    } else {
+<b class="nc"><i>912</i>&nbsp;                        udsOfThisZoneInThisWriteSet.add(upgradeDomain);</b>
+<b class="nc"><i>913</i>&nbsp;                        Integer numOfNodesInAZone = numOfBookiesInZones.get(zone);</b>
+<b class="nc"><i>914</i>&nbsp;                        numOfBookiesInZones.put(zone, (numOfNodesInAZone + 1));</b>
+<i>915</i>&nbsp;                    }
+<i>916</i>&nbsp;                }
+<b class="nc"><i>917</i>&nbsp;                if (numOfBookiesInZones.entrySet().size() &lt; minNumZonesPerWriteQuorum) {</b>
+<b class="nc"><i>918</i>&nbsp;                    placementPolicyAdherence = PlacementPolicyAdherence.FAIL;</b>
+<b class="nc"><i>919</i>&nbsp;                    if (LOG.isDebugEnabled()) {</b>
+<b class="nc"><i>920</i>&nbsp;                        LOG.debug(&quot;in ensemble: {}, writeset starting at: {} doesn&#39;t contain bookies from&quot;</b>
+<b class="nc"><i>921</i>&nbsp;                                + &quot; minNumZonesPerWriteQuorum: {}&quot;, ensembleList, i, minNumZonesPerWriteQuorum);</b>
+<i>922</i>&nbsp;                    }
+<b class="nc"><i>923</i>&nbsp;                    return placementPolicyAdherence;</b>
+<b class="nc"><i>924</i>&nbsp;                } else if (numOfBookiesInZones.entrySet().size() &gt;= desiredNumZonesPerWriteQuorumForThisEnsemble) {</b>
+<b class="nc"><i>925</i>&nbsp;                    if (!validateMinUDsAreMaintained(numOfBookiesInZones, bookiesLocationInWriteSet)) {</b>
+<b class="nc"><i>926</i>&nbsp;                        placementPolicyAdherence = PlacementPolicyAdherence.FAIL;</b>
+<b class="nc"><i>927</i>&nbsp;                        if (LOG.isDebugEnabled()) {</b>
+<b class="nc"><i>928</i>&nbsp;                            LOG.debug(&quot;in ensemble: {}, writeset starting at: {} doesn&#39;t maintain min of 2 UDs&quot;</b>
+<b class="nc"><i>929</i>&nbsp;                                    + &quot; when there are multiple bookies from the same zone.&quot;, ensembleList, i);</b>
+<i>930</i>&nbsp;                        }
+<b class="nc"><i>931</i>&nbsp;                        return placementPolicyAdherence;</b>
+<i>932</i>&nbsp;                    }
+<i>933</i>&nbsp;                } else {
+<b class="nc"><i>934</i>&nbsp;                    if (!validateMinUDsAreMaintained(numOfBookiesInZones, bookiesLocationInWriteSet)) {</b>
+<b class="nc"><i>935</i>&nbsp;                        placementPolicyAdherence = PlacementPolicyAdherence.FAIL;</b>
+<b class="nc"><i>936</i>&nbsp;                        if (LOG.isDebugEnabled()) {</b>
+<b class="nc"><i>937</i>&nbsp;                            LOG.debug(&quot;in ensemble: {}, writeset starting at: {} doesn&#39;t maintain min of 2 UDs&quot;</b>
+<b class="nc"><i>938</i>&nbsp;                                    + &quot; when there are multiple bookies from the same zone.&quot;, ensembleList, i);</b>
+<i>939</i>&nbsp;                        }
+<b class="nc"><i>940</i>&nbsp;                        return placementPolicyAdherence;</b>
+<i>941</i>&nbsp;                    }
+<b class="nc"><i>942</i>&nbsp;                    if (placementPolicyAdherence == PlacementPolicyAdherence.MEETS_STRICT) {</b>
+<b class="nc"><i>943</i>&nbsp;                        placementPolicyAdherence = PlacementPolicyAdherence.MEETS_SOFT;</b>
+<i>944</i>&nbsp;                    }
+<i>945</i>&nbsp;                }
+<i>946</i>&nbsp;            }
+<i>947</i>&nbsp;        } finally {
+<b class="nc"><i>948</i>&nbsp;            rwLock.readLock().unlock();</b>
+<i>949</i>&nbsp;        }
+<b class="nc"><i>950</i>&nbsp;        return placementPolicyAdherence;</b>
+<i>951</i>&nbsp;    }
+<i>952</i>&nbsp;
+<i>953</i>&nbsp;    private boolean validateMinUDsAreMaintained(HashMap&lt;String, Integer&gt; numOfNodesInZones,
+<i>954</i>&nbsp;            HashMap&lt;String, Set&lt;String&gt;&gt; nodesLocationInWriteSet) {
+<b class="nc"><i>955</i>&nbsp;        for (Entry&lt;String, Integer&gt; numOfNodesInZone : numOfNodesInZones.entrySet()) {</b>
+<b class="nc"><i>956</i>&nbsp;            String zone = numOfNodesInZone.getKey();</b>
+<b class="nc"><i>957</i>&nbsp;            Integer numOfNodesInThisZone = numOfNodesInZone.getValue();</b>
+<b class="nc"><i>958</i>&nbsp;            if (numOfNodesInThisZone &gt; 1) {</b>
+<b class="nc"><i>959</i>&nbsp;                Set&lt;String&gt; udsOfThisZone = nodesLocationInWriteSet.get(zone);</b>
+<b class="nc"><i>960</i>&nbsp;                if (udsOfThisZone.size() &lt; 2) {</b>
+<b class="nc"><i>961</i>&nbsp;                    return false;</b>
+<i>962</i>&nbsp;                }
+<i>963</i>&nbsp;            }
+<b class="nc"><i>964</i>&nbsp;        }</b>
+<b class="nc"><i>965</i>&nbsp;        return true;</b>
+<i>966</i>&nbsp;    }
+<i>967</i>&nbsp;
+<i>968</i>&nbsp;    @Override
+<i>969</i>&nbsp;    public boolean areAckedBookiesAdheringToPlacementPolicy(Set&lt;BookieSocketAddress&gt; ackedBookies, int writeQuorumSize,
+<i>970</i>&nbsp;            int ackQuorumSize) {
+<b class="nc"><i>971</i>&nbsp;        HashSet&lt;String&gt; zonesOfAckedBookies = new HashSet&lt;&gt;();</b>
+<b class="nc"><i>972</i>&nbsp;        int minNumZonesPerWriteQuorumForThisEnsemble = Math.min(writeQuorumSize, minNumZonesPerWriteQuorum);</b>
+<b class="nc"><i>973</i>&nbsp;        boolean areAckedBookiesAdheringToPlacementPolicy = false;</b>
+<b class="nc"><i>974</i>&nbsp;        ReentrantReadWriteLock.ReadLock readLock = rwLock.readLock();</b>
+<b class="nc"><i>975</i>&nbsp;        readLock.lock();</b>
+<i>976</i>&nbsp;        try {
+<b class="nc"><i>977</i>&nbsp;            for (BookieSocketAddress ackedBookie : ackedBookies) {</b>
+<b class="nc"><i>978</i>&nbsp;                zonesOfAckedBookies.add(getZoneAwareNodeLocation(ackedBookie).getZone());</b>
+<b class="nc"><i>979</i>&nbsp;            }</b>
+<b class="nc"><i>980</i>&nbsp;            areAckedBookiesAdheringToPlacementPolicy = ((zonesOfAckedBookies</b>
+<b class="nc"><i>981</i>&nbsp;                    .size() &gt;= minNumZonesPerWriteQuorumForThisEnsemble) &amp;&amp; (ackedBookies.size() &gt;= ackQuorumSize));</b>
+<b class="nc"><i>982</i>&nbsp;            if (LOG.isDebugEnabled()) {</b>
+<b class="nc"><i>983</i>&nbsp;                LOG.debug(</b>
+<i>984</i>&nbsp;                        &quot;areAckedBookiesAdheringToPlacementPolicy returning {}, because number of ackedBookies = {},&quot;
+<i>985</i>&nbsp;                                + &quot; number of Zones of ackedbookies = {},&quot;
+<i>986</i>&nbsp;                                + &quot; number of minNumZonesPerWriteQuorumForThisEnsemble = {}&quot;,
+<b class="nc"><i>987</i>&nbsp;                        areAckedBookiesAdheringToPlacementPolicy, ackedBookies.size(), zonesOfAckedBookies.size(),</b>
+<b class="nc"><i>988</i>&nbsp;                        minNumZonesPerWriteQuorumForThisEnsemble);</b>
+<i>989</i>&nbsp;            }
+<i>990</i>&nbsp;        } finally {
+<b class="nc"><i>991</i>&nbsp;            readLock.unlock();</b>
+<i>992</i>&nbsp;        }
+<b class="nc"><i>993</i>&nbsp;        return areAckedBookiesAdheringToPlacementPolicy;</b>
+<i>994</i>&nbsp;    }
+<i>995</i>&nbsp;}
+</div>
+</div>
+
+<div class="footer">
+    
+    <div style="float:right;">generated on 2021-06-28 15:57</div>
+</div>
+</body>
+</html>

@@ -1,0 +1,252 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MdcContextTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">MdcContextTest.java</span></div><h1>MdcContextTest.java</h1><pre class="source lang-java linenums">/*
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+
+package org.apache.bookkeeper.client;
+
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.hasItem;
+import static org.junit.Assert.assertThat;
+import static org.junit.Assert.fail;
+import static org.mockito.AdditionalAnswers.answerVoid;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import java.io.File;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
+
+import lombok.extern.slf4j.Slf4j;
+
+import org.apache.bookkeeper.bookie.Bookie;
+import org.apache.bookkeeper.bookie.InterleavedLedgerStorage;
+import org.apache.bookkeeper.bookie.LedgerDirsManager;
+import org.apache.bookkeeper.conf.ClientConfiguration;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.apache.log4j.Appender;
+import org.apache.log4j.Level;
+import org.apache.log4j.LogManager;
+import org.apache.log4j.Logger;
+import org.apache.log4j.MDC;
+import org.apache.log4j.spi.LoggingEvent;
+import org.hamcrest.CoreMatchers;
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+
+
+/**
+ * Test passing of MDC context.
+ */
+@SuppressWarnings(&quot;deprecation&quot;)
+<span class="nc" id="L62">@Slf4j</span>
+public class MdcContextTest extends BookKeeperClusterTestCase {
+    public static final String MDC_REQUEST_ID = &quot;request_id&quot;;
+
+<span class="nc" id="L66">    final byte[] entry = &quot;Test Entry&quot;.getBytes();</span>
+
+    BookKeeper bkc;
+    LedgerHandle lh;
+
+    private Appender mockAppender;
+    private Queue&lt;String&gt; capturedEvents;
+<span class="nc" id="L73">    private Logger rootLogger = LogManager.getRootLogger();</span>
+
+    public MdcContextTest() {
+<span class="nc" id="L76">        super(3);</span>
+<span class="nc" id="L77">        baseConf.setNumAddWorkerThreads(0);</span>
+<span class="nc" id="L78">        baseConf.setNumReadWorkerThreads(0);</span>
+<span class="nc" id="L79">        baseConf.setPreserveMdcForTaskExecution(true);</span>
+<span class="nc" id="L80">        baseConf.setReadOnlyModeEnabled(true);</span>
+
+        // for read-only bookie
+<span class="nc" id="L83">        baseConf.setLedgerStorageClass(InterleavedLedgerStorage.class.getName());</span>
+<span class="nc" id="L84">        baseConf.setEntryLogFilePreAllocationEnabled(false);</span>
+<span class="nc" id="L85">        baseConf.setMinUsableSizeForEntryLogCreation(Long.MAX_VALUE);</span>
+<span class="nc" id="L86">    }</span>
+
+
+    public static String mdcFormat(Object mdc, String message) {
+<span class="nc bnc" id="L90" title="All 2 branches missed.">        return mdc == null</span>
+                ? &quot;[&quot; + MDC_REQUEST_ID + &quot;:] - &quot; + message
+<span class="nc" id="L92">                : &quot;[&quot; + MDC_REQUEST_ID + &quot;:&quot; + mdc.toString()</span>
+                + &quot;] - &quot; + message;
+    }
+
+    public void assertLogWithMdc(String mdc, String msgSubstring) {
+<span class="nc" id="L97">        assertThat(capturedEvents,</span>
+<span class="nc" id="L98">                    hasItem(CoreMatchers.allOf(</span>
+<span class="nc" id="L99">                        containsString(&quot;[&quot; + MDC_REQUEST_ID + &quot;:&quot; + mdc + &quot;] - &quot;),</span>
+<span class="nc" id="L100">                        containsString(msgSubstring)</span>
+                    )));
+<span class="nc" id="L102">    }</span>
+
+    @Before
+    public void setUp() throws Exception {
+<span class="nc" id="L106">        super.setUp();</span>
+<span class="nc" id="L107">        ClientConfiguration conf = new ClientConfiguration();</span>
+<span class="nc" id="L108">        conf.setReadTimeout(360)</span>
+<span class="nc" id="L109">                .setMetadataServiceUri(zkUtil.getMetadataServiceUri())</span>
+<span class="nc" id="L110">                .setPreserveMdcForTaskExecution(true);</span>
+
+<span class="nc" id="L112">        MDC.clear();</span>
+<span class="nc" id="L113">        bkc = new BookKeeper(conf);</span>
+
+<span class="nc" id="L115">        MDC.put(MDC_REQUEST_ID, &quot;ledger_create&quot;);</span>
+<span class="nc" id="L116">        log.info(&quot;creating ledger&quot;);</span>
+<span class="nc" id="L117">        lh = bkc.createLedgerAdv(3, 3, 3, BookKeeper.DigestType.CRC32, new byte[] {});</span>
+<span class="nc" id="L118">        MDC.clear();</span>
+
+<span class="nc" id="L120">        mockAppender = mock(Appender.class);</span>
+<span class="nc" id="L121">        when(mockAppender.getName()).thenReturn(&quot;MockAppender&quot;);</span>
+
+<span class="nc" id="L123">        rootLogger.addAppender(mockAppender);</span>
+<span class="nc" id="L124">        rootLogger.setLevel(Level.INFO);</span>
+<span class="nc" id="L125">        capturedEvents = new ConcurrentLinkedQueue&lt;&gt;();</span>
+
+<span class="nc" id="L127">        doAnswer(answerVoid((LoggingEvent event) -&gt; capturedEvents.add(</span>
+<span class="nc" id="L128">                    mdcFormat(event.getMDC(MDC_REQUEST_ID), event.getRenderedMessage())</span>
+<span class="nc" id="L129">            ))).when(mockAppender).doAppend(any());</span>
+<span class="nc" id="L130">    }</span>
+
+    @After
+    public void tearDown() throws Exception {
+<span class="nc" id="L134">        lh.close();</span>
+<span class="nc" id="L135">        bkc.close();</span>
+<span class="nc" id="L136">        rootLogger.removeAppender(mockAppender);</span>
+<span class="nc" id="L137">        capturedEvents = null;</span>
+<span class="nc" id="L138">        MDC.clear();</span>
+<span class="nc" id="L139">        super.tearDown();</span>
+<span class="nc" id="L140">    }</span>
+
+    @Test
+    public void testLedgerCreateFails() throws Exception {
+<span class="nc" id="L144">        MDC.put(MDC_REQUEST_ID, &quot;ledger_create_fail&quot;);</span>
+        try {
+<span class="nc" id="L146">            bkc.createLedgerAdv(99, 3, 2, BookKeeper.DigestType.CRC32, new byte[]{});</span>
+<span class="nc" id="L147">            Assert.fail(&quot;should not get here&quot;);</span>
+<span class="nc" id="L148">        } catch (BKException bke) {</span>
+            // expected
+<span class="nc" id="L150">        }</span>
+<span class="nc" id="L151">        assertLogWithMdc(&quot;ledger_create_fail&quot;, &quot;Not enough bookies to create ledger&quot;);</span>
+<span class="nc" id="L152">    }</span>
+
+    @Test
+    public void testSimpleAdd() throws Exception {
+<span class="nc" id="L156">        MDC.put(MDC_REQUEST_ID, &quot;ledger_add_entry&quot;);</span>
+<span class="nc" id="L157">        lh.addEntry(0, entry);</span>
+
+        // client msg
+<span class="nc" id="L160">        assertLogWithMdc(&quot;ledger_add_entry&quot;, &quot;Successfully connected to bookie&quot;);</span>
+        // bookie msg
+<span class="nc" id="L162">        assertLogWithMdc(&quot;ledger_add_entry&quot;, &quot;Created new entry log file&quot;);</span>
+<span class="nc" id="L163">    }</span>
+
+    @Test
+    public void testAddWithEnsembleChange() throws Exception {
+<span class="nc" id="L167">        lh.addEntry(0, entry);</span>
+<span class="nc" id="L168">        startNewBookie();</span>
+<span class="nc" id="L169">        killBookie(0);</span>
+
+<span class="nc" id="L171">        MDC.put(MDC_REQUEST_ID, &quot;ledger_add_entry&quot;);</span>
+<span class="nc" id="L172">        lh.addEntry(1, entry);</span>
+<span class="nc" id="L173">        assertLogWithMdc(&quot;ledger_add_entry&quot;, &quot;Could not connect to bookie&quot;);</span>
+<span class="nc" id="L174">        assertLogWithMdc(&quot;ledger_add_entry&quot;, &quot;Failed to write entry&quot;);</span>
+        //commented out until we figure out a way to preserve MDC through a call out
+        //to another thread pool
+        //assertLogWithMdc(&quot;ledger_add_entry&quot;, &quot;New Ensemble&quot;);
+<span class="nc" id="L178">    }</span>
+
+    @Test
+    public void testAddFailsWithReadOnlyBookie() throws Exception {
+<span class="nc bnc" id="L182" title="All 2 branches missed.">        for (int i = 0; i &lt; 3; ++i) {</span>
+<span class="nc" id="L183">            Bookie bookie = bs.get(i).getBookie();</span>
+<span class="nc" id="L184">            File[] ledgerDirs = bsConfs.get(i).getLedgerDirs();</span>
+<span class="nc" id="L185">            LedgerDirsManager ledgerDirsManager = bookie.getLedgerDirsManager();</span>
+<span class="nc" id="L186">            ledgerDirsManager.addToFilledDirs(new File(ledgerDirs[0], &quot;current&quot;));</span>
+        }
+
+<span class="nc" id="L189">        MDC.put(MDC_REQUEST_ID, &quot;ledger_add_entry&quot;);</span>
+        try {
+<span class="nc" id="L191">            lh.addEntry(0, entry);</span>
+<span class="nc" id="L192">            Assert.fail(&quot;should not get here&quot;);</span>
+<span class="nc" id="L193">        } catch (BKException bke) {</span>
+            // expected, pass
+<span class="nc" id="L195">        }</span>
+
+<span class="nc" id="L197">        assertLogWithMdc(&quot;ledger_add_entry&quot;, &quot;No writable ledger dirs below diskUsageThreshold&quot;);</span>
+<span class="nc" id="L198">        assertLogWithMdc(&quot;ledger_add_entry&quot;, &quot;All ledger directories are non writable and no reserved space&quot;);</span>
+<span class="nc" id="L199">        assertLogWithMdc(&quot;ledger_add_entry&quot;, &quot;Error writing entry:0 to ledger:0&quot;);</span>
+<span class="nc" id="L200">        assertLogWithMdc(&quot;ledger_add_entry&quot;, &quot;Add for failed on bookie&quot;);</span>
+<span class="nc" id="L201">        assertLogWithMdc(&quot;ledger_add_entry&quot;, &quot;Failed to find 1 bookies&quot;);</span>
+<span class="nc" id="L202">        assertLogWithMdc(&quot;ledger_add_entry&quot;, &quot;Closing ledger 0 due to NotEnoughBookiesException&quot;);</span>
+<span class="nc" id="L203">    }</span>
+
+    @Test
+    public void testAddFailsDuplicateEntry() throws Exception {
+<span class="nc" id="L207">        lh.addEntry(0, entry);</span>
+
+<span class="nc" id="L209">        MDC.put(MDC_REQUEST_ID, &quot;ledger_add_duplicate_entry&quot;);</span>
+        try {
+<span class="nc" id="L211">            lh.addEntry(0, entry);</span>
+<span class="nc" id="L212">            Assert.fail(&quot;should not get here&quot;);</span>
+<span class="nc" id="L213">        } catch (BKException bke) {</span>
+            // expected, pass
+<span class="nc" id="L215">        }</span>
+
+<span class="nc" id="L217">        assertLogWithMdc(&quot;ledger_add_duplicate_entry&quot;, &quot;Trying to re-add duplicate entryid:0&quot;);</span>
+<span class="nc" id="L218">        assertLogWithMdc(&quot;ledger_add_duplicate_entry&quot;, &quot;Write of ledger entry to quorum failed&quot;);</span>
+<span class="nc" id="L219">    }</span>
+
+    @Test
+    public void testReadEntryBeyondLac() throws Exception {
+<span class="nc" id="L223">        MDC.put(MDC_REQUEST_ID, &quot;ledger_read_entry&quot;);</span>
+
+        try {
+<span class="nc" id="L226">            lh.readEntries(100, 100);</span>
+<span class="nc" id="L227">            fail(&quot;should not get here&quot;);</span>
+<span class="nc" id="L228">        } catch (BKException.BKReadException e) {</span>
+            // pass
+<span class="nc" id="L230">        }</span>
+<span class="nc" id="L231">        assertLogWithMdc(&quot;ledger_read_entry&quot;, &quot;ReadException on ledgerId:0 firstEntry:100 lastEntry:100&quot;);</span>
+<span class="nc" id="L232">    }</span>
+
+    @Test
+    public void testReadFromDeletedLedger() throws Exception {
+<span class="nc" id="L236">        lh.addEntry(0, entry);</span>
+<span class="nc" id="L237">        lh.close();</span>
+<span class="nc" id="L238">        bkc.deleteLedger(lh.ledgerId);</span>
+
+<span class="nc" id="L240">        MDC.put(MDC_REQUEST_ID, &quot;ledger_read_entry&quot;);</span>
+
+        try {
+<span class="nc" id="L243">            lh.readEntries(100, 100);</span>
+<span class="nc" id="L244">            fail(&quot;should not get here&quot;);</span>
+<span class="nc" id="L245">        } catch (BKException.BKReadException e) {</span>
+            // pass
+<span class="nc" id="L247">        }</span>
+<span class="nc" id="L248">        assertLogWithMdc(&quot;ledger_read_entry&quot;, &quot;ReadException on ledgerId:0 firstEntry:100 lastEntry:100&quot;);</span>
+<span class="nc" id="L249">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

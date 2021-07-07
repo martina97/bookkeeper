@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MockReadHandle.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">MockReadHandle.java</span></div><h1>MockReadHandle.java</h1><pre class="source lang-java linenums">/**
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+package org.apache.bookkeeper.client;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.bookkeeper.client.api.LastConfirmedAndEntry;
+import org.apache.bookkeeper.client.api.LedgerEntries;
+import org.apache.bookkeeper.client.api.LedgerEntry;
+import org.apache.bookkeeper.client.api.LedgerMetadata;
+import org.apache.bookkeeper.client.api.ReadHandle;
+import org.apache.bookkeeper.client.impl.LedgerEntriesImpl;
+import org.apache.bookkeeper.client.impl.LedgerEntryImpl;
+
+
+/**
+ * Mock implementation of ReadHandle.
+ */
+<span class="nc" id="L37">@Slf4j</span>
+class MockReadHandle implements ReadHandle {
+    private final MockBookKeeper bk;
+    private final long ledgerId;
+    private final LedgerMetadata metadata;
+    private final List&lt;LedgerEntryImpl&gt; entries;
+
+<span class="nc" id="L44">    MockReadHandle(MockBookKeeper bk, long ledgerId, LedgerMetadata metadata, List&lt;LedgerEntryImpl&gt; entries) {</span>
+<span class="nc" id="L45">        this.bk = bk;</span>
+<span class="nc" id="L46">        this.ledgerId = ledgerId;</span>
+<span class="nc" id="L47">        this.metadata = metadata;</span>
+<span class="nc" id="L48">        this.entries = entries;</span>
+<span class="nc" id="L49">    }</span>
+
+    @Override
+    public CompletableFuture&lt;LedgerEntries&gt; readAsync(long firstEntry, long lastEntry) {
+<span class="nc" id="L53">        CompletableFuture&lt;LedgerEntries&gt; promise = new CompletableFuture&lt;&gt;();</span>
+<span class="nc bnc" id="L54" title="All 2 branches missed.">        if (bk.isStopped()) {</span>
+<span class="nc" id="L55">            promise.completeExceptionally(new BKException.BKClientClosedException());</span>
+<span class="nc" id="L56">            return promise;</span>
+        }
+
+<span class="nc" id="L59">        bk.executor.execute(() -&gt; {</span>
+<span class="nc bnc" id="L60" title="All 2 branches missed.">                if (bk.getProgrammedFailStatus()) {</span>
+<span class="nc" id="L61">                    promise.completeExceptionally(BKException.create(bk.failReturnCode));</span>
+<span class="nc" id="L62">                    return;</span>
+<span class="nc bnc" id="L63" title="All 2 branches missed.">                } else if (bk.isStopped()) {</span>
+<span class="nc" id="L64">                    promise.completeExceptionally(new BKException.BKClientClosedException());</span>
+<span class="nc" id="L65">                    return;</span>
+                }
+
+<span class="nc" id="L68">                log.debug(&quot;readEntries: first={} last={} total={}&quot;, firstEntry, lastEntry, entries.size());</span>
+<span class="nc" id="L69">                List&lt;LedgerEntry&gt; seq = new ArrayList&lt;&gt;();</span>
+<span class="nc" id="L70">                long entryId = firstEntry;</span>
+<span class="nc bnc" id="L71" title="All 4 branches missed.">                while (entryId &lt;= lastEntry &amp;&amp; entryId &lt; entries.size()) {</span>
+<span class="nc" id="L72">                    seq.add(entries.get((int) entryId++).duplicate());</span>
+                }
+<span class="nc" id="L74">                log.debug(&quot;Entries read: {}&quot;, seq);</span>
+<span class="nc" id="L75">                promise.complete(LedgerEntriesImpl.create(seq));</span>
+<span class="nc" id="L76">            });</span>
+<span class="nc" id="L77">        return promise;</span>
+
+    }
+
+    @Override
+    public CompletableFuture&lt;LedgerEntries&gt; readUnconfirmedAsync(long firstEntry, long lastEntry) {
+<span class="nc" id="L83">        return readAsync(firstEntry, lastEntry);</span>
+    }
+
+    @Override
+    public CompletableFuture&lt;Long&gt; readLastAddConfirmedAsync() {
+<span class="nc" id="L88">        return CompletableFuture.completedFuture(getLastAddConfirmed());</span>
+    }
+
+    @Override
+    public CompletableFuture&lt;Long&gt; tryReadLastAddConfirmedAsync() {
+<span class="nc" id="L93">        return readLastAddConfirmedAsync();</span>
+    }
+
+    @Override
+    public long getLastAddConfirmed() {
+<span class="nc" id="L98">        return entries.get(entries.size() - 1).getEntryId();</span>
+    }
+
+    @Override
+    public long getLength() {
+<span class="nc" id="L103">        long length = 0;</span>
+<span class="nc bnc" id="L104" title="All 2 branches missed.">        for (LedgerEntryImpl entry : entries) {</span>
+<span class="nc" id="L105">            length += entry.getLength();</span>
+<span class="nc" id="L106">        }</span>
+
+<span class="nc" id="L108">        return length;</span>
+    }
+
+    @Override
+    public boolean isClosed() {
+<span class="nc" id="L113">        return metadata.isClosed();</span>
+    }
+
+    @Override
+    public CompletableFuture&lt;LastConfirmedAndEntry&gt; readLastAddConfirmedAndEntryAsync(long entryId,
+                                                                                      long timeOutInMillis,
+                                                                                      boolean parallel) {
+<span class="nc" id="L120">        CompletableFuture&lt;LastConfirmedAndEntry&gt; promise = new CompletableFuture&lt;&gt;();</span>
+<span class="nc" id="L121">        promise.completeExceptionally(new UnsupportedOperationException(&quot;Long poll not implemented&quot;));</span>
+<span class="nc" id="L122">        return promise;</span>
+    }
+
+    // Handle interface
+    @Override
+    public long getId() {
+<span class="nc" id="L128">        return ledgerId;</span>
+    }
+
+    @Override
+    public CompletableFuture&lt;Void&gt; closeAsync() {
+<span class="nc" id="L133">        return CompletableFuture.completedFuture(null);</span>
+    }
+
+    @Override
+    public LedgerMetadata getLedgerMetadata() {
+<span class="nc" id="L138">        return metadata;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

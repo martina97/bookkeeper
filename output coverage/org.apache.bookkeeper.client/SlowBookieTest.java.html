@@ -1,0 +1,367 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SlowBookieTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">SlowBookieTest.java</span></div><h1>SlowBookieTest.java</h1><pre class="source lang-java linenums">/*
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+
+package org.apache.bookkeeper.client;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.apache.bookkeeper.conf.ClientConfiguration;
+import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.proto.BookieClientImpl;
+import org.apache.bookkeeper.proto.BookkeeperInternalCallbacks.GenericCallback;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Test a slow bookie.
+ */
+@SuppressWarnings(&quot;deprecation&quot;)
+public class SlowBookieTest extends BookKeeperClusterTestCase {
+<span class="nc" id="L49">    private static final Logger LOG = LoggerFactory.getLogger(SlowBookieTest.class);</span>
+
+<span class="nc" id="L51">    final byte[] entry = &quot;Test Entry&quot;.getBytes();</span>
+
+    public SlowBookieTest() {
+<span class="nc" id="L54">        super(4);</span>
+<span class="nc" id="L55">        baseConf.setNumAddWorkerThreads(0);</span>
+<span class="nc" id="L56">        baseConf.setNumReadWorkerThreads(0);</span>
+<span class="nc" id="L57">    }</span>
+
+    @Test
+    public void testSlowBookie() throws Exception {
+<span class="nc" id="L61">        ClientConfiguration conf = new ClientConfiguration();</span>
+<span class="nc" id="L62">        conf.setReadTimeout(360)</span>
+<span class="nc" id="L63">            .setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+
+<span class="nc" id="L65">        BookKeeper bkc = new BookKeeper(conf);</span>
+
+<span class="nc" id="L67">        LedgerHandle lh = bkc.createLedger(4, 3, 2, BookKeeper.DigestType.CRC32, new byte[] {});</span>
+
+<span class="nc" id="L69">        byte[] entry = &quot;Test Entry&quot;.getBytes();</span>
+<span class="nc bnc" id="L70" title="All 2 branches missed.">        for (int i = 0; i &lt; 10; i++) {</span>
+<span class="nc" id="L71">            lh.addEntry(entry);</span>
+        }
+<span class="nc" id="L73">        final CountDownLatch b0latch = new CountDownLatch(1);</span>
+<span class="nc" id="L74">        final CountDownLatch b1latch = new CountDownLatch(1);</span>
+<span class="nc" id="L75">        final CountDownLatch addEntrylatch = new CountDownLatch(1);</span>
+<span class="nc" id="L76">        List&lt;BookieSocketAddress&gt; curEns = lh.getCurrentEnsemble();</span>
+        try {
+<span class="nc" id="L78">            sleepBookie(curEns.get(0), b0latch);</span>
+<span class="nc bnc" id="L79" title="All 2 branches missed.">            for (int i = 0; i &lt; 10; i++) {</span>
+<span class="nc" id="L80">                lh.addEntry(entry);</span>
+            }
+<span class="nc" id="L82">            sleepBookie(curEns.get(2), b1latch); // should cover all quorums</span>
+
+<span class="nc" id="L84">            final AtomicInteger i = new AtomicInteger(0xdeadbeef);</span>
+<span class="nc" id="L85">            AsyncCallback.AddCallback cb = new AsyncCallback.AddCallback() {</span>
+                    public void addComplete(int rc, LedgerHandle lh, long entryId, Object ctx) {
+<span class="nc" id="L87">                        i.set(rc);</span>
+<span class="nc" id="L88">                        addEntrylatch.countDown();</span>
+<span class="nc" id="L89">                    }</span>
+                };
+<span class="nc" id="L91">            lh.asyncAddEntry(entry, cb, null);</span>
+
+<span class="nc" id="L93">            Thread.sleep(3000); // sleep 3 seconds to allow time to complete</span>
+<span class="nc" id="L94">            assertEquals(&quot;Successfully added entry!&quot;, 0xdeadbeef, i.get());</span>
+<span class="nc" id="L95">            b0latch.countDown();</span>
+<span class="nc" id="L96">            b1latch.countDown();</span>
+<span class="nc" id="L97">            addEntrylatch.await(4000, TimeUnit.MILLISECONDS);</span>
+<span class="nc" id="L98">            assertEquals(&quot;Failed to add entry!&quot;, BKException.Code.OK, i.get());</span>
+        } finally {
+<span class="nc" id="L100">            b0latch.countDown();</span>
+<span class="nc" id="L101">            b1latch.countDown();</span>
+<span class="nc" id="L102">            addEntrylatch.countDown();</span>
+        }
+<span class="nc" id="L104">    }</span>
+
+    @Test
+    public void testBookieFailureWithSlowBookie() throws Exception {
+<span class="nc" id="L108">        ClientConfiguration conf = new ClientConfiguration();</span>
+<span class="nc" id="L109">        conf.setReadTimeout(5)</span>
+<span class="nc" id="L110">            .setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+
+<span class="nc" id="L112">        BookKeeper bkc = new BookKeeper(conf);</span>
+
+<span class="nc" id="L114">        byte[] pwd = new byte[] {};</span>
+<span class="nc" id="L115">        final LedgerHandle lh = bkc.createLedger(4, 3, 2, BookKeeper.DigestType.CRC32, pwd);</span>
+<span class="nc" id="L116">        final AtomicBoolean finished = new AtomicBoolean(false);</span>
+<span class="nc" id="L117">        final AtomicBoolean failTest = new AtomicBoolean(false);</span>
+<span class="nc" id="L118">        Thread t = new Thread() {</span>
+                public void run() {
+                    try {
+<span class="nc bnc" id="L121" title="All 2 branches missed.">                        while (!finished.get()) {</span>
+<span class="nc" id="L122">                            lh.addEntry(entry);</span>
+                        }
+<span class="nc" id="L124">                    } catch (Exception e) {</span>
+<span class="nc" id="L125">                        LOG.error(&quot;Exception in add entry thread&quot;, e);</span>
+<span class="nc" id="L126">                        failTest.set(true);</span>
+<span class="nc" id="L127">                    }</span>
+<span class="nc" id="L128">                }</span>
+            };
+<span class="nc" id="L130">        t.start();</span>
+<span class="nc" id="L131">        final CountDownLatch b0latch = new CountDownLatch(1);</span>
+
+<span class="nc" id="L133">        startNewBookie();</span>
+<span class="nc" id="L134">        sleepBookie(getBookie(0), b0latch);</span>
+
+<span class="nc" id="L136">        Thread.sleep(10000);</span>
+<span class="nc" id="L137">        b0latch.countDown();</span>
+
+<span class="nc" id="L139">        finished.set(true);</span>
+<span class="nc" id="L140">        t.join();</span>
+
+<span class="nc" id="L142">        assertFalse(failTest.get());</span>
+
+<span class="nc" id="L144">        lh.close();</span>
+
+<span class="nc" id="L146">        LedgerHandle lh2 = bkc.openLedger(lh.getId(), BookKeeper.DigestType.CRC32, pwd);</span>
+<span class="nc" id="L147">        LedgerChecker lc = new LedgerChecker(bkc);</span>
+<span class="nc" id="L148">        final CountDownLatch checklatch = new CountDownLatch(1);</span>
+<span class="nc" id="L149">        final AtomicInteger numFragments = new AtomicInteger(-1);</span>
+<span class="nc" id="L150">        lc.checkLedger(lh2, new GenericCallback&lt;Set&lt;LedgerFragment&gt;&gt;() {</span>
+                public void operationComplete(int rc, Set&lt;LedgerFragment&gt; badFragments) {
+<span class="nc" id="L152">                    LOG.debug(&quot;Checked ledgers returned {} {}&quot;, rc, badFragments);</span>
+<span class="nc bnc" id="L153" title="All 2 branches missed.">                    if (rc == BKException.Code.OK) {</span>
+<span class="nc" id="L154">                        numFragments.set(badFragments.size());</span>
+                    }
+<span class="nc" id="L156">                    checklatch.countDown();</span>
+<span class="nc" id="L157">                }</span>
+            });
+<span class="nc" id="L159">        checklatch.await();</span>
+<span class="nc" id="L160">        assertEquals(&quot;There should be no missing fragments&quot;, 0, numFragments.get());</span>
+<span class="nc" id="L161">    }</span>
+
+    @Test
+    public void testSlowBookieAndBackpressureOn() throws Exception {
+<span class="nc" id="L165">        final ClientConfiguration conf = new ClientConfiguration();</span>
+<span class="nc" id="L166">        conf.setReadTimeout(5)</span>
+<span class="nc" id="L167">                .setAddEntryTimeout(1)</span>
+<span class="nc" id="L168">                .setAddEntryQuorumTimeout(1)</span>
+<span class="nc" id="L169">                .setNumChannelsPerBookie(1)</span>
+<span class="nc" id="L170">                .setZkServers(zkUtil.getZooKeeperConnectString())</span>
+<span class="nc" id="L171">                .setClientWriteBufferLowWaterMark(1)</span>
+<span class="nc" id="L172">                .setClientWriteBufferHighWaterMark(entry.length - 1)</span>
+<span class="nc" id="L173">                .setWaitTimeoutOnBackpressureMillis(5000);</span>
+
+<span class="nc" id="L175">        final boolean expectWriteError = false;</span>
+<span class="nc" id="L176">        final boolean expectFailedTest = false;</span>
+
+<span class="nc" id="L178">        LedgerHandle lh = doBackpressureTest(entry, conf, expectWriteError, expectFailedTest, 2000);</span>
+<span class="nc bnc" id="L179" title="All 2 branches missed.">        assertTrue(lh.readLastConfirmed() &lt; 5);</span>
+<span class="nc" id="L180">    }</span>
+
+    @Test
+    public void testSlowBookieAndFastFailOn() throws Exception {
+<span class="nc" id="L184">        final ClientConfiguration conf = new ClientConfiguration();</span>
+<span class="nc" id="L185">        conf.setReadTimeout(5)</span>
+<span class="nc" id="L186">                .setAddEntryTimeout(1)</span>
+<span class="nc" id="L187">                .setAddEntryQuorumTimeout(1)</span>
+<span class="nc" id="L188">                .setNumChannelsPerBookie(1)</span>
+<span class="nc" id="L189">                .setZkServers(zkUtil.getZooKeeperConnectString())</span>
+<span class="nc" id="L190">                .setClientWriteBufferLowWaterMark(1)</span>
+<span class="nc" id="L191">                .setClientWriteBufferHighWaterMark(2)</span>
+<span class="nc" id="L192">                .setWaitTimeoutOnBackpressureMillis(0);</span>
+
+<span class="nc" id="L194">        final boolean expectWriteError = true;</span>
+<span class="nc" id="L195">        final boolean expectFailedTest = false;</span>
+
+<span class="nc" id="L197">        LedgerHandle lh = doBackpressureTest(entry, conf, expectWriteError, expectFailedTest, 1000);</span>
+<span class="nc bnc" id="L198" title="All 2 branches missed.">        assertTrue(lh.readLastConfirmed() &lt; 5);</span>
+<span class="nc" id="L199">    }</span>
+
+    @Test
+    public void testSlowBookieAndNoBackpressure() throws Exception {
+<span class="nc" id="L203">        final ClientConfiguration conf = new ClientConfiguration();</span>
+<span class="nc" id="L204">        conf.setReadTimeout(5)</span>
+<span class="nc" id="L205">                .setAddEntryTimeout(1)</span>
+<span class="nc" id="L206">                .setAddEntryQuorumTimeout(1)</span>
+<span class="nc" id="L207">                .setNumChannelsPerBookie(1)</span>
+<span class="nc" id="L208">                .setZkServers(zkUtil.getZooKeeperConnectString())</span>
+<span class="nc" id="L209">                .setClientWriteBufferLowWaterMark(1)</span>
+<span class="nc" id="L210">                .setClientWriteBufferHighWaterMark(entry.length - 1)</span>
+<span class="nc" id="L211">                .setWaitTimeoutOnBackpressureMillis(-1);</span>
+
+<span class="nc" id="L213">        final boolean expectWriteError = false;</span>
+<span class="nc" id="L214">        final boolean expectFailedTest = false;</span>
+
+<span class="nc" id="L216">        LedgerHandle lh = doBackpressureTest(entry, conf, expectWriteError, expectFailedTest, 4000);</span>
+
+<span class="nc bnc" id="L218" title="All 2 branches missed.">        assertTrue(lh.readLastConfirmed() &gt; 90);</span>
+<span class="nc" id="L219">    }</span>
+
+    private LedgerHandle doBackpressureTest(byte[] entry, ClientConfiguration conf,
+                                    boolean expectWriteError, boolean expectFailedTest,
+                                    long sleepInMillis) throws Exception {
+<span class="nc" id="L224">        BookKeeper bkc = new BookKeeper(conf);</span>
+
+<span class="nc" id="L226">        byte[] pwd = new byte[] {};</span>
+<span class="nc" id="L227">        final LedgerHandle lh = bkc.createLedger(4, 3, 1, BookKeeper.DigestType.CRC32, pwd);</span>
+<span class="nc" id="L228">        lh.addEntry(entry);</span>
+
+<span class="nc" id="L230">        final AtomicBoolean finished = new AtomicBoolean(false);</span>
+<span class="nc" id="L231">        final AtomicBoolean failTest = new AtomicBoolean(false);</span>
+<span class="nc" id="L232">        final AtomicBoolean writeError = new AtomicBoolean(false);</span>
+<span class="nc" id="L233">        Thread t = new Thread(() -&gt; {</span>
+            try {
+<span class="nc" id="L235">                int count = 0;</span>
+<span class="nc bnc" id="L236" title="All 2 branches missed.">                while (!finished.get()) {</span>
+<span class="nc" id="L237">                    lh.asyncAddEntry(entry, (rc, lh1, entryId, ctx) -&gt; {</span>
+<span class="nc bnc" id="L238" title="All 2 branches missed.">                        if (rc != BKException.Code.OK) {</span>
+<span class="nc" id="L239">                            finished.set(true);</span>
+<span class="nc" id="L240">                            writeError.set(true);</span>
+                        }
+<span class="nc" id="L242">                    }, null);</span>
+<span class="nc bnc" id="L243" title="All 2 branches missed.">                    if (++count &gt; 100) {</span>
+<span class="nc" id="L244">                        finished.set(true);</span>
+                    }
+                }
+<span class="nc" id="L247">            } catch (Exception e) {</span>
+<span class="nc" id="L248">                LOG.error(&quot;Exception in add entry thread&quot;, e);</span>
+<span class="nc" id="L249">                failTest.set(true);</span>
+<span class="nc" id="L250">            }</span>
+<span class="nc" id="L251">        });</span>
+<span class="nc" id="L252">        final CountDownLatch b0latch = new CountDownLatch(1);</span>
+<span class="nc" id="L253">        final CountDownLatch b0latch2 = new CountDownLatch(1);</span>
+
+
+<span class="nc" id="L256">        sleepBookie(getBookie(0), b0latch);</span>
+<span class="nc" id="L257">        sleepBookie(getBookie(1), b0latch2);</span>
+
+<span class="nc" id="L259">        setTargetChannelState(bkc, getBookie(0), 0, false);</span>
+<span class="nc" id="L260">        setTargetChannelState(bkc, getBookie(1), 0, false);</span>
+
+<span class="nc" id="L262">        t.start();</span>
+
+<span class="nc" id="L264">        Thread.sleep(sleepInMillis);</span>
+
+<span class="nc" id="L266">        finished.set(true);</span>
+
+<span class="nc" id="L268">        b0latch.countDown();</span>
+<span class="nc" id="L269">        b0latch2.countDown();</span>
+<span class="nc" id="L270">        setTargetChannelState(bkc, getBookie(0), 0, true);</span>
+<span class="nc" id="L271">        setTargetChannelState(bkc, getBookie(1), 0, true);</span>
+
+<span class="nc" id="L273">        t.join();</span>
+
+<span class="nc" id="L275">        assertEquals(&quot;write error&quot;, expectWriteError, writeError.get());</span>
+<span class="nc" id="L276">        assertEquals(&quot;test failure&quot;, expectFailedTest, failTest.get());</span>
+
+<span class="nc" id="L278">        lh.close();</span>
+
+<span class="nc" id="L280">        LedgerHandle lh2 = bkc.openLedger(lh.getId(), BookKeeper.DigestType.CRC32, pwd);</span>
+<span class="nc" id="L281">        LedgerChecker lc = new LedgerChecker(bkc);</span>
+<span class="nc" id="L282">        final CountDownLatch checklatch = new CountDownLatch(1);</span>
+<span class="nc" id="L283">        final AtomicInteger numFragments = new AtomicInteger(-1);</span>
+<span class="nc" id="L284">        lc.checkLedger(lh2, (rc, fragments) -&gt; {</span>
+<span class="nc" id="L285">            LOG.debug(&quot;Checked ledgers returned {} {}&quot;, rc, fragments);</span>
+<span class="nc bnc" id="L286" title="All 2 branches missed.">            if (rc == BKException.Code.OK) {</span>
+<span class="nc" id="L287">                numFragments.set(fragments.size());</span>
+<span class="nc" id="L288">                LOG.error(&quot;Checked ledgers returned {} {}&quot;, rc, fragments);</span>
+            }
+<span class="nc" id="L290">            checklatch.countDown();</span>
+<span class="nc" id="L291">        });</span>
+<span class="nc" id="L292">        checklatch.await();</span>
+<span class="nc" id="L293">        assertEquals(&quot;There should be no missing fragments&quot;, 0, numFragments.get());</span>
+
+<span class="nc" id="L295">        return lh2;</span>
+    }
+
+    private void setTargetChannelState(BookKeeper bkc, BookieSocketAddress address,
+                                       long key, boolean state) throws Exception {
+<span class="nc" id="L300">        ((BookieClientImpl) bkc.getBookieClient()).lookupClient(address).obtain((rc, pcbc) -&gt; {</span>
+<span class="nc" id="L301">            pcbc.setWritable(state);</span>
+<span class="nc" id="L302">        }, key);</span>
+<span class="nc" id="L303">    }</span>
+
+    @Test
+    public void testManyBookieFailureWithSlowBookies() throws Exception {
+<span class="nc" id="L307">        ClientConfiguration conf = new ClientConfiguration();</span>
+<span class="nc" id="L308">        conf.setReadTimeout(5)</span>
+<span class="nc" id="L309">            .setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+
+<span class="nc" id="L311">        BookKeeper bkc = new BookKeeper(conf);</span>
+
+<span class="nc" id="L313">        byte[] pwd = new byte[] {};</span>
+<span class="nc" id="L314">        final LedgerHandle lh = bkc.createLedger(4, 3, 1, BookKeeper.DigestType.CRC32, pwd);</span>
+<span class="nc" id="L315">        final AtomicBoolean finished = new AtomicBoolean(false);</span>
+<span class="nc" id="L316">        final AtomicBoolean failTest = new AtomicBoolean(false);</span>
+<span class="nc" id="L317">        Thread t = new Thread() {</span>
+                public void run() {
+                    try {
+<span class="nc bnc" id="L320" title="All 2 branches missed.">                        while (!finished.get()) {</span>
+<span class="nc" id="L321">                            lh.addEntry(entry);</span>
+<span class="nc" id="L322">                            Thread.sleep(1);</span>
+                        }
+<span class="nc" id="L324">                    } catch (Exception e) {</span>
+<span class="nc" id="L325">                        LOG.error(&quot;Exception in add entry thread&quot;, e);</span>
+<span class="nc" id="L326">                        failTest.set(true);</span>
+<span class="nc" id="L327">                    }</span>
+<span class="nc" id="L328">                }</span>
+            };
+<span class="nc" id="L330">        t.start();</span>
+<span class="nc" id="L331">        final CountDownLatch b0latch = new CountDownLatch(1);</span>
+<span class="nc" id="L332">        final CountDownLatch b1latch = new CountDownLatch(1);</span>
+
+<span class="nc" id="L334">        startNewBookie();</span>
+<span class="nc" id="L335">        startNewBookie();</span>
+
+<span class="nc" id="L337">        sleepBookie(getBookie(0), b0latch);</span>
+<span class="nc" id="L338">        sleepBookie(getBookie(1), b1latch);</span>
+
+<span class="nc" id="L340">        Thread.sleep(10000);</span>
+<span class="nc" id="L341">        b0latch.countDown();</span>
+<span class="nc" id="L342">        b1latch.countDown();</span>
+<span class="nc" id="L343">        finished.set(true);</span>
+<span class="nc" id="L344">        t.join();</span>
+
+<span class="nc" id="L346">        assertFalse(failTest.get());</span>
+
+<span class="nc" id="L348">        lh.close();</span>
+
+<span class="nc" id="L350">        LedgerHandle lh2 = bkc.openLedger(lh.getId(), BookKeeper.DigestType.CRC32, pwd);</span>
+<span class="nc" id="L351">        LedgerChecker lc = new LedgerChecker(bkc);</span>
+<span class="nc" id="L352">        final CountDownLatch checklatch = new CountDownLatch(1);</span>
+<span class="nc" id="L353">        final AtomicInteger numFragments = new AtomicInteger(-1);</span>
+<span class="nc" id="L354">        lc.checkLedger(lh2, new GenericCallback&lt;Set&lt;LedgerFragment&gt;&gt;() {</span>
+                public void operationComplete(int rc, Set&lt;LedgerFragment&gt; fragments) {
+<span class="nc" id="L356">                    LOG.debug(&quot;Checked ledgers returned {} {}&quot;, rc, fragments);</span>
+<span class="nc bnc" id="L357" title="All 2 branches missed.">                    if (rc == BKException.Code.OK) {</span>
+<span class="nc" id="L358">                        numFragments.set(fragments.size());</span>
+                    }
+<span class="nc" id="L360">                    checklatch.countDown();</span>
+<span class="nc" id="L361">                }</span>
+            });
+<span class="nc" id="L363">        checklatch.await();</span>
+<span class="nc" id="L364">        assertEquals(&quot;There should be no missing fragments&quot;, 0, numFragments.get());</span>
+<span class="nc" id="L365">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

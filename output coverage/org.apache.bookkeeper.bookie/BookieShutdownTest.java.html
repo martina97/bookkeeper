@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>BookieShutdownTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$myBookieFenceLedgerTest.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.bookie</a> &gt; <span class="el_source">BookieShutdownTest.java</span></div><h1>BookieShutdownTest.java</h1><pre class="source lang-java linenums">/*
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.bookie;
+
+import static org.junit.Assert.fail;
+
+import java.nio.ByteBuffer;
+import java.util.Random;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+
+import org.apache.bookkeeper.client.AsyncCallback.AddCallback;
+import org.apache.bookkeeper.client.BKException;
+import org.apache.bookkeeper.client.BookKeeper.DigestType;
+import org.apache.bookkeeper.client.LedgerHandle;
+import org.apache.bookkeeper.conf.ServerConfiguration;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Test bookie shutdown.
+ */
+public class BookieShutdownTest extends BookKeeperClusterTestCase {
+
+<span class="nc" id="L45">    private static final Logger LOG = LoggerFactory.getLogger(BookieShutdownTest.class);</span>
+
+    public BookieShutdownTest() {
+<span class="nc" id="L48">        super(3);</span>
+<span class="nc" id="L49">        baseConf.setAllowEphemeralPorts(false);</span>
+<span class="nc" id="L50">    }</span>
+
+    private LedgerHandle lh;
+<span class="nc" id="L53">    private int numEntriesToWrite = 200;</span>
+<span class="nc" id="L54">    private int maxInt = 2147483647;</span>
+<span class="nc" id="L55">    private Random rng = new Random(System.currentTimeMillis());</span>
+<span class="nc" id="L56">    private DigestType digestType = DigestType.CRC32;</span>
+
+<span class="nc" id="L58">    class SyncObj {</span>
+    }
+
+    /**
+     * Tests verifies the bookkeeper shutdown while writing entries.
+     * Continuously restarting the bookie server to see all the external
+     * resources are releasing properly. BOOKKEEPER-678
+     */
+    @Test
+    public void testBookieRestartContinuously() throws Exception {
+<span class="nc bnc" id="L68" title="All 2 branches missed.">        for (int index = 0; index &lt; 10; index++) {</span>
+<span class="nc" id="L69">            SyncObj sync = new SyncObj();</span>
+            try {
+                // Create a ledger
+<span class="nc" id="L72">                lh = bkc.createLedger(3, 2, digestType, &quot;aaa&quot;.getBytes());</span>
+<span class="nc" id="L73">                LOG.info(&quot;Ledger ID: &quot; + lh.getId());</span>
+<span class="nc bnc" id="L74" title="All 2 branches missed.">                for (int i = 0; i &lt; numEntriesToWrite; i++) {</span>
+<span class="nc" id="L75">                    ByteBuffer entry = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L76">                    entry.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L77">                    entry.position(0);</span>
+
+<span class="nc" id="L79">                    lh.asyncAddEntry(entry.array(),</span>
+                            new LedgerEntryAddCallback(), sync);
+                }
+
+<span class="nc" id="L83">                LOG.info(&quot;Wrote &quot; + numEntriesToWrite</span>
+                        + &quot; and now going to fail bookie.&quot;);
+                // Shutdown one Bookie server and restarting new one to continue
+                // writing
+<span class="nc" id="L87">                bsConfs.remove(0);</span>
+<span class="nc" id="L88">                bs.get(0).shutdown();</span>
+<span class="nc" id="L89">                bs.remove(0);</span>
+<span class="nc" id="L90">                startNewBookie();</span>
+<span class="nc" id="L91">                LOG.info(&quot;Shutdown one bookie server and started new bookie server...&quot;);</span>
+<span class="nc" id="L92">            } catch (BKException e) {</span>
+<span class="nc" id="L93">                LOG.error(&quot;Caught BKException&quot;, e);</span>
+<span class="nc" id="L94">                fail(e.toString());</span>
+<span class="nc" id="L95">            } catch (InterruptedException e) {</span>
+<span class="nc" id="L96">                Thread.currentThread().interrupt();</span>
+<span class="nc" id="L97">                LOG.error(&quot;Caught InterruptedException&quot;, e);</span>
+<span class="nc" id="L98">                fail(e.toString());</span>
+<span class="nc" id="L99">            }</span>
+        }
+<span class="nc" id="L101">    }</span>
+
+<span class="nc" id="L103">    private class LedgerEntryAddCallback implements AddCallback {</span>
+        @Override
+        public void addComplete(int rc, LedgerHandle lh, long entryId,
+                Object ctx) {
+<span class="nc" id="L107">            SyncObj x = (SyncObj) ctx;</span>
+<span class="nc" id="L108">            synchronized (x) {</span>
+<span class="nc" id="L109">                x.notify();</span>
+<span class="nc" id="L110">            }</span>
+<span class="nc" id="L111">        }</span>
+    }
+
+    /**
+     * Test whether Bookie can be shutdown when the call comes inside bookie thread.
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testBookieShutdownFromBookieThread() throws Exception {
+<span class="nc" id="L121">        ServerConfiguration conf = bsConfs.get(0);</span>
+<span class="nc" id="L122">        killBookie(0);</span>
+<span class="nc" id="L123">        final CountDownLatch latch = new CountDownLatch(1);</span>
+<span class="nc" id="L124">        final CountDownLatch shutdownComplete = new CountDownLatch(1);</span>
+<span class="nc" id="L125">        Bookie bookie = new Bookie(conf) {</span>
+            @Override
+            public void run() {
+                try {
+<span class="nc" id="L129">                    latch.await();</span>
+<span class="nc" id="L130">                } catch (InterruptedException e) {</span>
+<span class="nc" id="L131">                    Thread.currentThread().interrupt();</span>
+                    // Ignore
+<span class="nc" id="L133">                }</span>
+<span class="nc" id="L134">                triggerBookieShutdown(ExitCode.BOOKIE_EXCEPTION);</span>
+<span class="nc" id="L135">            }</span>
+
+            @Override
+            synchronized int shutdown(int exitCode) {
+<span class="nc" id="L139">                super.shutdown(exitCode);</span>
+<span class="nc" id="L140">                shutdownComplete.countDown();</span>
+<span class="nc" id="L141">                return exitCode;</span>
+            }
+        };
+<span class="nc" id="L144">        bookie.start();</span>
+        // after 1 sec stop .
+<span class="nc" id="L146">        Thread.sleep(1000);</span>
+<span class="nc" id="L147">        latch.countDown();</span>
+<span class="nc" id="L148">        shutdownComplete.await(5000, TimeUnit.MILLISECONDS);</span>
+<span class="nc" id="L149">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

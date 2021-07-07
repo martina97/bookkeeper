@@ -1,0 +1,453 @@
+
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html id="htmlId">
+<head>
+  <title>Coverage Report :: DbLedgerStorage</title>
+  <style type="text/css">
+    @import "../../.css/coverage.css";
+  </style>
+</head>
+
+<body>
+<div class="header"></div>
+
+<div class="content">
+<div class="breadCrumbs">
+    [ <a href="../../index.html">all classes</a> ]
+    [ <a href="../index.html">org.apache.bookkeeper.bookie.storage.ldb</a> ]
+</div>
+
+<h1>Coverage Summary for Class: DbLedgerStorage (org.apache.bookkeeper.bookie.storage.ldb)</h1>
+
+<table class="coverageStats">
+<tr>
+  <th class="name">Class</th>
+<th class="coverageStat 
+">
+  Class, %
+</th>
+<th class="coverageStat 
+">
+  Method, %
+</th>
+<th class="coverageStat 
+">
+  Line, %
+</th>
+</tr>
+<tr>
+  <td class="name">DbLedgerStorage</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 1)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 43)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 110)
+  </span>
+</td>
+</tr>
+
+</table>
+
+<br/>
+<br/>
+
+
+<div class="sourceCode"><i>1</i>&nbsp;/**
+<i>2</i>&nbsp; *
+<i>3</i>&nbsp; * Licensed to the Apache Software Foundation (ASF) under one
+<i>4</i>&nbsp; * or more contributor license agreements.  See the NOTICE file
+<i>5</i>&nbsp; * distributed with this work for additional information
+<i>6</i>&nbsp; * regarding copyright ownership.  The ASF licenses this file
+<i>7</i>&nbsp; * to you under the Apache License, Version 2.0 (the
+<i>8</i>&nbsp; * &quot;License&quot;); you may not use this file except in compliance
+<i>9</i>&nbsp; * with the License.  You may obtain a copy of the License at
+<i>10</i>&nbsp; *
+<i>11</i>&nbsp; *   http://www.apache.org/licenses/LICENSE-2.0
+<i>12</i>&nbsp; *
+<i>13</i>&nbsp; * Unless required by applicable law or agreed to in writing,
+<i>14</i>&nbsp; * software distributed under the License is distributed on an
+<i>15</i>&nbsp; * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+<i>16</i>&nbsp; * KIND, either express or implied.  See the License for the
+<i>17</i>&nbsp; * specific language governing permissions and limitations
+<i>18</i>&nbsp; * under the License.
+<i>19</i>&nbsp; *
+<i>20</i>&nbsp; */
+<i>21</i>&nbsp;package org.apache.bookkeeper.bookie.storage.ldb;
+<i>22</i>&nbsp;
+<i>23</i>&nbsp;import static com.google.common.base.Preconditions.checkNotNull;
+<i>24</i>&nbsp;
+<i>25</i>&nbsp;import com.google.common.annotations.VisibleForTesting;
+<i>26</i>&nbsp;import com.google.common.collect.Iterables;
+<i>27</i>&nbsp;import com.google.common.collect.Lists;
+<i>28</i>&nbsp;
+<i>29</i>&nbsp;import io.netty.buffer.ByteBuf;
+<i>30</i>&nbsp;import io.netty.buffer.ByteBufAllocator;
+<i>31</i>&nbsp;import io.netty.util.concurrent.DefaultThreadFactory;
+<i>32</i>&nbsp;//CHECKSTYLE.OFF: IllegalImport
+<i>33</i>&nbsp;import io.netty.util.internal.PlatformDependent;
+<i>34</i>&nbsp;//CHECKSTYLE.ON: IllegalImport
+<i>35</i>&nbsp;
+<i>36</i>&nbsp;import java.io.File;
+<i>37</i>&nbsp;import java.io.IOException;
+<i>38</i>&nbsp;import java.util.ArrayList;
+<i>39</i>&nbsp;import java.util.List;
+<i>40</i>&nbsp;import java.util.PrimitiveIterator.OfLong;
+<i>41</i>&nbsp;import java.util.concurrent.Executors;
+<i>42</i>&nbsp;import java.util.concurrent.ScheduledExecutorService;
+<i>43</i>&nbsp;
+<i>44</i>&nbsp;import java.util.stream.Collectors;
+<i>45</i>&nbsp;import lombok.extern.slf4j.Slf4j;
+<i>46</i>&nbsp;
+<i>47</i>&nbsp;import org.apache.bookkeeper.bookie.BookieException;
+<i>48</i>&nbsp;import org.apache.bookkeeper.bookie.CheckpointSource;
+<i>49</i>&nbsp;import org.apache.bookkeeper.bookie.CheckpointSource.Checkpoint;
+<i>50</i>&nbsp;import org.apache.bookkeeper.bookie.Checkpointer;
+<i>51</i>&nbsp;import org.apache.bookkeeper.bookie.GarbageCollectionStatus;
+<i>52</i>&nbsp;import org.apache.bookkeeper.bookie.LastAddConfirmedUpdateNotification;
+<i>53</i>&nbsp;import org.apache.bookkeeper.bookie.LedgerCache;
+<i>54</i>&nbsp;import org.apache.bookkeeper.bookie.LedgerDirsManager;
+<i>55</i>&nbsp;import org.apache.bookkeeper.bookie.LedgerStorage;
+<i>56</i>&nbsp;import org.apache.bookkeeper.bookie.StateManager;
+<i>57</i>&nbsp;import org.apache.bookkeeper.bookie.storage.ldb.KeyValueStorageFactory.DbConfigType;
+<i>58</i>&nbsp;import org.apache.bookkeeper.bookie.storage.ldb.SingleDirectoryDbLedgerStorage.LedgerLoggerProcessor;
+<i>59</i>&nbsp;import org.apache.bookkeeper.common.util.MathUtils;
+<i>60</i>&nbsp;import org.apache.bookkeeper.common.util.Watcher;
+<i>61</i>&nbsp;import org.apache.bookkeeper.conf.ServerConfiguration;
+<i>62</i>&nbsp;import org.apache.bookkeeper.meta.LedgerManager;
+<i>63</i>&nbsp;import org.apache.bookkeeper.stats.NullStatsLogger;
+<i>64</i>&nbsp;import org.apache.bookkeeper.stats.StatsLogger;
+<i>65</i>&nbsp;import org.apache.bookkeeper.util.DiskChecker;
+<i>66</i>&nbsp;import org.apache.commons.lang3.StringUtils;
+<i>67</i>&nbsp;
+<i>68</i>&nbsp;
+<i>69</i>&nbsp;/**
+<i>70</i>&nbsp; * Implementation of LedgerStorage that uses RocksDB to keep the indexes for entries stored in EntryLogs.
+<i>71</i>&nbsp; */
+<b class="nc"><i>72</i>&nbsp;@Slf4j</b>
+<b class="nc"><i>73</i>&nbsp;public class DbLedgerStorage implements LedgerStorage {</b>
+<i>74</i>&nbsp;
+<i>75</i>&nbsp;    public static final String WRITE_CACHE_MAX_SIZE_MB = &quot;dbStorage_writeCacheMaxSizeMb&quot;;
+<i>76</i>&nbsp;
+<i>77</i>&nbsp;    public static final String READ_AHEAD_CACHE_MAX_SIZE_MB = &quot;dbStorage_readAheadCacheMaxSizeMb&quot;;
+<i>78</i>&nbsp;
+<i>79</i>&nbsp;    static final String MAX_THROTTLE_TIME_MILLIS = &quot;dbStorage_maxThrottleTimeMs&quot;;
+<i>80</i>&nbsp;
+<i>81</i>&nbsp;    private static final int MB = 1024 * 1024;
+<i>82</i>&nbsp;
+<b class="nc"><i>83</i>&nbsp;    private static final long DEFAULT_WRITE_CACHE_MAX_SIZE_MB = (long) (0.25 * PlatformDependent.maxDirectMemory())</b>
+<i>84</i>&nbsp;            / MB;
+<b class="nc"><i>85</i>&nbsp;    private static final long DEFAULT_READ_CACHE_MAX_SIZE_MB = (long) (0.25 * PlatformDependent.maxDirectMemory())</b>
+<i>86</i>&nbsp;            / MB;
+<i>87</i>&nbsp;    private int numberOfDirs;
+<i>88</i>&nbsp;    private List&lt;SingleDirectoryDbLedgerStorage&gt; ledgerStorageList;
+<i>89</i>&nbsp;
+<i>90</i>&nbsp;    // Keep 1 single Bookie GC thread so the the compactions from multiple individual directories are serialized
+<i>91</i>&nbsp;    private ScheduledExecutorService gcExecutor;
+<i>92</i>&nbsp;    private DbLedgerStorageStats stats;
+<i>93</i>&nbsp;
+<i>94</i>&nbsp;    protected ByteBufAllocator allocator;
+<i>95</i>&nbsp;
+<i>96</i>&nbsp;    @Override
+<i>97</i>&nbsp;    public void initialize(ServerConfiguration conf, LedgerManager ledgerManager, LedgerDirsManager ledgerDirsManager,
+<i>98</i>&nbsp;            LedgerDirsManager indexDirsManager, StateManager stateManager, CheckpointSource checkpointSource,
+<i>99</i>&nbsp;            Checkpointer checkpointer, StatsLogger statsLogger, ByteBufAllocator allocator) throws IOException {
+<b class="nc"><i>100</i>&nbsp;        long writeCacheMaxSize = getLongVariableOrDefault(conf, WRITE_CACHE_MAX_SIZE_MB,</b>
+<i>101</i>&nbsp;                DEFAULT_WRITE_CACHE_MAX_SIZE_MB) * MB;
+<b class="nc"><i>102</i>&nbsp;        long readCacheMaxSize = getLongVariableOrDefault(conf, READ_AHEAD_CACHE_MAX_SIZE_MB,</b>
+<i>103</i>&nbsp;                DEFAULT_READ_CACHE_MAX_SIZE_MB) * MB;
+<i>104</i>&nbsp;
+<b class="nc"><i>105</i>&nbsp;        this.allocator = allocator;</b>
+<b class="nc"><i>106</i>&nbsp;        this.numberOfDirs = ledgerDirsManager.getAllLedgerDirs().size();</b>
+<i>107</i>&nbsp;
+<b class="nc"><i>108</i>&nbsp;        log.info(&quot;Started Db Ledger Storage&quot;);</b>
+<b class="nc"><i>109</i>&nbsp;        log.info(&quot; - Number of directories: {}&quot;, numberOfDirs);</b>
+<b class="nc"><i>110</i>&nbsp;        log.info(&quot; - Write cache size: {} MB&quot;, writeCacheMaxSize / MB);</b>
+<b class="nc"><i>111</i>&nbsp;        log.info(&quot; - Read Cache: {} MB&quot;, readCacheMaxSize / MB);</b>
+<i>112</i>&nbsp;
+<b class="nc"><i>113</i>&nbsp;        if (readCacheMaxSize + writeCacheMaxSize &gt; PlatformDependent.maxDirectMemory()) {</b>
+<b class="nc"><i>114</i>&nbsp;            throw new IOException(&quot;Read and write cache sizes exceed the configured max direct memory size&quot;);</b>
+<i>115</i>&nbsp;        }
+<i>116</i>&nbsp;
+<b class="nc"><i>117</i>&nbsp;        long perDirectoryWriteCacheSize = writeCacheMaxSize / numberOfDirs;</b>
+<b class="nc"><i>118</i>&nbsp;        long perDirectoryReadCacheSize = readCacheMaxSize / numberOfDirs;</b>
+<i>119</i>&nbsp;
+<b class="nc"><i>120</i>&nbsp;        gcExecutor = Executors.newSingleThreadScheduledExecutor(new DefaultThreadFactory(&quot;GarbageCollector&quot;));</b>
+<i>121</i>&nbsp;
+<b class="nc"><i>122</i>&nbsp;        ledgerStorageList = Lists.newArrayList();</b>
+<b class="nc"><i>123</i>&nbsp;        for (File ledgerDir : ledgerDirsManager.getAllLedgerDirs()) {</b>
+<i>124</i>&nbsp;            // Create a ledger dirs manager for the single directory
+<b class="nc"><i>125</i>&nbsp;            File[] dirs = new File[1];</b>
+<i>126</i>&nbsp;            // Remove the `/current` suffix which will be appended again by LedgersDirManager
+<b class="nc"><i>127</i>&nbsp;            dirs[0] = ledgerDir.getParentFile();</b>
+<b class="nc"><i>128</i>&nbsp;            LedgerDirsManager ldm = new LedgerDirsManager(conf, dirs, ledgerDirsManager.getDiskChecker(), statsLogger);</b>
+<b class="nc"><i>129</i>&nbsp;            ledgerStorageList.add(newSingleDirectoryDbLedgerStorage(conf, ledgerManager, ldm, indexDirsManager,</b>
+<i>130</i>&nbsp;                    stateManager, checkpointSource, checkpointer, statsLogger, gcExecutor, perDirectoryWriteCacheSize,
+<i>131</i>&nbsp;                    perDirectoryReadCacheSize));
+<b class="nc"><i>132</i>&nbsp;        }</b>
+<i>133</i>&nbsp;
+<b class="nc"><i>134</i>&nbsp;        this.stats = new DbLedgerStorageStats(</b>
+<i>135</i>&nbsp;            statsLogger,
+<b class="nc"><i>136</i>&nbsp;            () -&gt; ledgerStorageList.stream().mapToLong(SingleDirectoryDbLedgerStorage::getWriteCacheSize).sum(),</b>
+<b class="nc"><i>137</i>&nbsp;            () -&gt; ledgerStorageList.stream().mapToLong(SingleDirectoryDbLedgerStorage::getWriteCacheCount).sum(),</b>
+<b class="nc"><i>138</i>&nbsp;            () -&gt; ledgerStorageList.stream().mapToLong(SingleDirectoryDbLedgerStorage::getReadCacheSize).sum(),</b>
+<b class="nc"><i>139</i>&nbsp;            () -&gt; ledgerStorageList.stream().mapToLong(SingleDirectoryDbLedgerStorage::getReadCacheCount).sum()</b>
+<i>140</i>&nbsp;        );
+<b class="nc"><i>141</i>&nbsp;    }</b>
+<i>142</i>&nbsp;
+<i>143</i>&nbsp;    @VisibleForTesting
+<i>144</i>&nbsp;    protected SingleDirectoryDbLedgerStorage newSingleDirectoryDbLedgerStorage(ServerConfiguration conf,
+<i>145</i>&nbsp;            LedgerManager ledgerManager, LedgerDirsManager ledgerDirsManager, LedgerDirsManager indexDirsManager,
+<i>146</i>&nbsp;            StateManager stateManager, CheckpointSource checkpointSource, Checkpointer checkpointer,
+<i>147</i>&nbsp;            StatsLogger statsLogger, ScheduledExecutorService gcExecutor, long writeCacheSize, long readCacheSize)
+<i>148</i>&nbsp;            throws IOException {
+<b class="nc"><i>149</i>&nbsp;        return new SingleDirectoryDbLedgerStorage(conf, ledgerManager, ledgerDirsManager, indexDirsManager,</b>
+<i>150</i>&nbsp;                stateManager, checkpointSource, checkpointer, statsLogger, allocator, gcExecutor, writeCacheSize,
+<i>151</i>&nbsp;                readCacheSize);
+<i>152</i>&nbsp;    }
+<i>153</i>&nbsp;
+<i>154</i>&nbsp;    @Override
+<i>155</i>&nbsp;    public void start() {
+<b class="nc"><i>156</i>&nbsp;        ledgerStorageList.forEach(LedgerStorage::start);</b>
+<b class="nc"><i>157</i>&nbsp;    }</b>
+<i>158</i>&nbsp;
+<i>159</i>&nbsp;    @Override
+<i>160</i>&nbsp;    public void shutdown() throws InterruptedException {
+<b class="nc"><i>161</i>&nbsp;        for (LedgerStorage ls : ledgerStorageList) {</b>
+<b class="nc"><i>162</i>&nbsp;            ls.shutdown();</b>
+<b class="nc"><i>163</i>&nbsp;        }</b>
+<b class="nc"><i>164</i>&nbsp;    }</b>
+<i>165</i>&nbsp;
+<i>166</i>&nbsp;    @Override
+<i>167</i>&nbsp;    public boolean ledgerExists(long ledgerId) throws IOException {
+<b class="nc"><i>168</i>&nbsp;        return getLedgerSorage(ledgerId).ledgerExists(ledgerId);</b>
+<i>169</i>&nbsp;    }
+<i>170</i>&nbsp;
+<i>171</i>&nbsp;    @Override
+<i>172</i>&nbsp;    public boolean setFenced(long ledgerId) throws IOException {
+<b class="nc"><i>173</i>&nbsp;        return getLedgerSorage(ledgerId).setFenced(ledgerId);</b>
+<i>174</i>&nbsp;    }
+<i>175</i>&nbsp;
+<i>176</i>&nbsp;    @Override
+<i>177</i>&nbsp;    public boolean isFenced(long ledgerId) throws IOException {
+<b class="nc"><i>178</i>&nbsp;        return getLedgerSorage(ledgerId).isFenced(ledgerId);</b>
+<i>179</i>&nbsp;    }
+<i>180</i>&nbsp;
+<i>181</i>&nbsp;    @Override
+<i>182</i>&nbsp;    public void setMasterKey(long ledgerId, byte[] masterKey) throws IOException {
+<b class="nc"><i>183</i>&nbsp;        getLedgerSorage(ledgerId).setMasterKey(ledgerId, masterKey);</b>
+<b class="nc"><i>184</i>&nbsp;    }</b>
+<i>185</i>&nbsp;
+<i>186</i>&nbsp;    @Override
+<i>187</i>&nbsp;    public byte[] readMasterKey(long ledgerId) throws IOException, BookieException {
+<b class="nc"><i>188</i>&nbsp;        return getLedgerSorage(ledgerId).readMasterKey(ledgerId);</b>
+<i>189</i>&nbsp;    }
+<i>190</i>&nbsp;
+<i>191</i>&nbsp;    @Override
+<i>192</i>&nbsp;    public long addEntry(ByteBuf entry) throws IOException, BookieException {
+<b class="nc"><i>193</i>&nbsp;        long ledgerId = entry.getLong(entry.readerIndex());</b>
+<b class="nc"><i>194</i>&nbsp;        return getLedgerSorage(ledgerId).addEntry(entry);</b>
+<i>195</i>&nbsp;    }
+<i>196</i>&nbsp;
+<i>197</i>&nbsp;    @Override
+<i>198</i>&nbsp;    public ByteBuf getEntry(long ledgerId, long entryId) throws IOException {
+<b class="nc"><i>199</i>&nbsp;        return getLedgerSorage(ledgerId).getEntry(ledgerId, entryId);</b>
+<i>200</i>&nbsp;    }
+<i>201</i>&nbsp;
+<i>202</i>&nbsp;    @Override
+<i>203</i>&nbsp;    public long getLastAddConfirmed(long ledgerId) throws IOException {
+<b class="nc"><i>204</i>&nbsp;        return getLedgerSorage(ledgerId).getLastAddConfirmed(ledgerId);</b>
+<i>205</i>&nbsp;    }
+<i>206</i>&nbsp;
+<i>207</i>&nbsp;    @Override
+<i>208</i>&nbsp;    public boolean waitForLastAddConfirmedUpdate(long ledgerId, long previousLAC,
+<i>209</i>&nbsp;            Watcher&lt;LastAddConfirmedUpdateNotification&gt; watcher) throws IOException {
+<b class="nc"><i>210</i>&nbsp;        return getLedgerSorage(ledgerId).waitForLastAddConfirmedUpdate(ledgerId, previousLAC, watcher);</b>
+<i>211</i>&nbsp;    }
+<i>212</i>&nbsp;
+<i>213</i>&nbsp;    @Override
+<i>214</i>&nbsp;    public void cancelWaitForLastAddConfirmedUpdate(long ledgerId,
+<i>215</i>&nbsp;                                                    Watcher&lt;LastAddConfirmedUpdateNotification&gt; watcher)
+<i>216</i>&nbsp;            throws IOException {
+<b class="nc"><i>217</i>&nbsp;        getLedgerSorage(ledgerId).cancelWaitForLastAddConfirmedUpdate(ledgerId, watcher);</b>
+<b class="nc"><i>218</i>&nbsp;    }</b>
+<i>219</i>&nbsp;
+<i>220</i>&nbsp;    @Override
+<i>221</i>&nbsp;    public void flush() throws IOException {
+<b class="nc"><i>222</i>&nbsp;        for (LedgerStorage ls : ledgerStorageList) {</b>
+<b class="nc"><i>223</i>&nbsp;            ls.flush();</b>
+<b class="nc"><i>224</i>&nbsp;        }</b>
+<b class="nc"><i>225</i>&nbsp;    }</b>
+<i>226</i>&nbsp;
+<i>227</i>&nbsp;    @Override
+<i>228</i>&nbsp;    public void checkpoint(Checkpoint checkpoint) throws IOException {
+<b class="nc"><i>229</i>&nbsp;        for (LedgerStorage ls : ledgerStorageList) {</b>
+<b class="nc"><i>230</i>&nbsp;            ls.checkpoint(checkpoint);</b>
+<b class="nc"><i>231</i>&nbsp;        }</b>
+<b class="nc"><i>232</i>&nbsp;    }</b>
+<i>233</i>&nbsp;
+<i>234</i>&nbsp;    @Override
+<i>235</i>&nbsp;    public void deleteLedger(long ledgerId) throws IOException {
+<b class="nc"><i>236</i>&nbsp;        getLedgerSorage(ledgerId).deleteLedger(ledgerId);</b>
+<b class="nc"><i>237</i>&nbsp;    }</b>
+<i>238</i>&nbsp;
+<i>239</i>&nbsp;    @Override
+<i>240</i>&nbsp;    public void registerLedgerDeletionListener(LedgerDeletionListener listener) {
+<b class="nc"><i>241</i>&nbsp;        ledgerStorageList.forEach(ls -&gt; ls.registerLedgerDeletionListener(listener));</b>
+<b class="nc"><i>242</i>&nbsp;    }</b>
+<i>243</i>&nbsp;
+<i>244</i>&nbsp;    @Override
+<i>245</i>&nbsp;    public void setExplicitlac(long ledgerId, ByteBuf lac) throws IOException {
+<b class="nc"><i>246</i>&nbsp;        getLedgerSorage(ledgerId).setExplicitlac(ledgerId, lac);</b>
+<b class="nc"><i>247</i>&nbsp;    }</b>
+<i>248</i>&nbsp;
+<i>249</i>&nbsp;    @Override
+<i>250</i>&nbsp;    public ByteBuf getExplicitLac(long ledgerId) {
+<b class="nc"><i>251</i>&nbsp;        return getLedgerSorage(ledgerId).getExplicitLac(ledgerId);</b>
+<i>252</i>&nbsp;    }
+<i>253</i>&nbsp;
+<i>254</i>&nbsp;    public long addLedgerToIndex(long ledgerId, boolean isFenced, byte[] masterKey,
+<i>255</i>&nbsp;                                 LedgerCache.PageEntriesIterable pages) throws Exception {
+<b class="nc"><i>256</i>&nbsp;        return getLedgerSorage(ledgerId).addLedgerToIndex(ledgerId, isFenced, masterKey, pages);</b>
+<i>257</i>&nbsp;    }
+<i>258</i>&nbsp;
+<i>259</i>&nbsp;    public long getLastEntryInLedger(long ledgerId) throws IOException {
+<b class="nc"><i>260</i>&nbsp;        return getLedgerSorage(ledgerId).getEntryLocationIndex().getLastEntryInLedger(ledgerId);</b>
+<i>261</i>&nbsp;    }
+<i>262</i>&nbsp;
+<i>263</i>&nbsp;    public long getLocation(long ledgerId, long entryId) throws IOException {
+<b class="nc"><i>264</i>&nbsp;        return getLedgerSorage(ledgerId).getEntryLocationIndex().getLocation(ledgerId, entryId);</b>
+<i>265</i>&nbsp;    }
+<i>266</i>&nbsp;
+<i>267</i>&nbsp;    private SingleDirectoryDbLedgerStorage getLedgerSorage(long ledgerId) {
+<b class="nc"><i>268</i>&nbsp;        return ledgerStorageList.get(MathUtils.signSafeMod(ledgerId, numberOfDirs));</b>
+<i>269</i>&nbsp;    }
+<i>270</i>&nbsp;
+<i>271</i>&nbsp;    public Iterable&lt;Long&gt; getActiveLedgersInRange(long firstLedgerId, long lastLedgerId) throws IOException {
+<b class="nc"><i>272</i>&nbsp;        List&lt;Iterable&lt;Long&gt;&gt; listIt = new ArrayList&lt;&gt;(numberOfDirs);</b>
+<b class="nc"><i>273</i>&nbsp;        for (SingleDirectoryDbLedgerStorage ls : ledgerStorageList) {</b>
+<b class="nc"><i>274</i>&nbsp;            listIt.add(ls.getActiveLedgersInRange(firstLedgerId, lastLedgerId));</b>
+<b class="nc"><i>275</i>&nbsp;        }</b>
+<i>276</i>&nbsp;
+<b class="nc"><i>277</i>&nbsp;        return Iterables.concat(listIt);</b>
+<i>278</i>&nbsp;    }
+<i>279</i>&nbsp;
+<i>280</i>&nbsp;    public ByteBuf getLastEntry(long ledgerId) throws IOException {
+<b class="nc"><i>281</i>&nbsp;        return getLedgerSorage(ledgerId).getLastEntry(ledgerId);</b>
+<i>282</i>&nbsp;    }
+<i>283</i>&nbsp;
+<i>284</i>&nbsp;    @VisibleForTesting
+<i>285</i>&nbsp;    boolean isFlushRequired() {
+<b class="nc"><i>286</i>&nbsp;        return ledgerStorageList.stream().allMatch(SingleDirectoryDbLedgerStorage::isFlushRequired);</b>
+<i>287</i>&nbsp;    }
+<i>288</i>&nbsp;
+<i>289</i>&nbsp;    @VisibleForTesting
+<i>290</i>&nbsp;    List&lt;SingleDirectoryDbLedgerStorage&gt; getLedgerStorageList() {
+<b class="nc"><i>291</i>&nbsp;        return ledgerStorageList;</b>
+<i>292</i>&nbsp;    }
+<i>293</i>&nbsp;
+<i>294</i>&nbsp;    /**
+<i>295</i>&nbsp;     * Reads ledger index entries to get list of entry-logger that contains given ledgerId.
+<i>296</i>&nbsp;     *
+<i>297</i>&nbsp;     * @param ledgerId
+<i>298</i>&nbsp;     * @param serverConf
+<i>299</i>&nbsp;     * @param processor
+<i>300</i>&nbsp;     * @throws IOException
+<i>301</i>&nbsp;     */
+<i>302</i>&nbsp;    public static void readLedgerIndexEntries(long ledgerId, ServerConfiguration serverConf,
+<i>303</i>&nbsp;            LedgerLoggerProcessor processor) throws IOException {
+<i>304</i>&nbsp;
+<b class="nc"><i>305</i>&nbsp;        checkNotNull(serverConf, &quot;ServerConfiguration can&#39;t be null&quot;);</b>
+<b class="nc"><i>306</i>&nbsp;        checkNotNull(processor, &quot;LedgerLoggger info processor can&#39;t null&quot;);</b>
+<i>307</i>&nbsp;
+<b class="nc"><i>308</i>&nbsp;        LedgerDirsManager ledgerDirsManager = new LedgerDirsManager(serverConf, serverConf.getLedgerDirs(),</b>
+<b class="nc"><i>309</i>&nbsp;                new DiskChecker(serverConf.getDiskUsageThreshold(), serverConf.getDiskUsageWarnThreshold()));</b>
+<b class="nc"><i>310</i>&nbsp;        List&lt;File&gt; ledgerDirs = ledgerDirsManager.getAllLedgerDirs();</b>
+<i>311</i>&nbsp;
+<b class="nc"><i>312</i>&nbsp;        int dirIndex = MathUtils.signSafeMod(ledgerId, ledgerDirs.size());</b>
+<b class="nc"><i>313</i>&nbsp;        String ledgerBasePath = ledgerDirs.get(dirIndex).toString();</b>
+<i>314</i>&nbsp;
+<b class="nc"><i>315</i>&nbsp;        EntryLocationIndex entryLocationIndex = new EntryLocationIndex(serverConf,</b>
+<b class="nc"><i>316</i>&nbsp;                (path, dbConfigType, conf1) -&gt; new KeyValueStorageRocksDB(path, DbConfigType.Small, conf1, true),</b>
+<i>317</i>&nbsp;                ledgerBasePath, NullStatsLogger.INSTANCE);
+<i>318</i>&nbsp;        try {
+<b class="nc"><i>319</i>&nbsp;            long lastEntryId = entryLocationIndex.getLastEntryInLedger(ledgerId);</b>
+<b class="nc"><i>320</i>&nbsp;            for (long currentEntry = 0; currentEntry &lt;= lastEntryId; currentEntry++) {</b>
+<b class="nc"><i>321</i>&nbsp;                long offset = entryLocationIndex.getLocation(ledgerId, currentEntry);</b>
+<b class="nc"><i>322</i>&nbsp;                if (offset &lt;= 0) {</b>
+<i>323</i>&nbsp;                    // entry not found in this bookie
+<b class="nc"><i>324</i>&nbsp;                    continue;</b>
+<i>325</i>&nbsp;                }
+<b class="nc"><i>326</i>&nbsp;                long entryLogId = offset &gt;&gt; 32L;</b>
+<b class="nc"><i>327</i>&nbsp;                long position = offset &amp; 0xffffffffL;</b>
+<b class="nc"><i>328</i>&nbsp;                processor.process(currentEntry, entryLogId, position);</b>
+<i>329</i>&nbsp;            }
+<i>330</i>&nbsp;        } finally {
+<b class="nc"><i>331</i>&nbsp;            entryLocationIndex.close();</b>
+<i>332</i>&nbsp;        }
+<b class="nc"><i>333</i>&nbsp;    }</b>
+<i>334</i>&nbsp;
+<i>335</i>&nbsp;    @Override
+<i>336</i>&nbsp;    public void forceGC() {
+<b class="nc"><i>337</i>&nbsp;        ledgerStorageList.stream().forEach(SingleDirectoryDbLedgerStorage::forceGC);</b>
+<b class="nc"><i>338</i>&nbsp;    }</b>
+<i>339</i>&nbsp;
+<i>340</i>&nbsp;    @Override
+<i>341</i>&nbsp;    public boolean isInForceGC() {
+<b class="nc"><i>342</i>&nbsp;        return ledgerStorageList.stream().anyMatch(SingleDirectoryDbLedgerStorage::isInForceGC);</b>
+<i>343</i>&nbsp;    }
+<i>344</i>&nbsp;
+<i>345</i>&nbsp;    @Override
+<i>346</i>&nbsp;    public List&lt;GarbageCollectionStatus&gt; getGarbageCollectionStatus() {
+<b class="nc"><i>347</i>&nbsp;        return ledgerStorageList.stream()</b>
+<b class="nc"><i>348</i>&nbsp;            .map(single -&gt; single.getGarbageCollectionStatus().get(0)).collect(Collectors.toList());</b>
+<i>349</i>&nbsp;    }
+<i>350</i>&nbsp;
+<i>351</i>&nbsp;    static long getLongVariableOrDefault(ServerConfiguration conf, String keyName, long defaultValue) {
+<b class="nc"><i>352</i>&nbsp;        Object obj = conf.getProperty(keyName);</b>
+<b class="nc"><i>353</i>&nbsp;        if (obj instanceof Number) {</b>
+<b class="nc"><i>354</i>&nbsp;            return ((Number) obj).longValue();</b>
+<b class="nc"><i>355</i>&nbsp;        } else if (obj == null) {</b>
+<b class="nc"><i>356</i>&nbsp;            return defaultValue;</b>
+<b class="nc"><i>357</i>&nbsp;        } else if (StringUtils.isEmpty(conf.getString(keyName))) {</b>
+<b class="nc"><i>358</i>&nbsp;            return defaultValue;</b>
+<i>359</i>&nbsp;        } else {
+<b class="nc"><i>360</i>&nbsp;            return conf.getLong(keyName);</b>
+<i>361</i>&nbsp;        }
+<i>362</i>&nbsp;    }
+<i>363</i>&nbsp;
+<i>364</i>&nbsp;    @Override
+<i>365</i>&nbsp;    public OfLong getListOfEntriesOfLedger(long ledgerId) throws IOException {
+<i>366</i>&nbsp;        // check Issue #2078
+<b class="nc"><i>367</i>&nbsp;        throw new UnsupportedOperationException(</b>
+<i>368</i>&nbsp;                &quot;getListOfEntriesOfLedger method is currently unsupported for DbLedgerStorage&quot;);
+<i>369</i>&nbsp;    }
+<i>370</i>&nbsp;}
+</div>
+</div>
+
+<div class="footer">
+    
+    <div style="float:right;">generated on 2021-06-29 13:53</div>
+</div>
+</body>
+</html>

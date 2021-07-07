@@ -1,0 +1,1743 @@
+
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html id="htmlId">
+<head>
+  <title>Coverage Report :: BookKeeper</title>
+  <style type="text/css">
+    @import "../../.css/coverage.css";
+  </style>
+</head>
+
+<body>
+<div class="header"></div>
+
+<div class="content">
+<div class="breadCrumbs">
+    [ <a href="../../index.html">all classes</a> ]
+    [ <a href="../index.html">org.apache.bookkeeper.client</a> ]
+</div>
+
+<h1>Coverage Summary for Class: BookKeeper (org.apache.bookkeeper.client)</h1>
+
+<table class="coverageStats">
+
+<tr>
+  <th class="name">Class</th>
+<th class="coverageStat 
+">
+  Method, %
+</th>
+<th class="coverageStat 
+">
+  Line, %
+</th>
+</tr>
+<tr>
+  <td class="name">BookKeeper</td>
+<td class="coverageStat">
+  <span class="percent">
+    42,9%
+  </span>
+  <span class="absValue">
+    (24/ 56)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    42,9%
+  </span>
+  <span class="absValue">
+    (135/ 315)
+  </span>
+</td>
+</tr>
+  <tr>
+    <td class="name">BookKeeper$1</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 2)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 3)
+  </span>
+</td>
+  </tr>
+  <tr>
+    <td class="name">BookKeeper$1Result</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 1)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 2)
+  </span>
+</td>
+  </tr>
+  <tr>
+    <td class="name">BookKeeper$2</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 2)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 5)
+  </span>
+</td>
+  </tr>
+  <tr>
+    <td class="name">BookKeeper$3</td>
+<td class="coverageStat">
+  <span class="percent">
+    63,6%
+  </span>
+  <span class="absValue">
+    (7/ 11)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    63,6%
+  </span>
+  <span class="absValue">
+    (7/ 11)
+  </span>
+</td>
+  </tr>
+  <tr>
+    <td class="name">BookKeeper$4</td>
+<td class="coverageStat">
+  <span class="percent">
+    100%
+  </span>
+  <span class="absValue">
+    (1/ 1)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    100%
+  </span>
+  <span class="absValue">
+    (2/ 2)
+  </span>
+</td>
+  </tr>
+  <tr>
+    <td class="name">BookKeeper$Builder</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 12)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 32)
+  </span>
+</td>
+  </tr>
+  <tr>
+    <td class="name">BookKeeper$DigestType</td>
+<td class="coverageStat">
+  <span class="percent">
+    80%
+  </span>
+  <span class="absValue">
+    (4/ 5)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    40%
+  </span>
+  <span class="absValue">
+    (8/ 20)
+  </span>
+</td>
+  </tr>
+<tr>
+  <td class="name"><strong>total</strong></td>
+<td class="coverageStat">
+  <span class="percent">
+    40%
+  </span>
+  <span class="absValue">
+    (36/ 90)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    39%
+  </span>
+  <span class="absValue">
+    (152/ 390)
+  </span>
+</td>
+</tr>
+</table>
+
+<br/>
+<br/>
+
+
+<div class="sourceCode"><i>1</i>&nbsp;/**
+<i>2</i>&nbsp; *
+<i>3</i>&nbsp; * Licensed to the Apache Software Foundation (ASF) under one
+<i>4</i>&nbsp; * or more contributor license agreements.  See the NOTICE file
+<i>5</i>&nbsp; * distributed with this work for additional information
+<i>6</i>&nbsp; * regarding copyright ownership.  The ASF licenses this file
+<i>7</i>&nbsp; * to you under the Apache License, Version 2.0 (the
+<i>8</i>&nbsp; * &quot;License&quot;); you may not use this file except in compliance
+<i>9</i>&nbsp; * with the License.  You may obtain a copy of the License at
+<i>10</i>&nbsp; *
+<i>11</i>&nbsp; *   http://www.apache.org/licenses/LICENSE-2.0
+<i>12</i>&nbsp; *
+<i>13</i>&nbsp; * Unless required by applicable law or agreed to in writing,
+<i>14</i>&nbsp; * software distributed under the License is distributed on an
+<i>15</i>&nbsp; * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+<i>16</i>&nbsp; * KIND, either express or implied.  See the License for the
+<i>17</i>&nbsp; * specific language governing permissions and limitations
+<i>18</i>&nbsp; * under the License.
+<i>19</i>&nbsp; *
+<i>20</i>&nbsp; */
+<i>21</i>&nbsp;package org.apache.bookkeeper.client;
+<i>22</i>&nbsp;
+<i>23</i>&nbsp;import static com.google.common.base.Preconditions.checkNotNull;
+<i>24</i>&nbsp;import static org.apache.bookkeeper.bookie.BookKeeperServerStats.WATCHER_SCOPE;
+<i>25</i>&nbsp;
+<i>26</i>&nbsp;import com.google.common.annotations.VisibleForTesting;
+<i>27</i>&nbsp;import com.google.common.util.concurrent.ThreadFactoryBuilder;
+<i>28</i>&nbsp;
+<i>29</i>&nbsp;import io.netty.buffer.ByteBufAllocator;
+<i>30</i>&nbsp;import io.netty.buffer.UnpooledByteBufAllocator;
+<i>31</i>&nbsp;import io.netty.channel.EventLoopGroup;
+<i>32</i>&nbsp;import io.netty.util.HashedWheelTimer;
+<i>33</i>&nbsp;import io.netty.util.concurrent.DefaultThreadFactory;
+<i>34</i>&nbsp;
+<i>35</i>&nbsp;import java.io.IOException;
+<i>36</i>&nbsp;import java.net.URI;
+<i>37</i>&nbsp;import java.util.Collections;
+<i>38</i>&nbsp;import java.util.List;
+<i>39</i>&nbsp;import java.util.Map;
+<i>40</i>&nbsp;import java.util.concurrent.CompletableFuture;
+<i>41</i>&nbsp;import java.util.concurrent.CountDownLatch;
+<i>42</i>&nbsp;import java.util.concurrent.Executors;
+<i>43</i>&nbsp;import java.util.concurrent.ScheduledExecutorService;
+<i>44</i>&nbsp;import java.util.concurrent.TimeUnit;
+<i>45</i>&nbsp;import java.util.concurrent.locks.ReentrantReadWriteLock;
+<i>46</i>&nbsp;
+<i>47</i>&nbsp;import org.apache.bookkeeper.bookie.BookKeeperServerStats;
+<i>48</i>&nbsp;import org.apache.bookkeeper.client.AsyncCallback.CreateCallback;
+<i>49</i>&nbsp;import org.apache.bookkeeper.client.AsyncCallback.DeleteCallback;
+<i>50</i>&nbsp;import org.apache.bookkeeper.client.AsyncCallback.IsClosedCallback;
+<i>51</i>&nbsp;import org.apache.bookkeeper.client.AsyncCallback.OpenCallback;
+<i>52</i>&nbsp;import org.apache.bookkeeper.client.BookieInfoReader.BookieInfo;
+<i>53</i>&nbsp;import org.apache.bookkeeper.client.SyncCallbackUtils.SyncCreateAdvCallback;
+<i>54</i>&nbsp;import org.apache.bookkeeper.client.SyncCallbackUtils.SyncCreateCallback;
+<i>55</i>&nbsp;import org.apache.bookkeeper.client.SyncCallbackUtils.SyncDeleteCallback;
+<i>56</i>&nbsp;import org.apache.bookkeeper.client.SyncCallbackUtils.SyncOpenCallback;
+<i>57</i>&nbsp;import org.apache.bookkeeper.client.api.BookKeeperBuilder;
+<i>58</i>&nbsp;import org.apache.bookkeeper.client.api.CreateBuilder;
+<i>59</i>&nbsp;import org.apache.bookkeeper.client.api.DeleteBuilder;
+<i>60</i>&nbsp;import org.apache.bookkeeper.client.api.OpenBuilder;
+<i>61</i>&nbsp;import org.apache.bookkeeper.client.api.WriteFlag;
+<i>62</i>&nbsp;import org.apache.bookkeeper.common.allocator.ByteBufAllocatorBuilder;
+<i>63</i>&nbsp;import org.apache.bookkeeper.common.util.OrderedExecutor;
+<i>64</i>&nbsp;import org.apache.bookkeeper.common.util.OrderedScheduler;
+<i>65</i>&nbsp;import org.apache.bookkeeper.common.util.ReflectionUtils;
+<i>66</i>&nbsp;import org.apache.bookkeeper.conf.AbstractConfiguration;
+<i>67</i>&nbsp;import org.apache.bookkeeper.conf.ClientConfiguration;
+<i>68</i>&nbsp;import org.apache.bookkeeper.feature.FeatureProvider;
+<i>69</i>&nbsp;import org.apache.bookkeeper.feature.SettableFeatureProvider;
+<i>70</i>&nbsp;import org.apache.bookkeeper.meta.CleanupLedgerManager;
+<i>71</i>&nbsp;import org.apache.bookkeeper.meta.LedgerIdGenerator;
+<i>72</i>&nbsp;import org.apache.bookkeeper.meta.LedgerManager;
+<i>73</i>&nbsp;import org.apache.bookkeeper.meta.LedgerManagerFactory;
+<i>74</i>&nbsp;import org.apache.bookkeeper.meta.MetadataClientDriver;
+<i>75</i>&nbsp;import org.apache.bookkeeper.meta.MetadataDrivers;
+<i>76</i>&nbsp;import org.apache.bookkeeper.meta.exceptions.MetadataException;
+<i>77</i>&nbsp;import org.apache.bookkeeper.meta.zk.ZKMetadataClientDriver;
+<i>78</i>&nbsp;import org.apache.bookkeeper.net.BookieSocketAddress;
+<i>79</i>&nbsp;import org.apache.bookkeeper.net.DNSToSwitchMapping;
+<i>80</i>&nbsp;import org.apache.bookkeeper.proto.BookieClient;
+<i>81</i>&nbsp;import org.apache.bookkeeper.proto.BookieClientImpl;
+<i>82</i>&nbsp;import org.apache.bookkeeper.proto.DataFormats;
+<i>83</i>&nbsp;import org.apache.bookkeeper.stats.NullStatsLogger;
+<i>84</i>&nbsp;import org.apache.bookkeeper.stats.StatsLogger;
+<i>85</i>&nbsp;import org.apache.bookkeeper.util.EventLoopUtil;
+<i>86</i>&nbsp;import org.apache.bookkeeper.util.SafeRunnable;
+<i>87</i>&nbsp;import org.apache.commons.configuration.ConfigurationException;
+<i>88</i>&nbsp;import org.apache.zookeeper.KeeperException;
+<i>89</i>&nbsp;import org.apache.zookeeper.ZooKeeper;
+<i>90</i>&nbsp;import org.slf4j.Logger;
+<i>91</i>&nbsp;import org.slf4j.LoggerFactory;
+<i>92</i>&nbsp;
+<i>93</i>&nbsp;/**
+<i>94</i>&nbsp; * BookKeeper client.
+<i>95</i>&nbsp; *
+<i>96</i>&nbsp; * &lt;p&gt;We assume there is one single writer to a ledger at any time.
+<i>97</i>&nbsp; *
+<i>98</i>&nbsp; * &lt;p&gt;There are four possible operations: start a new ledger, write to a ledger,
+<i>99</i>&nbsp; * read from a ledger and delete a ledger.
+<i>100</i>&nbsp; *
+<i>101</i>&nbsp; * &lt;p&gt;The exceptions resulting from synchronous calls and error code resulting from
+<i>102</i>&nbsp; * asynchronous calls can be found in the class {@link BKException}.
+<i>103</i>&nbsp; */
+<b class="fc"><i>104</i>&nbsp;public class BookKeeper implements org.apache.bookkeeper.client.api.BookKeeper {</b>
+<i>105</i>&nbsp;
+<b class="fc"><i>106</i>&nbsp;    private static final Logger LOG = LoggerFactory.getLogger(BookKeeper.class);</b>
+<i>107</i>&nbsp;
+<i>108</i>&nbsp;
+<i>109</i>&nbsp;    final EventLoopGroup eventLoopGroup;
+<i>110</i>&nbsp;    private final ByteBufAllocator allocator;
+<i>111</i>&nbsp;
+<i>112</i>&nbsp;    // The stats logger for this client.
+<i>113</i>&nbsp;    private final StatsLogger statsLogger;
+<i>114</i>&nbsp;    private final BookKeeperClientStats clientStats;
+<i>115</i>&nbsp;    private final double bookieQuarantineRatio;
+<i>116</i>&nbsp;
+<i>117</i>&nbsp;    // whether the event loop group is one we created, or is owned by whoever
+<i>118</i>&nbsp;    // instantiated us
+<b class="fc"><i>119</i>&nbsp;    boolean ownEventLoopGroup = false;</b>
+<i>120</i>&nbsp;
+<i>121</i>&nbsp;    final BookieClient bookieClient;
+<i>122</i>&nbsp;    final BookieWatcherImpl bookieWatcher;
+<i>123</i>&nbsp;
+<i>124</i>&nbsp;    final OrderedExecutor mainWorkerPool;
+<i>125</i>&nbsp;    final OrderedScheduler scheduler;
+<i>126</i>&nbsp;    final HashedWheelTimer requestTimer;
+<i>127</i>&nbsp;    final boolean ownTimer;
+<i>128</i>&nbsp;    final FeatureProvider featureProvider;
+<i>129</i>&nbsp;    final ScheduledExecutorService bookieInfoScheduler;
+<i>130</i>&nbsp;
+<i>131</i>&nbsp;    final MetadataClientDriver metadataDriver;
+<i>132</i>&nbsp;    // Ledger manager responsible for how to store ledger meta data
+<i>133</i>&nbsp;    final LedgerManagerFactory ledgerManagerFactory;
+<i>134</i>&nbsp;    final LedgerManager ledgerManager;
+<i>135</i>&nbsp;    final LedgerIdGenerator ledgerIdGenerator;
+<i>136</i>&nbsp;
+<i>137</i>&nbsp;    // Ensemble Placement Policy
+<i>138</i>&nbsp;    final EnsemblePlacementPolicy placementPolicy;
+<i>139</i>&nbsp;    BookieInfoReader bookieInfoReader;
+<i>140</i>&nbsp;
+<i>141</i>&nbsp;    final ClientConfiguration conf;
+<i>142</i>&nbsp;    final ClientInternalConf internalConf;
+<i>143</i>&nbsp;
+<i>144</i>&nbsp;    // Close State
+<b class="fc"><i>145</i>&nbsp;    boolean closed = false;</b>
+<b class="fc"><i>146</i>&nbsp;    final ReentrantReadWriteLock closeLock = new ReentrantReadWriteLock();</b>
+<i>147</i>&nbsp;
+<i>148</i>&nbsp;    /**
+<i>149</i>&nbsp;     * BookKeeper Client Builder to build client instances.
+<i>150</i>&nbsp;     *
+<i>151</i>&nbsp;     * @see BookKeeperBuilder
+<i>152</i>&nbsp;     */
+<i>153</i>&nbsp;    public static class Builder {
+<i>154</i>&nbsp;        final ClientConfiguration conf;
+<i>155</i>&nbsp;
+<b class="nc"><i>156</i>&nbsp;        ZooKeeper zk = null;</b>
+<b class="nc"><i>157</i>&nbsp;        EventLoopGroup eventLoopGroup = null;</b>
+<b class="nc"><i>158</i>&nbsp;        ByteBufAllocator allocator = null;</b>
+<b class="nc"><i>159</i>&nbsp;        StatsLogger statsLogger = NullStatsLogger.INSTANCE;</b>
+<b class="nc"><i>160</i>&nbsp;        DNSToSwitchMapping dnsResolver = null;</b>
+<b class="nc"><i>161</i>&nbsp;        HashedWheelTimer requestTimer = null;</b>
+<b class="nc"><i>162</i>&nbsp;        FeatureProvider featureProvider = null;</b>
+<i>163</i>&nbsp;
+<b class="nc"><i>164</i>&nbsp;        Builder(ClientConfiguration conf) {</b>
+<b class="nc"><i>165</i>&nbsp;            this.conf = conf;</b>
+<b class="nc"><i>166</i>&nbsp;        }</b>
+<i>167</i>&nbsp;
+<i>168</i>&nbsp;        /**
+<i>169</i>&nbsp;         * Configure the bookkeeper client with a provided {@link EventLoopGroup}.
+<i>170</i>&nbsp;         *
+<i>171</i>&nbsp;         * @param f an external {@link EventLoopGroup} to use by the bookkeeper client.
+<i>172</i>&nbsp;         * @return client builder.
+<i>173</i>&nbsp;         * @deprecated since 4.5, use {@link #eventLoopGroup(EventLoopGroup)}
+<i>174</i>&nbsp;         * @see #eventLoopGroup(EventLoopGroup)
+<i>175</i>&nbsp;         */
+<i>176</i>&nbsp;        @Deprecated
+<i>177</i>&nbsp;        public Builder setEventLoopGroup(EventLoopGroup f) {
+<b class="nc"><i>178</i>&nbsp;            eventLoopGroup = f;</b>
+<b class="nc"><i>179</i>&nbsp;            return this;</b>
+<i>180</i>&nbsp;        }
+<i>181</i>&nbsp;
+<i>182</i>&nbsp;        /**
+<i>183</i>&nbsp;         * Configure the bookkeeper client with a provided {@link ZooKeeper} client.
+<i>184</i>&nbsp;         *
+<i>185</i>&nbsp;         * @param zk an external {@link ZooKeeper} client to use by the bookkeeper client.
+<i>186</i>&nbsp;         * @return client builder.
+<i>187</i>&nbsp;         * @deprecated since 4.5, use {@link #zk(ZooKeeper)}
+<i>188</i>&nbsp;         * @see #zk(ZooKeeper)
+<i>189</i>&nbsp;         */
+<i>190</i>&nbsp;        @Deprecated
+<i>191</i>&nbsp;        public Builder setZookeeper(ZooKeeper zk) {
+<b class="nc"><i>192</i>&nbsp;            this.zk = zk;</b>
+<b class="nc"><i>193</i>&nbsp;            return this;</b>
+<i>194</i>&nbsp;        }
+<i>195</i>&nbsp;
+<i>196</i>&nbsp;        /**
+<i>197</i>&nbsp;         * Configure the bookkeeper client with a provided {@link StatsLogger}.
+<i>198</i>&nbsp;         *
+<i>199</i>&nbsp;         * @param statsLogger an {@link StatsLogger} to use by the bookkeeper client to collect stats generated
+<i>200</i>&nbsp;         *                    by the client.
+<i>201</i>&nbsp;         * @return client builder.
+<i>202</i>&nbsp;         * @deprecated since 4.5, use {@link #statsLogger(StatsLogger)}
+<i>203</i>&nbsp;         * @see #statsLogger(StatsLogger)
+<i>204</i>&nbsp;         */
+<i>205</i>&nbsp;        @Deprecated
+<i>206</i>&nbsp;        public Builder setStatsLogger(StatsLogger statsLogger) {
+<b class="nc"><i>207</i>&nbsp;            this.statsLogger = statsLogger;</b>
+<b class="nc"><i>208</i>&nbsp;            return this;</b>
+<i>209</i>&nbsp;        }
+<i>210</i>&nbsp;
+<i>211</i>&nbsp;        /**
+<i>212</i>&nbsp;         * Configure the bookkeeper client with a provided {@link EventLoopGroup}.
+<i>213</i>&nbsp;         *
+<i>214</i>&nbsp;         * @param f an external {@link EventLoopGroup} to use by the bookkeeper client.
+<i>215</i>&nbsp;         * @return client builder.
+<i>216</i>&nbsp;         * @since 4.5
+<i>217</i>&nbsp;         */
+<i>218</i>&nbsp;        public Builder eventLoopGroup(EventLoopGroup f) {
+<b class="nc"><i>219</i>&nbsp;            eventLoopGroup = f;</b>
+<b class="nc"><i>220</i>&nbsp;            return this;</b>
+<i>221</i>&nbsp;        }
+<i>222</i>&nbsp;
+<i>223</i>&nbsp;        /**
+<i>224</i>&nbsp;         * Configure the bookkeeper client with a provided {@link ByteBufAllocator}.
+<i>225</i>&nbsp;         *
+<i>226</i>&nbsp;         * @param allocator an external {@link ByteBufAllocator} to use by the bookkeeper client.
+<i>227</i>&nbsp;         * @return client builder.
+<i>228</i>&nbsp;         * @since 4.9
+<i>229</i>&nbsp;         */
+<i>230</i>&nbsp;        public Builder allocator(ByteBufAllocator allocator) {
+<b class="nc"><i>231</i>&nbsp;            this.allocator = allocator;</b>
+<b class="nc"><i>232</i>&nbsp;            return this;</b>
+<i>233</i>&nbsp;        }
+<i>234</i>&nbsp;
+<i>235</i>&nbsp;        /**
+<i>236</i>&nbsp;         * Configure the bookkeeper client with a provided {@link ZooKeeper} client.
+<i>237</i>&nbsp;         *
+<i>238</i>&nbsp;         * @param zk an external {@link ZooKeeper} client to use by the bookkeeper client.
+<i>239</i>&nbsp;         * @return client builder.
+<i>240</i>&nbsp;         * @since 4.5
+<i>241</i>&nbsp;         */
+<i>242</i>&nbsp;        @Deprecated
+<i>243</i>&nbsp;        public Builder zk(ZooKeeper zk) {
+<b class="nc"><i>244</i>&nbsp;            this.zk = zk;</b>
+<b class="nc"><i>245</i>&nbsp;            return this;</b>
+<i>246</i>&nbsp;        }
+<i>247</i>&nbsp;
+<i>248</i>&nbsp;        /**
+<i>249</i>&nbsp;         * Configure the bookkeeper client with a provided {@link StatsLogger}.
+<i>250</i>&nbsp;         *
+<i>251</i>&nbsp;         * @param statsLogger an {@link StatsLogger} to use by the bookkeeper client to collect stats generated
+<i>252</i>&nbsp;         *                    by the client.
+<i>253</i>&nbsp;         * @return client builder.
+<i>254</i>&nbsp;         * @since 4.5
+<i>255</i>&nbsp;         */
+<i>256</i>&nbsp;        public Builder statsLogger(StatsLogger statsLogger) {
+<b class="nc"><i>257</i>&nbsp;            this.statsLogger = statsLogger;</b>
+<b class="nc"><i>258</i>&nbsp;            return this;</b>
+<i>259</i>&nbsp;        }
+<i>260</i>&nbsp;
+<i>261</i>&nbsp;        /**
+<i>262</i>&nbsp;         * Configure the bookkeeper client to use the provided dns resolver {@link DNSToSwitchMapping}.
+<i>263</i>&nbsp;         *
+<i>264</i>&nbsp;         * @param dnsResolver dns resolver for placement policy to use for resolving network locations.
+<i>265</i>&nbsp;         * @return client builder
+<i>266</i>&nbsp;         * @since 4.5
+<i>267</i>&nbsp;         */
+<i>268</i>&nbsp;        public Builder dnsResolver(DNSToSwitchMapping dnsResolver) {
+<b class="nc"><i>269</i>&nbsp;            this.dnsResolver = dnsResolver;</b>
+<b class="nc"><i>270</i>&nbsp;            return this;</b>
+<i>271</i>&nbsp;        }
+<i>272</i>&nbsp;
+<i>273</i>&nbsp;        /**
+<i>274</i>&nbsp;         * Configure the bookkeeper client to use a provided {@link HashedWheelTimer}.
+<i>275</i>&nbsp;         *
+<i>276</i>&nbsp;         * @param requestTimer request timer for client to manage timer related tasks.
+<i>277</i>&nbsp;         * @return client builder
+<i>278</i>&nbsp;         * @since 4.5
+<i>279</i>&nbsp;         */
+<i>280</i>&nbsp;        public Builder requestTimer(HashedWheelTimer requestTimer) {
+<b class="nc"><i>281</i>&nbsp;            this.requestTimer = requestTimer;</b>
+<b class="nc"><i>282</i>&nbsp;            return this;</b>
+<i>283</i>&nbsp;        }
+<i>284</i>&nbsp;
+<i>285</i>&nbsp;        /**
+<i>286</i>&nbsp;         * Feature Provider.
+<i>287</i>&nbsp;         *
+<i>288</i>&nbsp;         * @param featureProvider
+<i>289</i>&nbsp;         * @return
+<i>290</i>&nbsp;         */
+<i>291</i>&nbsp;        public Builder featureProvider(FeatureProvider featureProvider) {
+<b class="nc"><i>292</i>&nbsp;            this.featureProvider = featureProvider;</b>
+<b class="nc"><i>293</i>&nbsp;            return this;</b>
+<i>294</i>&nbsp;        }
+<i>295</i>&nbsp;
+<i>296</i>&nbsp;        public BookKeeper build() throws IOException, InterruptedException, BKException {
+<b class="nc"><i>297</i>&nbsp;            checkNotNull(statsLogger, &quot;No stats logger provided&quot;);</b>
+<b class="nc"><i>298</i>&nbsp;            return new BookKeeper(conf, zk, eventLoopGroup, allocator, statsLogger, dnsResolver, requestTimer,</b>
+<i>299</i>&nbsp;                    featureProvider);
+<i>300</i>&nbsp;        }
+<i>301</i>&nbsp;    }
+<i>302</i>&nbsp;
+<i>303</i>&nbsp;    public static Builder forConfig(final ClientConfiguration conf) {
+<b class="nc"><i>304</i>&nbsp;        return new Builder(conf);</b>
+<i>305</i>&nbsp;    }
+<i>306</i>&nbsp;
+<i>307</i>&nbsp;    /**
+<i>308</i>&nbsp;     * Create a bookkeeper client. A zookeeper client and a client event loop group
+<i>309</i>&nbsp;     * will be instantiated as part of this constructor.
+<i>310</i>&nbsp;     *
+<i>311</i>&nbsp;     * @param servers
+<i>312</i>&nbsp;     *          A list of one of more servers on which zookeeper is running. The
+<i>313</i>&nbsp;     *          client assumes that the running bookies have been registered with
+<i>314</i>&nbsp;     *          zookeeper under the path
+<i>315</i>&nbsp;     *          {@link AbstractConfiguration#getZkAvailableBookiesPath()}
+<i>316</i>&nbsp;     * @throws IOException
+<i>317</i>&nbsp;     * @throws InterruptedException
+<i>318</i>&nbsp;     */
+<i>319</i>&nbsp;    public BookKeeper(String servers) throws IOException, InterruptedException,
+<i>320</i>&nbsp;        BKException {
+<b class="nc"><i>321</i>&nbsp;        this(new ClientConfiguration().setMetadataServiceUri(&quot;zk+null://&quot; + servers + &quot;/ledgers&quot;));</b>
+<b class="nc"><i>322</i>&nbsp;    }</b>
+<i>323</i>&nbsp;
+<i>324</i>&nbsp;    /**
+<i>325</i>&nbsp;     * Create a bookkeeper client using a configuration object.
+<i>326</i>&nbsp;     * A zookeeper client and a client event loop group will be
+<i>327</i>&nbsp;     * instantiated as part of this constructor.
+<i>328</i>&nbsp;     *
+<i>329</i>&nbsp;     * @param conf
+<i>330</i>&nbsp;     *          Client Configuration object
+<i>331</i>&nbsp;     * @throws IOException
+<i>332</i>&nbsp;     * @throws InterruptedException
+<i>333</i>&nbsp;     */
+<i>334</i>&nbsp;    public BookKeeper(final ClientConfiguration conf)
+<i>335</i>&nbsp;            throws IOException, InterruptedException, BKException {
+<b class="fc"><i>336</i>&nbsp;        this(conf, null, null, null, NullStatsLogger.INSTANCE,</b>
+<i>337</i>&nbsp;                null, null, null);
+<b class="fc"><i>338</i>&nbsp;    }</b>
+<i>339</i>&nbsp;
+<i>340</i>&nbsp;    private static ZooKeeper validateZooKeeper(ZooKeeper zk) throws NullPointerException, IOException {
+<b class="nc"><i>341</i>&nbsp;        checkNotNull(zk, &quot;No zookeeper instance provided&quot;);</b>
+<b class="nc"><i>342</i>&nbsp;        if (!zk.getState().isConnected()) {</b>
+<b class="nc"><i>343</i>&nbsp;            LOG.error(&quot;Unconnected zookeeper handle passed to bookkeeper&quot;);</b>
+<b class="nc"><i>344</i>&nbsp;            throw new IOException(KeeperException.create(KeeperException.Code.CONNECTIONLOSS));</b>
+<i>345</i>&nbsp;        }
+<b class="nc"><i>346</i>&nbsp;        return zk;</b>
+<i>347</i>&nbsp;    }
+<i>348</i>&nbsp;
+<i>349</i>&nbsp;    private static EventLoopGroup validateEventLoopGroup(EventLoopGroup eventLoopGroup)
+<i>350</i>&nbsp;            throws NullPointerException {
+<b class="nc"><i>351</i>&nbsp;        checkNotNull(eventLoopGroup, &quot;No Event Loop Group provided&quot;);</b>
+<b class="nc"><i>352</i>&nbsp;        return eventLoopGroup;</b>
+<i>353</i>&nbsp;    }
+<i>354</i>&nbsp;
+<i>355</i>&nbsp;    /**
+<i>356</i>&nbsp;     * Create a bookkeeper client but use the passed in zookeeper client instead
+<i>357</i>&nbsp;     * of instantiating one.
+<i>358</i>&nbsp;     *
+<i>359</i>&nbsp;     * @param conf
+<i>360</i>&nbsp;     *          Client Configuration object
+<i>361</i>&nbsp;     *          {@link ClientConfiguration}
+<i>362</i>&nbsp;     * @param zk
+<i>363</i>&nbsp;     *          Zookeeper client instance connected to the zookeeper with which
+<i>364</i>&nbsp;     *          the bookies have registered
+<i>365</i>&nbsp;     * @throws IOException
+<i>366</i>&nbsp;     * @throws InterruptedException
+<i>367</i>&nbsp;     */
+<i>368</i>&nbsp;    public BookKeeper(ClientConfiguration conf, ZooKeeper zk)
+<i>369</i>&nbsp;            throws IOException, InterruptedException, BKException {
+<b class="nc"><i>370</i>&nbsp;        this(conf, validateZooKeeper(zk), null, null, NullStatsLogger.INSTANCE, null, null, null);</b>
+<b class="nc"><i>371</i>&nbsp;    }</b>
+<i>372</i>&nbsp;
+<i>373</i>&nbsp;    /**
+<i>374</i>&nbsp;     * Create a bookkeeper client but use the passed in zookeeper client and
+<i>375</i>&nbsp;     * client event loop group instead of instantiating those.
+<i>376</i>&nbsp;     *
+<i>377</i>&nbsp;     * @param conf
+<i>378</i>&nbsp;     *          Client Configuration Object
+<i>379</i>&nbsp;     *          {@link ClientConfiguration}
+<i>380</i>&nbsp;     * @param zk
+<i>381</i>&nbsp;     *          Zookeeper client instance connected to the zookeeper with which
+<i>382</i>&nbsp;     *          the bookies have registered. The ZooKeeper client must be connected
+<i>383</i>&nbsp;     *          before it is passed to BookKeeper. Otherwise a KeeperException is thrown.
+<i>384</i>&nbsp;     * @param eventLoopGroup
+<i>385</i>&nbsp;     *          An event loop group that will be used to create connections to the bookies
+<i>386</i>&nbsp;     * @throws IOException
+<i>387</i>&nbsp;     * @throws InterruptedException
+<i>388</i>&nbsp;     * @throws BKException in the event of a bookkeeper connection error
+<i>389</i>&nbsp;     */
+<i>390</i>&nbsp;    public BookKeeper(ClientConfiguration conf, ZooKeeper zk, EventLoopGroup eventLoopGroup)
+<i>391</i>&nbsp;            throws IOException, InterruptedException, BKException {
+<b class="nc"><i>392</i>&nbsp;        this(conf, validateZooKeeper(zk), validateEventLoopGroup(eventLoopGroup), null, NullStatsLogger.INSTANCE,</b>
+<i>393</i>&nbsp;                null, null, null);
+<b class="nc"><i>394</i>&nbsp;    }</b>
+<i>395</i>&nbsp;
+<i>396</i>&nbsp;    /**
+<i>397</i>&nbsp;     * Constructor for use with the builder. Other constructors also use it.
+<i>398</i>&nbsp;     */
+<i>399</i>&nbsp;    @SuppressWarnings(&quot;deprecation&quot;)
+<i>400</i>&nbsp;    @VisibleForTesting
+<i>401</i>&nbsp;    BookKeeper(ClientConfiguration conf,
+<i>402</i>&nbsp;                       ZooKeeper zkc,
+<i>403</i>&nbsp;                       EventLoopGroup eventLoopGroup,
+<i>404</i>&nbsp;                       ByteBufAllocator byteBufAllocator,
+<i>405</i>&nbsp;                       StatsLogger rootStatsLogger,
+<i>406</i>&nbsp;                       DNSToSwitchMapping dnsResolver,
+<i>407</i>&nbsp;                       HashedWheelTimer requestTimer,
+<i>408</i>&nbsp;                       FeatureProvider featureProvider)
+<b class="fc"><i>409</i>&nbsp;            throws IOException, InterruptedException, BKException {</b>
+<b class="fc"><i>410</i>&nbsp;        this.conf = conf;</b>
+<i>411</i>&nbsp;        // initialize feature provider
+<b class="pc"><i>412</i>&nbsp;        if (null == featureProvider) {</b>
+<b class="fc"><i>413</i>&nbsp;            this.featureProvider = SettableFeatureProvider.DISABLE_ALL;</b>
+<i>414</i>&nbsp;        } else {
+<b class="nc"><i>415</i>&nbsp;            this.featureProvider = featureProvider;</b>
+<i>416</i>&nbsp;        }
+<i>417</i>&nbsp;
+<b class="fc"><i>418</i>&nbsp;        this.internalConf = ClientInternalConf.fromConfigAndFeatureProvider(conf, this.featureProvider);</b>
+<i>419</i>&nbsp;
+<i>420</i>&nbsp;        // initialize resources
+<b class="fc"><i>421</i>&nbsp;        this.scheduler = OrderedScheduler.newSchedulerBuilder().numThreads(1).name(&quot;BookKeeperClientScheduler&quot;).build();</b>
+<b class="fc"><i>422</i>&nbsp;        this.mainWorkerPool = OrderedExecutor.newBuilder()</b>
+<b class="fc"><i>423</i>&nbsp;                .name(&quot;BookKeeperClientWorker&quot;)</b>
+<b class="fc"><i>424</i>&nbsp;                .numThreads(conf.getNumWorkerThreads())</b>
+<b class="fc"><i>425</i>&nbsp;                .statsLogger(rootStatsLogger)</b>
+<b class="fc"><i>426</i>&nbsp;                .traceTaskExecution(conf.getEnableTaskExecutionStats())</b>
+<b class="fc"><i>427</i>&nbsp;                .preserveMdcForTaskExecution(conf.getPreserveMdcForTaskExecution())</b>
+<b class="fc"><i>428</i>&nbsp;                .traceTaskWarnTimeMicroSec(conf.getTaskExecutionWarnTimeMicros())</b>
+<b class="fc"><i>429</i>&nbsp;                .enableBusyWait(conf.isBusyWaitEnabled())</b>
+<b class="fc"><i>430</i>&nbsp;                .build();</b>
+<i>431</i>&nbsp;
+<i>432</i>&nbsp;        // initialize stats logger
+<b class="fc"><i>433</i>&nbsp;        this.statsLogger = rootStatsLogger.scope(BookKeeperClientStats.CLIENT_SCOPE);</b>
+<b class="fc"><i>434</i>&nbsp;        this.clientStats = BookKeeperClientStats.newInstance(this.statsLogger);</b>
+<i>435</i>&nbsp;
+<i>436</i>&nbsp;        // initialize metadata driver
+<i>437</i>&nbsp;        try {
+<b class="fc"><i>438</i>&nbsp;            String metadataServiceUriStr = conf.getMetadataServiceUri();</b>
+<b class="pc"><i>439</i>&nbsp;            if (null != metadataServiceUriStr) {</b>
+<b class="fc"><i>440</i>&nbsp;                this.metadataDriver = MetadataDrivers.getClientDriver(URI.create(metadataServiceUriStr));</b>
+<i>441</i>&nbsp;            } else {
+<b class="nc"><i>442</i>&nbsp;                checkNotNull(zkc, &quot;No external zookeeper provided when no metadata service uri is found&quot;);</b>
+<b class="nc"><i>443</i>&nbsp;                this.metadataDriver = MetadataDrivers.getClientDriver(&quot;zk&quot;);</b>
+<i>444</i>&nbsp;            }
+<b class="fc"><i>445</i>&nbsp;            this.metadataDriver.initialize(</b>
+<i>446</i>&nbsp;                conf,
+<i>447</i>&nbsp;                scheduler,
+<i>448</i>&nbsp;                rootStatsLogger,
+<b class="fc"><i>449</i>&nbsp;                java.util.Optional.ofNullable(zkc));</b>
+<b class="nc"><i>450</i>&nbsp;        } catch (ConfigurationException ce) {</b>
+<b class="nc"><i>451</i>&nbsp;            LOG.error(&quot;Failed to initialize metadata client driver using invalid metadata service uri&quot;, ce);</b>
+<b class="nc"><i>452</i>&nbsp;            throw new IOException(&quot;Failed to initialize metadata client driver&quot;, ce);</b>
+<b class="nc"><i>453</i>&nbsp;        } catch (MetadataException me) {</b>
+<b class="nc"><i>454</i>&nbsp;            LOG.error(&quot;Encountered metadata exceptions on initializing metadata client driver&quot;, me);</b>
+<b class="nc"><i>455</i>&nbsp;            throw new IOException(&quot;Failed to initialize metadata client driver&quot;, me);</b>
+<b class="fc"><i>456</i>&nbsp;        }</b>
+<i>457</i>&nbsp;
+<i>458</i>&nbsp;        // initialize event loop group
+<b class="pc"><i>459</i>&nbsp;        if (null == eventLoopGroup) {</b>
+<b class="fc"><i>460</i>&nbsp;            this.eventLoopGroup = EventLoopUtil.getClientEventLoopGroup(conf,</b>
+<i>461</i>&nbsp;                    new DefaultThreadFactory(&quot;bookkeeper-io&quot;));
+<b class="fc"><i>462</i>&nbsp;            this.ownEventLoopGroup = true;</b>
+<i>463</i>&nbsp;        } else {
+<b class="nc"><i>464</i>&nbsp;            this.eventLoopGroup = eventLoopGroup;</b>
+<b class="nc"><i>465</i>&nbsp;            this.ownEventLoopGroup = false;</b>
+<i>466</i>&nbsp;        }
+<i>467</i>&nbsp;
+<b class="fc"><i>468</i>&nbsp;        if (byteBufAllocator != null) {</b>
+<b class="fc"><i>469</i>&nbsp;            this.allocator = byteBufAllocator;</b>
+<i>470</i>&nbsp;        } else {
+<b class="fc"><i>471</i>&nbsp;            this.allocator = ByteBufAllocatorBuilder.create()</b>
+<b class="fc"><i>472</i>&nbsp;                    .poolingPolicy(conf.getAllocatorPoolingPolicy())</b>
+<b class="fc"><i>473</i>&nbsp;                    .poolingConcurrency(conf.getAllocatorPoolingConcurrency())</b>
+<b class="fc"><i>474</i>&nbsp;                    .outOfMemoryPolicy(conf.getAllocatorOutOfMemoryPolicy())</b>
+<b class="fc"><i>475</i>&nbsp;                    .leakDetectionPolicy(conf.getAllocatorLeakDetectionPolicy())</b>
+<b class="fc"><i>476</i>&nbsp;                    .build();</b>
+<i>477</i>&nbsp;        }
+<i>478</i>&nbsp;
+<i>479</i>&nbsp;        // initialize bookie client
+<b class="fc"><i>480</i>&nbsp;        this.bookieClient = new BookieClientImpl(conf, this.eventLoopGroup, this.allocator, this.mainWorkerPool,</b>
+<i>481</i>&nbsp;                scheduler, rootStatsLogger);
+<i>482</i>&nbsp;
+<b class="pc"><i>483</i>&nbsp;        if (null == requestTimer) {</b>
+<b class="fc"><i>484</i>&nbsp;            this.requestTimer = new HashedWheelTimer(</b>
+<b class="fc"><i>485</i>&nbsp;                    new ThreadFactoryBuilder().setNameFormat(&quot;BookieClientTimer-%d&quot;).build(),</b>
+<b class="fc"><i>486</i>&nbsp;                    conf.getTimeoutTimerTickDurationMs(), TimeUnit.MILLISECONDS,</b>
+<b class="fc"><i>487</i>&nbsp;                    conf.getTimeoutTimerNumTicks());</b>
+<b class="fc"><i>488</i>&nbsp;            this.ownTimer = true;</b>
+<i>489</i>&nbsp;        } else {
+<b class="nc"><i>490</i>&nbsp;            this.requestTimer = requestTimer;</b>
+<b class="nc"><i>491</i>&nbsp;            this.ownTimer = false;</b>
+<i>492</i>&nbsp;        }
+<i>493</i>&nbsp;
+<i>494</i>&nbsp;        // initialize the ensemble placement
+<b class="fc"><i>495</i>&nbsp;        this.placementPolicy = initializeEnsemblePlacementPolicy(conf,</b>
+<i>496</i>&nbsp;                dnsResolver, this.requestTimer, this.featureProvider, this.statsLogger);
+<i>497</i>&nbsp;
+<i>498</i>&nbsp;
+<b class="fc"><i>499</i>&nbsp;        this.bookieWatcher = new BookieWatcherImpl(</b>
+<b class="fc"><i>500</i>&nbsp;                conf, this.placementPolicy, metadataDriver.getRegistrationClient(),</b>
+<b class="fc"><i>501</i>&nbsp;                this.statsLogger.scope(WATCHER_SCOPE));</b>
+<b class="pc"><i>502</i>&nbsp;        if (conf.getDiskWeightBasedPlacementEnabled()) {</b>
+<b class="nc"><i>503</i>&nbsp;            LOG.info(&quot;Weighted ledger placement enabled&quot;);</b>
+<b class="nc"><i>504</i>&nbsp;            ThreadFactoryBuilder tFBuilder = new ThreadFactoryBuilder()</b>
+<b class="nc"><i>505</i>&nbsp;                    .setNameFormat(&quot;BKClientMetaDataPollScheduler-%d&quot;);</b>
+<b class="nc"><i>506</i>&nbsp;            this.bookieInfoScheduler = Executors.newSingleThreadScheduledExecutor(tFBuilder.build());</b>
+<b class="nc"><i>507</i>&nbsp;            this.bookieInfoReader = new BookieInfoReader(this, conf, this.bookieInfoScheduler);</b>
+<b class="nc"><i>508</i>&nbsp;            this.bookieWatcher.initialBlockingBookieRead();</b>
+<b class="nc"><i>509</i>&nbsp;            this.bookieInfoReader.start();</b>
+<b class="nc"><i>510</i>&nbsp;        } else {</b>
+<b class="fc"><i>511</i>&nbsp;            LOG.info(&quot;Weighted ledger placement is not enabled&quot;);</b>
+<b class="fc"><i>512</i>&nbsp;            this.bookieInfoScheduler = null;</b>
+<b class="fc"><i>513</i>&nbsp;            this.bookieInfoReader = new BookieInfoReader(this, conf, null);</b>
+<b class="fc"><i>514</i>&nbsp;            this.bookieWatcher.initialBlockingBookieRead();</b>
+<i>515</i>&nbsp;        }
+<i>516</i>&nbsp;
+<i>517</i>&nbsp;        // initialize ledger manager
+<i>518</i>&nbsp;        try {
+<b class="fc"><i>519</i>&nbsp;            this.ledgerManagerFactory =</b>
+<b class="fc"><i>520</i>&nbsp;                this.metadataDriver.getLedgerManagerFactory();</b>
+<b class="nc"><i>521</i>&nbsp;        } catch (MetadataException e) {</b>
+<b class="nc"><i>522</i>&nbsp;            throw new IOException(&quot;Failed to initialize ledger manager factory&quot;, e);</b>
+<b class="fc"><i>523</i>&nbsp;        }</b>
+<b class="fc"><i>524</i>&nbsp;        this.ledgerManager = new CleanupLedgerManager(ledgerManagerFactory.newLedgerManager());</b>
+<b class="fc"><i>525</i>&nbsp;        this.ledgerIdGenerator = ledgerManagerFactory.newLedgerIdGenerator();</b>
+<i>526</i>&nbsp;
+<b class="fc"><i>527</i>&nbsp;        this.bookieQuarantineRatio = conf.getBookieQuarantineRatio();</b>
+<b class="fc"><i>528</i>&nbsp;        scheduleBookieHealthCheckIfEnabled(conf);</b>
+<b class="fc"><i>529</i>&nbsp;    }</b>
+<i>530</i>&nbsp;
+<i>531</i>&nbsp;    /**
+<i>532</i>&nbsp;     * Allow to extend BookKeeper for mocking in unit tests.
+<i>533</i>&nbsp;     */
+<i>534</i>&nbsp;    @VisibleForTesting
+<b class="nc"><i>535</i>&nbsp;    BookKeeper() {</b>
+<b class="nc"><i>536</i>&nbsp;        conf = new ClientConfiguration();</b>
+<b class="nc"><i>537</i>&nbsp;        internalConf = ClientInternalConf.fromConfig(conf);</b>
+<b class="nc"><i>538</i>&nbsp;        statsLogger = NullStatsLogger.INSTANCE;</b>
+<b class="nc"><i>539</i>&nbsp;        clientStats = BookKeeperClientStats.newInstance(statsLogger);</b>
+<b class="nc"><i>540</i>&nbsp;        scheduler = null;</b>
+<b class="nc"><i>541</i>&nbsp;        requestTimer = null;</b>
+<b class="nc"><i>542</i>&nbsp;        metadataDriver = null;</b>
+<b class="nc"><i>543</i>&nbsp;        placementPolicy = null;</b>
+<b class="nc"><i>544</i>&nbsp;        ownTimer = false;</b>
+<b class="nc"><i>545</i>&nbsp;        mainWorkerPool = null;</b>
+<b class="nc"><i>546</i>&nbsp;        ledgerManagerFactory = null;</b>
+<b class="nc"><i>547</i>&nbsp;        ledgerManager = null;</b>
+<b class="nc"><i>548</i>&nbsp;        ledgerIdGenerator = null;</b>
+<b class="nc"><i>549</i>&nbsp;        featureProvider = null;</b>
+<b class="nc"><i>550</i>&nbsp;        eventLoopGroup = null;</b>
+<b class="nc"><i>551</i>&nbsp;        bookieWatcher = null;</b>
+<b class="nc"><i>552</i>&nbsp;        bookieInfoScheduler = null;</b>
+<b class="nc"><i>553</i>&nbsp;        bookieClient = null;</b>
+<b class="nc"><i>554</i>&nbsp;        allocator = UnpooledByteBufAllocator.DEFAULT;</b>
+<b class="nc"><i>555</i>&nbsp;        bookieQuarantineRatio = 1.0;</b>
+<b class="nc"><i>556</i>&nbsp;    }</b>
+<i>557</i>&nbsp;
+<i>558</i>&nbsp;    private EnsemblePlacementPolicy initializeEnsemblePlacementPolicy(ClientConfiguration conf,
+<i>559</i>&nbsp;                                                                      DNSToSwitchMapping dnsResolver,
+<i>560</i>&nbsp;                                                                      HashedWheelTimer timer,
+<i>561</i>&nbsp;                                                                      FeatureProvider featureProvider,
+<i>562</i>&nbsp;                                                                      StatsLogger statsLogger)
+<i>563</i>&nbsp;        throws IOException {
+<i>564</i>&nbsp;        try {
+<b class="fc"><i>565</i>&nbsp;            Class&lt;? extends EnsemblePlacementPolicy&gt; policyCls = conf.getEnsemblePlacementPolicy();</b>
+<b class="fc"><i>566</i>&nbsp;            return ReflectionUtils.newInstance(policyCls).initialize(conf, java.util.Optional.ofNullable(dnsResolver),</b>
+<i>567</i>&nbsp;                    timer, featureProvider, statsLogger);
+<b class="nc"><i>568</i>&nbsp;        } catch (ConfigurationException e) {</b>
+<b class="nc"><i>569</i>&nbsp;            throw new IOException(&quot;Failed to initialize ensemble placement policy : &quot;, e);</b>
+<i>570</i>&nbsp;        }
+<i>571</i>&nbsp;    }
+<i>572</i>&nbsp;
+<i>573</i>&nbsp;    int getReturnRc(int rc) {
+<b class="nc"><i>574</i>&nbsp;        return getReturnRc(bookieClient, rc);</b>
+<i>575</i>&nbsp;    }
+<i>576</i>&nbsp;
+<i>577</i>&nbsp;    static int getReturnRc(BookieClient bookieClient, int rc) {
+<b class="nc"><i>578</i>&nbsp;        if (BKException.Code.OK == rc) {</b>
+<b class="nc"><i>579</i>&nbsp;            return rc;</b>
+<i>580</i>&nbsp;        } else {
+<b class="nc"><i>581</i>&nbsp;            if (bookieClient.isClosed()) {</b>
+<b class="nc"><i>582</i>&nbsp;                return BKException.Code.ClientClosedException;</b>
+<i>583</i>&nbsp;            } else {
+<b class="nc"><i>584</i>&nbsp;                return rc;</b>
+<i>585</i>&nbsp;            }
+<i>586</i>&nbsp;        }
+<i>587</i>&nbsp;    }
+<i>588</i>&nbsp;
+<i>589</i>&nbsp;    void scheduleBookieHealthCheckIfEnabled(ClientConfiguration conf) {
+<b class="pc"><i>590</i>&nbsp;        if (conf.isBookieHealthCheckEnabled()) {</b>
+<b class="nc"><i>591</i>&nbsp;            scheduler.scheduleAtFixedRate(new SafeRunnable() {</b>
+<i>592</i>&nbsp;
+<i>593</i>&nbsp;                @Override
+<i>594</i>&nbsp;                public void safeRun() {
+<b class="nc"><i>595</i>&nbsp;                    checkForFaultyBookies();</b>
+<b class="nc"><i>596</i>&nbsp;                }</b>
+<b class="nc"><i>597</i>&nbsp;                    }, conf.getBookieHealthCheckIntervalSeconds(), conf.getBookieHealthCheckIntervalSeconds(),</b>
+<i>598</i>&nbsp;                    TimeUnit.SECONDS);
+<i>599</i>&nbsp;        }
+<b class="fc"><i>600</i>&nbsp;    }</b>
+<i>601</i>&nbsp;
+<i>602</i>&nbsp;    void checkForFaultyBookies() {
+<b class="nc"><i>603</i>&nbsp;        List&lt;BookieSocketAddress&gt; faultyBookies = bookieClient.getFaultyBookies();</b>
+<b class="nc"><i>604</i>&nbsp;        for (BookieSocketAddress faultyBookie : faultyBookies) {</b>
+<b class="nc"><i>605</i>&nbsp;            if (Math.random() &lt;= bookieQuarantineRatio) {</b>
+<b class="nc"><i>606</i>&nbsp;                bookieWatcher.quarantineBookie(faultyBookie);</b>
+<b class="nc"><i>607</i>&nbsp;                statsLogger.getCounter(BookKeeperServerStats.BOOKIE_QUARANTINE).inc();</b>
+<i>608</i>&nbsp;            } else {
+<b class="nc"><i>609</i>&nbsp;                statsLogger.getCounter(BookKeeperServerStats.BOOKIE_QUARANTINE_SKIP).inc();</b>
+<i>610</i>&nbsp;            }
+<b class="nc"><i>611</i>&nbsp;        }</b>
+<b class="nc"><i>612</i>&nbsp;    }</b>
+<i>613</i>&nbsp;
+<i>614</i>&nbsp;    /**
+<i>615</i>&nbsp;     * Returns ref to speculative read counter, needed in PendingReadOp.
+<i>616</i>&nbsp;     */
+<i>617</i>&nbsp;    @VisibleForTesting
+<i>618</i>&nbsp;    public LedgerManager getLedgerManager() {
+<b class="fc"><i>619</i>&nbsp;        return ledgerManager;</b>
+<i>620</i>&nbsp;    }
+<i>621</i>&nbsp;
+<i>622</i>&nbsp;    @VisibleForTesting
+<i>623</i>&nbsp;    LedgerManager getUnderlyingLedgerManager() {
+<b class="nc"><i>624</i>&nbsp;        return ((CleanupLedgerManager) ledgerManager).getUnderlying();</b>
+<i>625</i>&nbsp;    }
+<i>626</i>&nbsp;
+<i>627</i>&nbsp;    @VisibleForTesting
+<i>628</i>&nbsp;    LedgerIdGenerator getLedgerIdGenerator() {
+<b class="fc"><i>629</i>&nbsp;        return ledgerIdGenerator;</b>
+<i>630</i>&nbsp;    }
+<i>631</i>&nbsp;
+<i>632</i>&nbsp;    @VisibleForTesting
+<i>633</i>&nbsp;    ReentrantReadWriteLock getCloseLock() {
+<b class="nc"><i>634</i>&nbsp;        return closeLock;</b>
+<i>635</i>&nbsp;    }
+<i>636</i>&nbsp;
+<i>637</i>&nbsp;    @VisibleForTesting
+<i>638</i>&nbsp;    boolean isClosed() {
+<b class="nc"><i>639</i>&nbsp;        return closed;</b>
+<i>640</i>&nbsp;    }
+<i>641</i>&nbsp;
+<i>642</i>&nbsp;    @VisibleForTesting
+<i>643</i>&nbsp;    BookieWatcher getBookieWatcher() {
+<b class="fc"><i>644</i>&nbsp;        return bookieWatcher;</b>
+<i>645</i>&nbsp;    }
+<i>646</i>&nbsp;
+<i>647</i>&nbsp;    public OrderedExecutor getMainWorkerPool() {
+<b class="fc"><i>648</i>&nbsp;        return mainWorkerPool;</b>
+<i>649</i>&nbsp;    }
+<i>650</i>&nbsp;
+<i>651</i>&nbsp;    @VisibleForTesting
+<i>652</i>&nbsp;    OrderedScheduler getScheduler() {
+<b class="nc"><i>653</i>&nbsp;        return scheduler;</b>
+<i>654</i>&nbsp;    }
+<i>655</i>&nbsp;
+<i>656</i>&nbsp;    @VisibleForTesting
+<i>657</i>&nbsp;    EnsemblePlacementPolicy getPlacementPolicy() {
+<b class="nc"><i>658</i>&nbsp;        return placementPolicy;</b>
+<i>659</i>&nbsp;    }
+<i>660</i>&nbsp;
+<i>661</i>&nbsp;    @VisibleForTesting
+<i>662</i>&nbsp;    public MetadataClientDriver getMetadataClientDriver() {
+<b class="fc"><i>663</i>&nbsp;        return metadataDriver;</b>
+<i>664</i>&nbsp;    }
+<i>665</i>&nbsp;
+<i>666</i>&nbsp;    /**
+<i>667</i>&nbsp;     * There are 3 digest types that can be used for verification. The CRC32 is
+<i>668</i>&nbsp;     * cheap to compute but does not protect against byzantine bookies (i.e., a
+<i>669</i>&nbsp;     * bookie might report fake bytes and a matching CRC32). The MAC code is more
+<i>670</i>&nbsp;     * expensive to compute, but is protected by a password, i.e., a bookie can&#39;t
+<i>671</i>&nbsp;     * report fake bytes with a mathching MAC unless it knows the password.
+<i>672</i>&nbsp;     * The CRC32C, which use SSE processor instruction, has better performance than CRC32.
+<i>673</i>&nbsp;     * Legacy DigestType for backward compatibility. If we want to add new DigestType,
+<i>674</i>&nbsp;     * we should add it in here, client.api.DigestType and DigestType in DataFormats.proto.
+<i>675</i>&nbsp;     * If the digest type is set/passed in as DUMMY, a dummy digest is added/checked.
+<i>676</i>&nbsp;     * This DUMMY digest is mostly for test purposes or in situations/use-cases
+<i>677</i>&nbsp;     * where digest is considered a overhead.
+<i>678</i>&nbsp;     */
+<b class="fc"><i>679</i>&nbsp;    public enum DigestType {</b>
+<b class="fc"><i>680</i>&nbsp;        MAC, CRC32, CRC32C, DUMMY;</b>
+<i>681</i>&nbsp;
+<i>682</i>&nbsp;        public static DigestType fromApiDigestType(org.apache.bookkeeper.client.api.DigestType digestType) {
+<b class="pc"><i>683</i>&nbsp;            switch (digestType) {</b>
+<i>684</i>&nbsp;                case MAC:
+<b class="nc"><i>685</i>&nbsp;                    return DigestType.MAC;</b>
+<i>686</i>&nbsp;                case CRC32:
+<b class="fc"><i>687</i>&nbsp;                    return DigestType.CRC32;</b>
+<i>688</i>&nbsp;                case CRC32C:
+<b class="nc"><i>689</i>&nbsp;                    return DigestType.CRC32C;</b>
+<i>690</i>&nbsp;                case DUMMY:
+<b class="nc"><i>691</i>&nbsp;                    return DigestType.DUMMY;</b>
+<i>692</i>&nbsp;                default:
+<b class="nc"><i>693</i>&nbsp;                    throw new IllegalArgumentException(&quot;Unable to convert digest type &quot; + digestType);</b>
+<i>694</i>&nbsp;            }
+<i>695</i>&nbsp;        }
+<i>696</i>&nbsp;        public static DataFormats.LedgerMetadataFormat.DigestType toProtoDigestType(DigestType digestType) {
+<b class="pc"><i>697</i>&nbsp;            switch (digestType) {</b>
+<i>698</i>&nbsp;                case MAC:
+<b class="nc"><i>699</i>&nbsp;                    return DataFormats.LedgerMetadataFormat.DigestType.HMAC;</b>
+<i>700</i>&nbsp;                case CRC32:
+<b class="fc"><i>701</i>&nbsp;                    return DataFormats.LedgerMetadataFormat.DigestType.CRC32;</b>
+<i>702</i>&nbsp;                case CRC32C:
+<b class="nc"><i>703</i>&nbsp;                    return DataFormats.LedgerMetadataFormat.DigestType.CRC32C;</b>
+<i>704</i>&nbsp;                case DUMMY:
+<b class="nc"><i>705</i>&nbsp;                    return DataFormats.LedgerMetadataFormat.DigestType.DUMMY;</b>
+<i>706</i>&nbsp;                default:
+<b class="nc"><i>707</i>&nbsp;                    throw new IllegalArgumentException(&quot;Unable to convert digest type &quot; + digestType);</b>
+<i>708</i>&nbsp;            }
+<i>709</i>&nbsp;        }
+<i>710</i>&nbsp;        public org.apache.bookkeeper.client.api.DigestType toApiDigestType() {
+<b class="pc"><i>711</i>&nbsp;            switch (this) {</b>
+<i>712</i>&nbsp;                case MAC:
+<b class="nc"><i>713</i>&nbsp;                    return org.apache.bookkeeper.client.api.DigestType.MAC;</b>
+<i>714</i>&nbsp;                case CRC32:
+<b class="fc"><i>715</i>&nbsp;                    return org.apache.bookkeeper.client.api.DigestType.CRC32;</b>
+<i>716</i>&nbsp;                case CRC32C:
+<b class="nc"><i>717</i>&nbsp;                    return org.apache.bookkeeper.client.api.DigestType.CRC32C;</b>
+<i>718</i>&nbsp;                case DUMMY:
+<b class="nc"><i>719</i>&nbsp;                    return org.apache.bookkeeper.client.api.DigestType.DUMMY;</b>
+<i>720</i>&nbsp;                default:
+<b class="nc"><i>721</i>&nbsp;                    throw new IllegalArgumentException(&quot;Unable to convert digest type &quot; + this);</b>
+<i>722</i>&nbsp;            }
+<i>723</i>&nbsp;        }
+<i>724</i>&nbsp;    }
+<i>725</i>&nbsp;
+<i>726</i>&nbsp;    ZooKeeper getZkHandle() {
+<b class="nc"><i>727</i>&nbsp;        return ((ZKMetadataClientDriver) metadataDriver).getZk();</b>
+<i>728</i>&nbsp;    }
+<i>729</i>&nbsp;
+<i>730</i>&nbsp;    protected ClientConfiguration getConf() {
+<b class="fc"><i>731</i>&nbsp;        return conf;</b>
+<i>732</i>&nbsp;    }
+<i>733</i>&nbsp;
+<i>734</i>&nbsp;    StatsLogger getStatsLogger() {
+<b class="nc"><i>735</i>&nbsp;        return statsLogger;</b>
+<i>736</i>&nbsp;    }
+<i>737</i>&nbsp;
+<i>738</i>&nbsp;    /**
+<i>739</i>&nbsp;     * Get the BookieClient, currently used for doing bookie recovery.
+<i>740</i>&nbsp;     *
+<i>741</i>&nbsp;     * @return BookieClient for the BookKeeper instance.
+<i>742</i>&nbsp;     */
+<i>743</i>&nbsp;    BookieClient getBookieClient() {
+<b class="fc"><i>744</i>&nbsp;        return bookieClient;</b>
+<i>745</i>&nbsp;    }
+<i>746</i>&nbsp;
+<i>747</i>&nbsp;    /**
+<i>748</i>&nbsp;     * Retrieves BookieInfo from all the bookies in the cluster. It sends requests
+<i>749</i>&nbsp;     * to all the bookies in parallel and returns the info from the bookies that responded.
+<i>750</i>&nbsp;     * If there was an error in reading from any bookie, nothing will be returned for
+<i>751</i>&nbsp;     * that bookie in the map.
+<i>752</i>&nbsp;     * @return map
+<i>753</i>&nbsp;     *             A map of bookieSocketAddress to its BookiInfo
+<i>754</i>&nbsp;     * @throws BKException
+<i>755</i>&nbsp;     * @throws InterruptedException
+<i>756</i>&nbsp;     */
+<i>757</i>&nbsp;    public Map&lt;BookieSocketAddress, BookieInfo&gt; getBookieInfo() throws BKException, InterruptedException {
+<b class="nc"><i>758</i>&nbsp;        return bookieInfoReader.getBookieInfo();</b>
+<i>759</i>&nbsp;    }
+<i>760</i>&nbsp;
+<i>761</i>&nbsp;    /**
+<i>762</i>&nbsp;     * Creates a new ledger asynchronously. To create a ledger, we need to specify
+<i>763</i>&nbsp;     * the ensemble size, the quorum size, the digest type, a password, a callback
+<i>764</i>&nbsp;     * implementation, and an optional control object. The ensemble size is how
+<i>765</i>&nbsp;     * many bookies the entries should be striped among and the quorum size is the
+<i>766</i>&nbsp;     * degree of replication of each entry. The digest type is either a MAC or a
+<i>767</i>&nbsp;     * CRC. Note that the CRC option is not able to protect a client against a
+<i>768</i>&nbsp;     * bookie that replaces an entry. The password is used not only to
+<i>769</i>&nbsp;     * authenticate access to a ledger, but also to verify entries in ledgers.
+<i>770</i>&nbsp;     *
+<i>771</i>&nbsp;     * @param ensSize
+<i>772</i>&nbsp;     *          number of bookies over which to stripe entries
+<i>773</i>&nbsp;     * @param writeQuorumSize
+<i>774</i>&nbsp;     *          number of bookies each entry will be written to. each of these bookies
+<i>775</i>&nbsp;     *          must acknowledge the entry before the call is completed.
+<i>776</i>&nbsp;     * @param digestType
+<i>777</i>&nbsp;     *          digest type, either MAC or CRC32
+<i>778</i>&nbsp;     * @param passwd
+<i>779</i>&nbsp;     *          password
+<i>780</i>&nbsp;     * @param cb
+<i>781</i>&nbsp;     *          createCallback implementation
+<i>782</i>&nbsp;     * @param ctx
+<i>783</i>&nbsp;     *          optional control object
+<i>784</i>&nbsp;     */
+<i>785</i>&nbsp;    public void asyncCreateLedger(final int ensSize,
+<i>786</i>&nbsp;                                  final int writeQuorumSize,
+<i>787</i>&nbsp;                                  final DigestType digestType,
+<i>788</i>&nbsp;                                  final byte[] passwd, final CreateCallback cb, final Object ctx) {
+<b class="nc"><i>789</i>&nbsp;        asyncCreateLedger(ensSize, writeQuorumSize, writeQuorumSize,</b>
+<b class="nc"><i>790</i>&nbsp;                          digestType, passwd, cb, ctx, Collections.emptyMap());</b>
+<b class="nc"><i>791</i>&nbsp;    }</b>
+<i>792</i>&nbsp;
+<i>793</i>&nbsp;    /**
+<i>794</i>&nbsp;     * Creates a new ledger asynchronously. Ledgers created with this call have
+<i>795</i>&nbsp;     * a separate write quorum and ack quorum size. The write quorum must be larger than
+<i>796</i>&nbsp;     * the ack quorum.
+<i>797</i>&nbsp;     *
+<i>798</i>&nbsp;     * &lt;p&gt;Separating the write and the ack quorum allows the BookKeeper client to continue
+<i>799</i>&nbsp;     * writing when a bookie has failed but the failure has not yet been detected. Detecting
+<i>800</i>&nbsp;     * a bookie has failed can take a number of seconds, as configured by the read timeout
+<i>801</i>&nbsp;     * {@link ClientConfiguration#getReadTimeout()}. Once the bookie failure is detected,
+<i>802</i>&nbsp;     * that bookie will be removed from the ensemble.
+<i>803</i>&nbsp;     *
+<i>804</i>&nbsp;     * &lt;p&gt;The other parameters match those of {@link #asyncCreateLedger(int, int, DigestType, byte[],
+<i>805</i>&nbsp;     *                                      AsyncCallback.CreateCallback, Object)}
+<i>806</i>&nbsp;     *
+<i>807</i>&nbsp;     * @param ensSize
+<i>808</i>&nbsp;     *          number of bookies over which to stripe entries
+<i>809</i>&nbsp;     * @param writeQuorumSize
+<i>810</i>&nbsp;     *          number of bookies each entry will be written to
+<i>811</i>&nbsp;     * @param ackQuorumSize
+<i>812</i>&nbsp;     *          number of bookies which must acknowledge an entry before the call is completed
+<i>813</i>&nbsp;     * @param digestType
+<i>814</i>&nbsp;     *          digest type, either MAC or CRC32
+<i>815</i>&nbsp;     * @param passwd
+<i>816</i>&nbsp;     *          password
+<i>817</i>&nbsp;     * @param cb
+<i>818</i>&nbsp;     *          createCallback implementation
+<i>819</i>&nbsp;     * @param ctx
+<i>820</i>&nbsp;     *          optional control object
+<i>821</i>&nbsp;     * @param customMetadata
+<i>822</i>&nbsp;     *          optional customMetadata that holds user specified metadata
+<i>823</i>&nbsp;     */
+<i>824</i>&nbsp;
+<i>825</i>&nbsp;    public void asyncCreateLedger(final int ensSize, final int writeQuorumSize, final int ackQuorumSize,
+<i>826</i>&nbsp;                                  final DigestType digestType, final byte[] passwd,
+<i>827</i>&nbsp;                                  final CreateCallback cb, final Object ctx, final Map&lt;String, byte[]&gt; customMetadata) {
+<b class="pc"><i>828</i>&nbsp;        if (writeQuorumSize &lt; ackQuorumSize) {</b>
+<b class="nc"><i>829</i>&nbsp;            throw new IllegalArgumentException(&quot;Write quorum must be larger than ack quorum&quot;);</b>
+<i>830</i>&nbsp;        }
+<b class="fc"><i>831</i>&nbsp;        closeLock.readLock().lock();</b>
+<i>832</i>&nbsp;        try {
+<b class="pc"><i>833</i>&nbsp;            if (closed) {</b>
+<b class="nc"><i>834</i>&nbsp;                cb.createComplete(BKException.Code.ClientClosedException, null, ctx);</b>
+<b class="nc"><i>835</i>&nbsp;                return;</b>
+<i>836</i>&nbsp;            }
+<b class="fc"><i>837</i>&nbsp;            new LedgerCreateOp(BookKeeper.this, ensSize, writeQuorumSize,</b>
+<i>838</i>&nbsp;                               ackQuorumSize, digestType, passwd, cb, ctx,
+<i>839</i>&nbsp;                               customMetadata, WriteFlag.NONE, clientStats)
+<b class="fc"><i>840</i>&nbsp;                .initiate();</b>
+<i>841</i>&nbsp;        } finally {
+<b class="fc"><i>842</i>&nbsp;            closeLock.readLock().unlock();</b>
+<b class="fc"><i>843</i>&nbsp;        }</b>
+<b class="fc"><i>844</i>&nbsp;    }</b>
+<i>845</i>&nbsp;
+<i>846</i>&nbsp;
+<i>847</i>&nbsp;    /**
+<i>848</i>&nbsp;     * Creates a new ledger. Default of 3 servers, and quorum of 2 servers.
+<i>849</i>&nbsp;     *
+<i>850</i>&nbsp;     * @param digestType
+<i>851</i>&nbsp;     *          digest type, either MAC or CRC32
+<i>852</i>&nbsp;     * @param passwd
+<i>853</i>&nbsp;     *          password
+<i>854</i>&nbsp;     * @return a handle to the newly created ledger
+<i>855</i>&nbsp;     * @throws InterruptedException
+<i>856</i>&nbsp;     * @throws BKException
+<i>857</i>&nbsp;     */
+<i>858</i>&nbsp;    public LedgerHandle createLedger(DigestType digestType, byte[] passwd)
+<i>859</i>&nbsp;            throws BKException, InterruptedException {
+<b class="fc"><i>860</i>&nbsp;        return createLedger(3, 2, digestType, passwd);</b>
+<i>861</i>&nbsp;    }
+<i>862</i>&nbsp;
+<i>863</i>&nbsp;    /**
+<i>864</i>&nbsp;     * Synchronous call to create ledger. Parameters match those of
+<i>865</i>&nbsp;     * {@link #asyncCreateLedger(int, int, DigestType, byte[],
+<i>866</i>&nbsp;     *                           AsyncCallback.CreateCallback, Object)}
+<i>867</i>&nbsp;     *
+<i>868</i>&nbsp;     * @param ensSize
+<i>869</i>&nbsp;     * @param qSize
+<i>870</i>&nbsp;     * @param digestType
+<i>871</i>&nbsp;     * @param passwd
+<i>872</i>&nbsp;     * @return a handle to the newly created ledger
+<i>873</i>&nbsp;     * @throws InterruptedException
+<i>874</i>&nbsp;     * @throws BKException
+<i>875</i>&nbsp;     */
+<i>876</i>&nbsp;    public LedgerHandle createLedger(int ensSize, int qSize,
+<i>877</i>&nbsp;                                     DigestType digestType, byte[] passwd)
+<i>878</i>&nbsp;            throws InterruptedException, BKException {
+<b class="fc"><i>879</i>&nbsp;        return createLedger(ensSize, qSize, qSize, digestType, passwd, Collections.emptyMap());</b>
+<i>880</i>&nbsp;    }
+<i>881</i>&nbsp;
+<i>882</i>&nbsp;    /**
+<i>883</i>&nbsp;     * Synchronous call to create ledger. Parameters match those of
+<i>884</i>&nbsp;     * {@link #asyncCreateLedger(int, int, DigestType, byte[],
+<i>885</i>&nbsp;     *                           AsyncCallback.CreateCallback, Object)}
+<i>886</i>&nbsp;     *
+<i>887</i>&nbsp;     * @param ensSize
+<i>888</i>&nbsp;     * @param writeQuorumSize
+<i>889</i>&nbsp;     * @param ackQuorumSize
+<i>890</i>&nbsp;     * @param digestType
+<i>891</i>&nbsp;     * @param passwd
+<i>892</i>&nbsp;     * @return a handle to the newly created ledger
+<i>893</i>&nbsp;     * @throws InterruptedException
+<i>894</i>&nbsp;     * @throws BKException
+<i>895</i>&nbsp;     */
+<i>896</i>&nbsp;    public LedgerHandle createLedger(int ensSize, int writeQuorumSize, int ackQuorumSize,
+<i>897</i>&nbsp;            DigestType digestType, byte[] passwd)
+<i>898</i>&nbsp;            throws InterruptedException, BKException {
+<b class="nc"><i>899</i>&nbsp;        return createLedger(ensSize, writeQuorumSize, ackQuorumSize, digestType, passwd, Collections.emptyMap());</b>
+<i>900</i>&nbsp;    }
+<i>901</i>&nbsp;
+<i>902</i>&nbsp;    /**
+<i>903</i>&nbsp;     * Synchronous call to create ledger. Parameters match those of asyncCreateLedger
+<i>904</i>&nbsp;     *
+<i>905</i>&nbsp;     * @param ensSize
+<i>906</i>&nbsp;     * @param writeQuorumSize
+<i>907</i>&nbsp;     * @param ackQuorumSize
+<i>908</i>&nbsp;     * @param digestType
+<i>909</i>&nbsp;     * @param passwd
+<i>910</i>&nbsp;     * @param customMetadata
+<i>911</i>&nbsp;     * @return a handle to the newly created ledger
+<i>912</i>&nbsp;     * @throws InterruptedException
+<i>913</i>&nbsp;     * @throws BKException
+<i>914</i>&nbsp;     */
+<i>915</i>&nbsp;    public LedgerHandle createLedger(int ensSize, int writeQuorumSize, int ackQuorumSize,
+<i>916</i>&nbsp;                                     DigestType digestType, byte[] passwd, final Map&lt;String, byte[]&gt; customMetadata)
+<i>917</i>&nbsp;            throws InterruptedException, BKException {
+<b class="fc"><i>918</i>&nbsp;        CompletableFuture&lt;LedgerHandle&gt; future = new CompletableFuture&lt;&gt;();</b>
+<b class="fc"><i>919</i>&nbsp;        SyncCreateCallback result = new SyncCreateCallback(future);</b>
+<i>920</i>&nbsp;
+<i>921</i>&nbsp;        /*
+<i>922</i>&nbsp;         * Calls asynchronous version
+<i>923</i>&nbsp;         */
+<b class="fc"><i>924</i>&nbsp;        asyncCreateLedger(ensSize, writeQuorumSize, ackQuorumSize, digestType, passwd,</b>
+<i>925</i>&nbsp;                          result, null, customMetadata);
+<i>926</i>&nbsp;
+<b class="fc"><i>927</i>&nbsp;        LedgerHandle lh = SyncCallbackUtils.waitForResult(future);</b>
+<b class="pc"><i>928</i>&nbsp;        if (lh == null) {</b>
+<b class="nc"><i>929</i>&nbsp;            LOG.error(&quot;Unexpected condition : no ledger handle returned for a success ledger creation&quot;);</b>
+<b class="nc"><i>930</i>&nbsp;            throw BKException.create(BKException.Code.UnexpectedConditionException);</b>
+<i>931</i>&nbsp;        }
+<b class="fc"><i>932</i>&nbsp;        return lh;</b>
+<i>933</i>&nbsp;    }
+<i>934</i>&nbsp;
+<i>935</i>&nbsp;    /**
+<i>936</i>&nbsp;     * Synchronous call to create ledger.
+<i>937</i>&nbsp;     * Creates a new ledger asynchronously and returns {@link LedgerHandleAdv} which can accept entryId.
+<i>938</i>&nbsp;     * Parameters must match those of asyncCreateLedgerAdv
+<i>939</i>&nbsp;     *
+<i>940</i>&nbsp;     * @param ensSize
+<i>941</i>&nbsp;     * @param writeQuorumSize
+<i>942</i>&nbsp;     * @param ackQuorumSize
+<i>943</i>&nbsp;     * @param digestType
+<i>944</i>&nbsp;     * @param passwd
+<i>945</i>&nbsp;     *
+<i>946</i>&nbsp;     * @return a handle to the newly created ledger
+<i>947</i>&nbsp;     * @throws InterruptedException
+<i>948</i>&nbsp;     * @throws BKException
+<i>949</i>&nbsp;     */
+<i>950</i>&nbsp;    public LedgerHandle createLedgerAdv(int ensSize, int writeQuorumSize, int ackQuorumSize,
+<i>951</i>&nbsp;                                        DigestType digestType, byte[] passwd)
+<i>952</i>&nbsp;            throws InterruptedException, BKException {
+<b class="nc"><i>953</i>&nbsp;        return createLedgerAdv(ensSize, writeQuorumSize, ackQuorumSize,</b>
+<b class="nc"><i>954</i>&nbsp;                               digestType, passwd, Collections.emptyMap());</b>
+<i>955</i>&nbsp;    }
+<i>956</i>&nbsp;
+<i>957</i>&nbsp;    /**
+<i>958</i>&nbsp;     * Synchronous call to create ledger.
+<i>959</i>&nbsp;     * Creates a new ledger asynchronously and returns {@link LedgerHandleAdv} which can accept entryId.
+<i>960</i>&nbsp;     * Parameters must match those of asyncCreateLedgerAdv
+<i>961</i>&nbsp;     *
+<i>962</i>&nbsp;     * @param ensSize
+<i>963</i>&nbsp;     * @param writeQuorumSize
+<i>964</i>&nbsp;     * @param ackQuorumSize
+<i>965</i>&nbsp;     * @param digestType
+<i>966</i>&nbsp;     * @param passwd
+<i>967</i>&nbsp;     * @param customMetadata
+<i>968</i>&nbsp;     * @return a handle to the newly created ledger
+<i>969</i>&nbsp;     * @throws InterruptedException
+<i>970</i>&nbsp;     * @throws BKException
+<i>971</i>&nbsp;     */
+<i>972</i>&nbsp;    public LedgerHandle createLedgerAdv(int ensSize, int writeQuorumSize, int ackQuorumSize,
+<i>973</i>&nbsp;                                        DigestType digestType, byte[] passwd, final Map&lt;String, byte[]&gt; customMetadata)
+<i>974</i>&nbsp;            throws InterruptedException, BKException {
+<b class="nc"><i>975</i>&nbsp;        CompletableFuture&lt;LedgerHandleAdv&gt; future = new CompletableFuture&lt;&gt;();</b>
+<b class="nc"><i>976</i>&nbsp;        SyncCreateAdvCallback result = new SyncCreateAdvCallback(future);</b>
+<i>977</i>&nbsp;
+<i>978</i>&nbsp;        /*
+<i>979</i>&nbsp;         * Calls asynchronous version
+<i>980</i>&nbsp;         */
+<b class="nc"><i>981</i>&nbsp;        asyncCreateLedgerAdv(ensSize, writeQuorumSize, ackQuorumSize, digestType, passwd,</b>
+<i>982</i>&nbsp;                             result, null, customMetadata);
+<i>983</i>&nbsp;
+<b class="nc"><i>984</i>&nbsp;        LedgerHandle lh = SyncCallbackUtils.waitForResult(future);</b>
+<b class="nc"><i>985</i>&nbsp;        if (lh == null) {</b>
+<b class="nc"><i>986</i>&nbsp;            LOG.error(&quot;Unexpected condition : no ledger handle returned for a success ledger creation&quot;);</b>
+<b class="nc"><i>987</i>&nbsp;            throw BKException.create(BKException.Code.UnexpectedConditionException);</b>
+<i>988</i>&nbsp;        }
+<b class="nc"><i>989</i>&nbsp;        return lh;</b>
+<i>990</i>&nbsp;    }
+<i>991</i>&nbsp;
+<i>992</i>&nbsp;    /**
+<i>993</i>&nbsp;     * Creates a new ledger asynchronously and returns {@link LedgerHandleAdv}
+<i>994</i>&nbsp;     * which can accept entryId.  Ledgers created with this call have ability to accept
+<i>995</i>&nbsp;     * a separate write quorum and ack quorum size. The write quorum must be larger than
+<i>996</i>&nbsp;     * the ack quorum.
+<i>997</i>&nbsp;     *
+<i>998</i>&nbsp;     * &lt;p&gt;Separating the write and the ack quorum allows the BookKeeper client to continue
+<i>999</i>&nbsp;     * writing when a bookie has failed but the failure has not yet been detected. Detecting
+<i>1000</i>&nbsp;     * a bookie has failed can take a number of seconds, as configured by the read timeout
+<i>1001</i>&nbsp;     * {@link ClientConfiguration#getReadTimeout()}. Once the bookie failure is detected,
+<i>1002</i>&nbsp;     * that bookie will be removed from the ensemble.
+<i>1003</i>&nbsp;     *
+<i>1004</i>&nbsp;     * &lt;p&gt;The other parameters match those of {@link #asyncCreateLedger(int, int, DigestType, byte[],
+<i>1005</i>&nbsp;     *                                      AsyncCallback.CreateCallback, Object)}
+<i>1006</i>&nbsp;     *
+<i>1007</i>&nbsp;     * @param ensSize
+<i>1008</i>&nbsp;     *          number of bookies over which to stripe entries
+<i>1009</i>&nbsp;     * @param writeQuorumSize
+<i>1010</i>&nbsp;     *          number of bookies each entry will be written to
+<i>1011</i>&nbsp;     * @param ackQuorumSize
+<i>1012</i>&nbsp;     *          number of bookies which must acknowledge an entry before the call is completed
+<i>1013</i>&nbsp;     * @param digestType
+<i>1014</i>&nbsp;     *          digest type, either MAC or CRC32
+<i>1015</i>&nbsp;     * @param passwd
+<i>1016</i>&nbsp;     *          password
+<i>1017</i>&nbsp;     * @param cb
+<i>1018</i>&nbsp;     *          createCallback implementation
+<i>1019</i>&nbsp;     * @param ctx
+<i>1020</i>&nbsp;     *          optional control object
+<i>1021</i>&nbsp;     * @param customMetadata
+<i>1022</i>&nbsp;     *          optional customMetadata that holds user specified metadata
+<i>1023</i>&nbsp;     */
+<i>1024</i>&nbsp;    public void asyncCreateLedgerAdv(final int ensSize, final int writeQuorumSize, final int ackQuorumSize,
+<i>1025</i>&nbsp;            final DigestType digestType, final byte[] passwd, final CreateCallback cb, final Object ctx,
+<i>1026</i>&nbsp;            final Map&lt;String, byte[]&gt; customMetadata) {
+<b class="nc"><i>1027</i>&nbsp;        if (writeQuorumSize &lt; ackQuorumSize) {</b>
+<b class="nc"><i>1028</i>&nbsp;            throw new IllegalArgumentException(&quot;Write quorum must be larger than ack quorum&quot;);</b>
+<i>1029</i>&nbsp;        }
+<b class="nc"><i>1030</i>&nbsp;        closeLock.readLock().lock();</b>
+<i>1031</i>&nbsp;        try {
+<b class="nc"><i>1032</i>&nbsp;            if (closed) {</b>
+<b class="nc"><i>1033</i>&nbsp;                cb.createComplete(BKException.Code.ClientClosedException, null, ctx);</b>
+<b class="nc"><i>1034</i>&nbsp;                return;</b>
+<i>1035</i>&nbsp;            }
+<b class="nc"><i>1036</i>&nbsp;            new LedgerCreateOp(BookKeeper.this, ensSize, writeQuorumSize,</b>
+<i>1037</i>&nbsp;                               ackQuorumSize, digestType, passwd, cb, ctx,
+<i>1038</i>&nbsp;                               customMetadata, WriteFlag.NONE, clientStats)
+<b class="nc"><i>1039</i>&nbsp;                                       .initiateAdv(-1L);</b>
+<i>1040</i>&nbsp;        } finally {
+<b class="nc"><i>1041</i>&nbsp;            closeLock.readLock().unlock();</b>
+<b class="nc"><i>1042</i>&nbsp;        }</b>
+<b class="nc"><i>1043</i>&nbsp;    }</b>
+<i>1044</i>&nbsp;
+<i>1045</i>&nbsp;    /**
+<i>1046</i>&nbsp;     * Synchronously creates a new ledger using the interface which accepts a ledgerId as input.
+<i>1047</i>&nbsp;     * This method returns {@link LedgerHandleAdv} which can accept entryId.
+<i>1048</i>&nbsp;     * Parameters must match those of asyncCreateLedgerAdvWithLedgerId
+<i>1049</i>&nbsp;     * @param ledgerId
+<i>1050</i>&nbsp;     * @param ensSize
+<i>1051</i>&nbsp;     * @param writeQuorumSize
+<i>1052</i>&nbsp;     * @param ackQuorumSize
+<i>1053</i>&nbsp;     * @param digestType
+<i>1054</i>&nbsp;     * @param passwd
+<i>1055</i>&nbsp;     * @param customMetadata
+<i>1056</i>&nbsp;     * @return a handle to the newly created ledger
+<i>1057</i>&nbsp;     * @throws InterruptedException
+<i>1058</i>&nbsp;     * @throws BKException
+<i>1059</i>&nbsp;     */
+<i>1060</i>&nbsp;    public LedgerHandle createLedgerAdv(final long ledgerId,
+<i>1061</i>&nbsp;                                        int ensSize,
+<i>1062</i>&nbsp;                                        int writeQuorumSize,
+<i>1063</i>&nbsp;                                        int ackQuorumSize,
+<i>1064</i>&nbsp;                                        DigestType digestType,
+<i>1065</i>&nbsp;                                        byte[] passwd,
+<i>1066</i>&nbsp;                                        final Map&lt;String, byte[]&gt; customMetadata)
+<i>1067</i>&nbsp;            throws InterruptedException, BKException {
+<b class="nc"><i>1068</i>&nbsp;        CompletableFuture&lt;LedgerHandleAdv&gt; future = new CompletableFuture&lt;&gt;();</b>
+<b class="nc"><i>1069</i>&nbsp;        SyncCreateAdvCallback result = new SyncCreateAdvCallback(future);</b>
+<i>1070</i>&nbsp;
+<i>1071</i>&nbsp;        /*
+<i>1072</i>&nbsp;         * Calls asynchronous version
+<i>1073</i>&nbsp;         */
+<b class="nc"><i>1074</i>&nbsp;        asyncCreateLedgerAdv(ledgerId, ensSize, writeQuorumSize, ackQuorumSize, digestType, passwd,</b>
+<i>1075</i>&nbsp;                             result, null, customMetadata);
+<i>1076</i>&nbsp;
+<b class="nc"><i>1077</i>&nbsp;        LedgerHandle lh = SyncCallbackUtils.waitForResult(future);</b>
+<b class="nc"><i>1078</i>&nbsp;        if (lh == null) {</b>
+<b class="nc"><i>1079</i>&nbsp;            LOG.error(&quot;Unexpected condition : no ledger handle returned for a success ledger creation&quot;);</b>
+<b class="nc"><i>1080</i>&nbsp;            throw BKException.create(BKException.Code.UnexpectedConditionException);</b>
+<b class="nc"><i>1081</i>&nbsp;        } else if (ledgerId != lh.getId()) {</b>
+<b class="nc"><i>1082</i>&nbsp;            LOG.error(&quot;Unexpected condition : Expected ledgerId: {} but got: {}&quot;, ledgerId, lh.getId());</b>
+<b class="nc"><i>1083</i>&nbsp;            throw BKException.create(BKException.Code.UnexpectedConditionException);</b>
+<i>1084</i>&nbsp;        }
+<i>1085</i>&nbsp;
+<b class="nc"><i>1086</i>&nbsp;        LOG.info(&quot;Ensemble: {} for ledger: {}&quot;, lh.getLedgerMetadata().getEnsembleAt(0L), lh.getId());</b>
+<i>1087</i>&nbsp;
+<b class="nc"><i>1088</i>&nbsp;        return lh;</b>
+<i>1089</i>&nbsp;    }
+<i>1090</i>&nbsp;
+<i>1091</i>&nbsp;    /**
+<i>1092</i>&nbsp;     * Asynchronously creates a new ledger using the interface which accepts a ledgerId as input.
+<i>1093</i>&nbsp;     * This method returns {@link LedgerHandleAdv} which can accept entryId.
+<i>1094</i>&nbsp;     * Ledgers created with this call have ability to accept
+<i>1095</i>&nbsp;     * a separate write quorum and ack quorum size. The write quorum must be larger than
+<i>1096</i>&nbsp;     * the ack quorum.
+<i>1097</i>&nbsp;     *
+<i>1098</i>&nbsp;     * &lt;p&gt;Separating the write and the ack quorum allows the BookKeeper client to continue
+<i>1099</i>&nbsp;     * writing when a bookie has failed but the failure has not yet been detected. Detecting
+<i>1100</i>&nbsp;     * a bookie has failed can take a number of seconds, as configured by the read timeout
+<i>1101</i>&nbsp;     * {@link ClientConfiguration#getReadTimeout()}. Once the bookie failure is detected,
+<i>1102</i>&nbsp;     * that bookie will be removed from the ensemble.
+<i>1103</i>&nbsp;     *
+<i>1104</i>&nbsp;     * &lt;p&gt;The other parameters match those of asyncCreateLedger&lt;/p&gt;
+<i>1105</i>&nbsp;     *
+<i>1106</i>&nbsp;     * @param ledgerId
+<i>1107</i>&nbsp;     *          ledger Id to use for the newly created ledger
+<i>1108</i>&nbsp;     * @param ensSize
+<i>1109</i>&nbsp;     *          number of bookies over which to stripe entries
+<i>1110</i>&nbsp;     * @param writeQuorumSize
+<i>1111</i>&nbsp;     *          number of bookies each entry will be written to
+<i>1112</i>&nbsp;     * @param ackQuorumSize
+<i>1113</i>&nbsp;     *          number of bookies which must acknowledge an entry before the call is completed
+<i>1114</i>&nbsp;     * @param digestType
+<i>1115</i>&nbsp;     *          digest type, either MAC or CRC32
+<i>1116</i>&nbsp;     * @param passwd
+<i>1117</i>&nbsp;     *          password
+<i>1118</i>&nbsp;     * @param cb
+<i>1119</i>&nbsp;     *          createCallback implementation
+<i>1120</i>&nbsp;     * @param ctx
+<i>1121</i>&nbsp;     *          optional control object
+<i>1122</i>&nbsp;     * @param customMetadata
+<i>1123</i>&nbsp;     *          optional customMetadata that holds user specified metadata
+<i>1124</i>&nbsp;     */
+<i>1125</i>&nbsp;    public void asyncCreateLedgerAdv(final long ledgerId,
+<i>1126</i>&nbsp;                                     final int ensSize,
+<i>1127</i>&nbsp;                                     final int writeQuorumSize,
+<i>1128</i>&nbsp;                                     final int ackQuorumSize,
+<i>1129</i>&nbsp;                                     final DigestType digestType,
+<i>1130</i>&nbsp;                                     final byte[] passwd,
+<i>1131</i>&nbsp;                                     final CreateCallback cb,
+<i>1132</i>&nbsp;                                     final Object ctx,
+<i>1133</i>&nbsp;                                     final Map&lt;String, byte[]&gt; customMetadata) {
+<b class="nc"><i>1134</i>&nbsp;        if (writeQuorumSize &lt; ackQuorumSize) {</b>
+<b class="nc"><i>1135</i>&nbsp;            throw new IllegalArgumentException(&quot;Write quorum must be larger than ack quorum&quot;);</b>
+<i>1136</i>&nbsp;        }
+<b class="nc"><i>1137</i>&nbsp;        closeLock.readLock().lock();</b>
+<i>1138</i>&nbsp;        try {
+<b class="nc"><i>1139</i>&nbsp;            if (closed) {</b>
+<b class="nc"><i>1140</i>&nbsp;                cb.createComplete(BKException.Code.ClientClosedException, null, ctx);</b>
+<b class="nc"><i>1141</i>&nbsp;                return;</b>
+<i>1142</i>&nbsp;            }
+<b class="nc"><i>1143</i>&nbsp;            new LedgerCreateOp(BookKeeper.this, ensSize, writeQuorumSize,</b>
+<i>1144</i>&nbsp;                               ackQuorumSize, digestType, passwd, cb, ctx,
+<i>1145</i>&nbsp;                               customMetadata, WriteFlag.NONE, clientStats)
+<b class="nc"><i>1146</i>&nbsp;                    .initiateAdv(ledgerId);</b>
+<i>1147</i>&nbsp;        } finally {
+<b class="nc"><i>1148</i>&nbsp;            closeLock.readLock().unlock();</b>
+<b class="nc"><i>1149</i>&nbsp;        }</b>
+<b class="nc"><i>1150</i>&nbsp;    }</b>
+<i>1151</i>&nbsp;
+<i>1152</i>&nbsp;    /**
+<i>1153</i>&nbsp;     * Open existing ledger asynchronously for reading.
+<i>1154</i>&nbsp;     *
+<i>1155</i>&nbsp;     * &lt;p&gt;Opening a ledger with this method invokes fencing and recovery on the ledger
+<i>1156</i>&nbsp;     * if the ledger has not been closed. Fencing will block all other clients from
+<i>1157</i>&nbsp;     * writing to the ledger. Recovery will make sure that the ledger is closed
+<i>1158</i>&nbsp;     * before reading from it.
+<i>1159</i>&nbsp;     *
+<i>1160</i>&nbsp;     * &lt;p&gt;Recovery also makes sure that any entries which reached one bookie, but not a
+<i>1161</i>&nbsp;     * quorum, will be replicated to a quorum of bookies. This occurs in cases were
+<i>1162</i>&nbsp;     * the writer of a ledger crashes after sending a write request to one bookie but
+<i>1163</i>&nbsp;     * before being able to send it to the rest of the bookies in the quorum.
+<i>1164</i>&nbsp;     *
+<i>1165</i>&nbsp;     * &lt;p&gt;If the ledger is already closed, neither fencing nor recovery will be applied.
+<i>1166</i>&nbsp;     *
+<i>1167</i>&nbsp;     * @see LedgerHandle#asyncClose
+<i>1168</i>&nbsp;     *
+<i>1169</i>&nbsp;     * @param lId
+<i>1170</i>&nbsp;     *          ledger identifier
+<i>1171</i>&nbsp;     * @param digestType
+<i>1172</i>&nbsp;     *          digest type, either MAC or CRC32
+<i>1173</i>&nbsp;     * @param passwd
+<i>1174</i>&nbsp;     *          password
+<i>1175</i>&nbsp;     * @param ctx
+<i>1176</i>&nbsp;     *          optional control object
+<i>1177</i>&nbsp;     */
+<i>1178</i>&nbsp;    public void asyncOpenLedger(final long lId, final DigestType digestType, final byte[] passwd,
+<i>1179</i>&nbsp;                                final OpenCallback cb, final Object ctx) {
+<b class="fc"><i>1180</i>&nbsp;        closeLock.readLock().lock();</b>
+<i>1181</i>&nbsp;        try {
+<b class="pc"><i>1182</i>&nbsp;            if (closed) {</b>
+<b class="nc"><i>1183</i>&nbsp;                cb.openComplete(BKException.Code.ClientClosedException, null, ctx);</b>
+<b class="nc"><i>1184</i>&nbsp;                return;</b>
+<i>1185</i>&nbsp;            }
+<b class="fc"><i>1186</i>&nbsp;            new LedgerOpenOp(BookKeeper.this, clientStats,</b>
+<b class="fc"><i>1187</i>&nbsp;                             lId, digestType, passwd, cb, ctx).initiate();</b>
+<i>1188</i>&nbsp;        } finally {
+<b class="fc"><i>1189</i>&nbsp;            closeLock.readLock().unlock();</b>
+<b class="fc"><i>1190</i>&nbsp;        }</b>
+<b class="fc"><i>1191</i>&nbsp;    }</b>
+<i>1192</i>&nbsp;
+<i>1193</i>&nbsp;    /**
+<i>1194</i>&nbsp;     * Open existing ledger asynchronously for reading, but it does not try to
+<i>1195</i>&nbsp;     * recover the ledger if it is not yet closed. The application needs to use
+<i>1196</i>&nbsp;     * it carefully, since the writer might have crashed and ledger will remain
+<i>1197</i>&nbsp;     * unsealed forever if there is no external mechanism to detect the failure
+<i>1198</i>&nbsp;     * of the writer and the ledger is not open in a safe manner, invoking the
+<i>1199</i>&nbsp;     * recovery procedure.
+<i>1200</i>&nbsp;     *
+<i>1201</i>&nbsp;     * &lt;p&gt;Opening a ledger without recovery does not fence the ledger. As such, other
+<i>1202</i>&nbsp;     * clients can continue to write to the ledger.
+<i>1203</i>&nbsp;     *
+<i>1204</i>&nbsp;     * &lt;p&gt;This method returns a read only ledger handle. It will not be possible
+<i>1205</i>&nbsp;     * to add entries to the ledger. Any attempt to add entries will throw an
+<i>1206</i>&nbsp;     * exception.
+<i>1207</i>&nbsp;     *
+<i>1208</i>&nbsp;     * &lt;p&gt;Reads from the returned ledger will be able to read entries up until
+<i>1209</i>&nbsp;     * the lastConfirmedEntry at the point in time at which the ledger was opened.
+<i>1210</i>&nbsp;     * If an attempt is made to read beyond the ledger handle&#39;s LAC, an attempt is made
+<i>1211</i>&nbsp;     * to get the latest LAC from bookies or metadata, and if the entry_id of the read request
+<i>1212</i>&nbsp;     * is less than or equal to the new LAC, read will be allowed to proceed.
+<i>1213</i>&nbsp;     *
+<i>1214</i>&nbsp;     * @param lId
+<i>1215</i>&nbsp;     *          ledger identifier
+<i>1216</i>&nbsp;     * @param digestType
+<i>1217</i>&nbsp;     *          digest type, either MAC or CRC32
+<i>1218</i>&nbsp;     * @param passwd
+<i>1219</i>&nbsp;     *          password
+<i>1220</i>&nbsp;     * @param ctx
+<i>1221</i>&nbsp;     *          optional control object
+<i>1222</i>&nbsp;     */
+<i>1223</i>&nbsp;    public void asyncOpenLedgerNoRecovery(final long lId, final DigestType digestType, final byte[] passwd,
+<i>1224</i>&nbsp;                                          final OpenCallback cb, final Object ctx) {
+<b class="nc"><i>1225</i>&nbsp;        closeLock.readLock().lock();</b>
+<i>1226</i>&nbsp;        try {
+<b class="nc"><i>1227</i>&nbsp;            if (closed) {</b>
+<b class="nc"><i>1228</i>&nbsp;                cb.openComplete(BKException.Code.ClientClosedException, null, ctx);</b>
+<b class="nc"><i>1229</i>&nbsp;                return;</b>
+<i>1230</i>&nbsp;            }
+<b class="nc"><i>1231</i>&nbsp;            new LedgerOpenOp(BookKeeper.this, clientStats,</b>
+<b class="nc"><i>1232</i>&nbsp;                             lId, digestType, passwd, cb, ctx).initiateWithoutRecovery();</b>
+<i>1233</i>&nbsp;        } finally {
+<b class="nc"><i>1234</i>&nbsp;            closeLock.readLock().unlock();</b>
+<b class="nc"><i>1235</i>&nbsp;        }</b>
+<b class="nc"><i>1236</i>&nbsp;    }</b>
+<i>1237</i>&nbsp;
+<i>1238</i>&nbsp;
+<i>1239</i>&nbsp;    /**
+<i>1240</i>&nbsp;     * Synchronous open ledger call.
+<i>1241</i>&nbsp;     *
+<i>1242</i>&nbsp;     * @see #asyncOpenLedger
+<i>1243</i>&nbsp;     * @param lId
+<i>1244</i>&nbsp;     *          ledger identifier
+<i>1245</i>&nbsp;     * @param digestType
+<i>1246</i>&nbsp;     *          digest type, either MAC or CRC32
+<i>1247</i>&nbsp;     * @param passwd
+<i>1248</i>&nbsp;     *          password
+<i>1249</i>&nbsp;     * @return a handle to the open ledger
+<i>1250</i>&nbsp;     * @throws InterruptedException
+<i>1251</i>&nbsp;     * @throws BKException
+<i>1252</i>&nbsp;     */
+<i>1253</i>&nbsp;    public LedgerHandle openLedger(long lId, DigestType digestType, byte[] passwd)
+<i>1254</i>&nbsp;            throws BKException, InterruptedException {
+<b class="fc"><i>1255</i>&nbsp;        CompletableFuture&lt;LedgerHandle&gt; future = new CompletableFuture&lt;&gt;();</b>
+<b class="fc"><i>1256</i>&nbsp;        SyncOpenCallback result = new SyncOpenCallback(future);</b>
+<i>1257</i>&nbsp;
+<i>1258</i>&nbsp;        /*
+<i>1259</i>&nbsp;         * Calls async open ledger
+<i>1260</i>&nbsp;         */
+<b class="fc"><i>1261</i>&nbsp;        asyncOpenLedger(lId, digestType, passwd, result, null);</b>
+<i>1262</i>&nbsp;
+<b class="fc"><i>1263</i>&nbsp;        return SyncCallbackUtils.waitForResult(future);</b>
+<i>1264</i>&nbsp;    }
+<i>1265</i>&nbsp;
+<i>1266</i>&nbsp;    /**
+<i>1267</i>&nbsp;     * Synchronous, unsafe open ledger call.
+<i>1268</i>&nbsp;     *
+<i>1269</i>&nbsp;     * @see #asyncOpenLedgerNoRecovery
+<i>1270</i>&nbsp;     * @param lId
+<i>1271</i>&nbsp;     *          ledger identifier
+<i>1272</i>&nbsp;     * @param digestType
+<i>1273</i>&nbsp;     *          digest type, either MAC or CRC32
+<i>1274</i>&nbsp;     * @param passwd
+<i>1275</i>&nbsp;     *          password
+<i>1276</i>&nbsp;     * @return a handle to the open ledger
+<i>1277</i>&nbsp;     * @throws InterruptedException
+<i>1278</i>&nbsp;     * @throws BKException
+<i>1279</i>&nbsp;     */
+<i>1280</i>&nbsp;    public LedgerHandle openLedgerNoRecovery(long lId, DigestType digestType, byte[] passwd)
+<i>1281</i>&nbsp;            throws BKException, InterruptedException {
+<b class="nc"><i>1282</i>&nbsp;        CompletableFuture&lt;LedgerHandle&gt; future = new CompletableFuture&lt;&gt;();</b>
+<b class="nc"><i>1283</i>&nbsp;        SyncOpenCallback result = new SyncOpenCallback(future);</b>
+<i>1284</i>&nbsp;
+<i>1285</i>&nbsp;        /*
+<i>1286</i>&nbsp;         * Calls async open ledger
+<i>1287</i>&nbsp;         */
+<b class="nc"><i>1288</i>&nbsp;        asyncOpenLedgerNoRecovery(lId, digestType, passwd,</b>
+<i>1289</i>&nbsp;                                  result, null);
+<i>1290</i>&nbsp;
+<b class="nc"><i>1291</i>&nbsp;        return SyncCallbackUtils.waitForResult(future);</b>
+<i>1292</i>&nbsp;    }
+<i>1293</i>&nbsp;
+<i>1294</i>&nbsp;    /**
+<i>1295</i>&nbsp;     * Deletes a ledger asynchronously.
+<i>1296</i>&nbsp;     *
+<i>1297</i>&nbsp;     * @param lId
+<i>1298</i>&nbsp;     *            ledger Id
+<i>1299</i>&nbsp;     * @param cb
+<i>1300</i>&nbsp;     *            deleteCallback implementation
+<i>1301</i>&nbsp;     * @param ctx
+<i>1302</i>&nbsp;     *            optional control object
+<i>1303</i>&nbsp;     */
+<i>1304</i>&nbsp;    public void asyncDeleteLedger(final long lId, final DeleteCallback cb, final Object ctx) {
+<b class="fc"><i>1305</i>&nbsp;        closeLock.readLock().lock();</b>
+<i>1306</i>&nbsp;        try {
+<b class="pc"><i>1307</i>&nbsp;            if (closed) {</b>
+<b class="nc"><i>1308</i>&nbsp;                cb.deleteComplete(BKException.Code.ClientClosedException, ctx);</b>
+<b class="nc"><i>1309</i>&nbsp;                return;</b>
+<i>1310</i>&nbsp;            }
+<b class="fc"><i>1311</i>&nbsp;            new LedgerDeleteOp(BookKeeper.this, clientStats, lId, cb, ctx).initiate();</b>
+<i>1312</i>&nbsp;        } finally {
+<b class="fc"><i>1313</i>&nbsp;            closeLock.readLock().unlock();</b>
+<b class="nc"><i>1314</i>&nbsp;        }</b>
+<b class="fc"><i>1315</i>&nbsp;    }</b>
+<i>1316</i>&nbsp;
+<i>1317</i>&nbsp;
+<i>1318</i>&nbsp;    /**
+<i>1319</i>&nbsp;     * Synchronous call to delete a ledger. Parameters match those of
+<i>1320</i>&nbsp;     * {@link #asyncDeleteLedger(long, AsyncCallback.DeleteCallback, Object)}
+<i>1321</i>&nbsp;     *
+<i>1322</i>&nbsp;     * @param lId
+<i>1323</i>&nbsp;     *            ledgerId
+<i>1324</i>&nbsp;     * @throws InterruptedException
+<i>1325</i>&nbsp;     * @throws BKException
+<i>1326</i>&nbsp;     */
+<i>1327</i>&nbsp;    public void deleteLedger(long lId) throws InterruptedException, BKException {
+<b class="fc"><i>1328</i>&nbsp;        CompletableFuture&lt;Void&gt; future = new CompletableFuture&lt;&gt;();</b>
+<b class="fc"><i>1329</i>&nbsp;        SyncDeleteCallback result = new SyncDeleteCallback(future);</b>
+<i>1330</i>&nbsp;        // Call asynchronous version
+<b class="fc"><i>1331</i>&nbsp;        asyncDeleteLedger(lId, result, null);</b>
+<i>1332</i>&nbsp;
+<b class="fc"><i>1333</i>&nbsp;        SyncCallbackUtils.waitForResult(future);</b>
+<b class="fc"><i>1334</i>&nbsp;    }</b>
+<i>1335</i>&nbsp;
+<i>1336</i>&nbsp;    /**
+<i>1337</i>&nbsp;     * Check asynchronously whether the ledger with identifier &lt;i&gt;lId&lt;/i&gt;
+<i>1338</i>&nbsp;     * has been closed.
+<i>1339</i>&nbsp;     *
+<i>1340</i>&nbsp;     * @param lId   ledger identifier
+<i>1341</i>&nbsp;     * @param cb    callback method
+<i>1342</i>&nbsp;     */
+<i>1343</i>&nbsp;    public void asyncIsClosed(long lId, final IsClosedCallback cb, final Object ctx){
+<b class="nc"><i>1344</i>&nbsp;        ledgerManager.readLedgerMetadata(lId).whenComplete((metadata, exception) -&gt; {</b>
+<b class="nc"><i>1345</i>&nbsp;                if (exception == null) {</b>
+<b class="nc"><i>1346</i>&nbsp;                    cb.isClosedComplete(BKException.Code.OK, metadata.getValue().isClosed(), ctx);</b>
+<i>1347</i>&nbsp;                } else {
+<b class="nc"><i>1348</i>&nbsp;                    cb.isClosedComplete(BKException.getExceptionCode(exception), false, ctx);</b>
+<i>1349</i>&nbsp;                }
+<b class="nc"><i>1350</i>&nbsp;            });</b>
+<b class="nc"><i>1351</i>&nbsp;    }</b>
+<i>1352</i>&nbsp;
+<i>1353</i>&nbsp;    /**
+<i>1354</i>&nbsp;     * Check whether the ledger with identifier &lt;i&gt;lId&lt;/i&gt;
+<i>1355</i>&nbsp;     * has been closed.
+<i>1356</i>&nbsp;     *
+<i>1357</i>&nbsp;     * @param lId
+<i>1358</i>&nbsp;     * @return boolean true if ledger has been closed
+<i>1359</i>&nbsp;     * @throws BKException
+<i>1360</i>&nbsp;     */
+<i>1361</i>&nbsp;    public boolean isClosed(long lId)
+<i>1362</i>&nbsp;    throws BKException, InterruptedException {
+<b class="nc"><i>1363</i>&nbsp;        final class Result {</b>
+<i>1364</i>&nbsp;            int rc;
+<i>1365</i>&nbsp;            boolean isClosed;
+<b class="nc"><i>1366</i>&nbsp;            final CountDownLatch notifier = new CountDownLatch(1);</b>
+<i>1367</i>&nbsp;        }
+<i>1368</i>&nbsp;
+<b class="nc"><i>1369</i>&nbsp;        final Result result = new Result();</b>
+<i>1370</i>&nbsp;
+<b class="nc"><i>1371</i>&nbsp;        final IsClosedCallback cb = new IsClosedCallback(){</b>
+<i>1372</i>&nbsp;            @Override
+<i>1373</i>&nbsp;            public void isClosedComplete(int rc, boolean isClosed, Object ctx){
+<b class="nc"><i>1374</i>&nbsp;                    result.isClosed = isClosed;</b>
+<b class="nc"><i>1375</i>&nbsp;                    result.rc = rc;</b>
+<b class="nc"><i>1376</i>&nbsp;                    result.notifier.countDown();</b>
+<b class="nc"><i>1377</i>&nbsp;            }</b>
+<i>1378</i>&nbsp;        };
+<i>1379</i>&nbsp;
+<i>1380</i>&nbsp;        /*
+<i>1381</i>&nbsp;         * Call asynchronous version of isClosed
+<i>1382</i>&nbsp;         */
+<b class="nc"><i>1383</i>&nbsp;        asyncIsClosed(lId, cb, null);</b>
+<i>1384</i>&nbsp;
+<i>1385</i>&nbsp;        /*
+<i>1386</i>&nbsp;         * Wait for callback
+<i>1387</i>&nbsp;         */
+<b class="nc"><i>1388</i>&nbsp;        result.notifier.await();</b>
+<i>1389</i>&nbsp;
+<b class="nc"><i>1390</i>&nbsp;        if (result.rc != BKException.Code.OK) {</b>
+<b class="nc"><i>1391</i>&nbsp;            throw BKException.create(result.rc);</b>
+<i>1392</i>&nbsp;        }
+<i>1393</i>&nbsp;
+<b class="nc"><i>1394</i>&nbsp;        return result.isClosed;</b>
+<i>1395</i>&nbsp;    }
+<i>1396</i>&nbsp;
+<i>1397</i>&nbsp;    /**
+<i>1398</i>&nbsp;     * Shuts down client.
+<i>1399</i>&nbsp;     *
+<i>1400</i>&nbsp;     */
+<i>1401</i>&nbsp;    @Override
+<i>1402</i>&nbsp;    public void close() throws BKException, InterruptedException {
+<b class="fc"><i>1403</i>&nbsp;        closeLock.writeLock().lock();</b>
+<i>1404</i>&nbsp;        try {
+<b class="pc"><i>1405</i>&nbsp;            if (closed) {</b>
+<b class="nc"><i>1406</i>&nbsp;                return;</b>
+<i>1407</i>&nbsp;            }
+<b class="fc"><i>1408</i>&nbsp;            closed = true;</b>
+<i>1409</i>&nbsp;        } finally {
+<b class="fc"><i>1410</i>&nbsp;            closeLock.writeLock().unlock();</b>
+<b class="fc"><i>1411</i>&nbsp;        }</b>
+<i>1412</i>&nbsp;
+<i>1413</i>&nbsp;        // Close bookie client so all pending bookie requests would be failed
+<i>1414</i>&nbsp;        // which will reject any incoming bookie requests.
+<b class="fc"><i>1415</i>&nbsp;        bookieClient.close();</b>
+<i>1416</i>&nbsp;        try {
+<i>1417</i>&nbsp;            // Close ledger manage so all pending metadata requests would be failed
+<i>1418</i>&nbsp;            // which will reject any incoming metadata requests.
+<b class="fc"><i>1419</i>&nbsp;            ledgerManager.close();</b>
+<b class="fc"><i>1420</i>&nbsp;            ledgerIdGenerator.close();</b>
+<b class="nc"><i>1421</i>&nbsp;        } catch (IOException ie) {</b>
+<b class="nc"><i>1422</i>&nbsp;            LOG.error(&quot;Failed to close ledger manager : &quot;, ie);</b>
+<b class="fc"><i>1423</i>&nbsp;        }</b>
+<i>1424</i>&nbsp;
+<i>1425</i>&nbsp;        // Close the scheduler
+<b class="fc"><i>1426</i>&nbsp;        scheduler.shutdown();</b>
+<b class="pc"><i>1427</i>&nbsp;        if (!scheduler.awaitTermination(10, TimeUnit.SECONDS)) {</b>
+<b class="nc"><i>1428</i>&nbsp;            LOG.warn(&quot;The scheduler did not shutdown cleanly&quot;);</b>
+<i>1429</i>&nbsp;        }
+<b class="fc"><i>1430</i>&nbsp;        mainWorkerPool.shutdown();</b>
+<b class="pc"><i>1431</i>&nbsp;        if (!mainWorkerPool.awaitTermination(10, TimeUnit.SECONDS)) {</b>
+<b class="nc"><i>1432</i>&nbsp;            LOG.warn(&quot;The mainWorkerPool did not shutdown cleanly&quot;);</b>
+<i>1433</i>&nbsp;        }
+<b class="pc"><i>1434</i>&nbsp;        if (this.bookieInfoScheduler != null) {</b>
+<b class="nc"><i>1435</i>&nbsp;            this.bookieInfoScheduler.shutdown();</b>
+<b class="nc"><i>1436</i>&nbsp;            if (!bookieInfoScheduler.awaitTermination(10, TimeUnit.SECONDS)) {</b>
+<b class="nc"><i>1437</i>&nbsp;                LOG.warn(&quot;The bookieInfoScheduler did not shutdown cleanly&quot;);</b>
+<i>1438</i>&nbsp;            }
+<i>1439</i>&nbsp;        }
+<i>1440</i>&nbsp;
+<b class="pc"><i>1441</i>&nbsp;        if (ownTimer) {</b>
+<b class="fc"><i>1442</i>&nbsp;            requestTimer.stop();</b>
+<i>1443</i>&nbsp;        }
+<b class="pc"><i>1444</i>&nbsp;        if (ownEventLoopGroup) {</b>
+<b class="fc"><i>1445</i>&nbsp;            eventLoopGroup.shutdownGracefully();</b>
+<i>1446</i>&nbsp;        }
+<b class="fc"><i>1447</i>&nbsp;        this.metadataDriver.close();</b>
+<b class="fc"><i>1448</i>&nbsp;    }</b>
+<i>1449</i>&nbsp;
+<i>1450</i>&nbsp;    @Override
+<i>1451</i>&nbsp;    public CreateBuilder newCreateLedgerOp() {
+<b class="nc"><i>1452</i>&nbsp;        return new LedgerCreateOp.CreateBuilderImpl(this);</b>
+<i>1453</i>&nbsp;    }
+<i>1454</i>&nbsp;
+<i>1455</i>&nbsp;    @Override
+<i>1456</i>&nbsp;    public OpenBuilder newOpenLedgerOp() {
+<b class="nc"><i>1457</i>&nbsp;        return new LedgerOpenOp.OpenBuilderImpl(this);</b>
+<i>1458</i>&nbsp;    }
+<i>1459</i>&nbsp;
+<i>1460</i>&nbsp;    @Override
+<i>1461</i>&nbsp;    public DeleteBuilder newDeleteLedgerOp() {
+<b class="nc"><i>1462</i>&nbsp;        return new LedgerDeleteOp.DeleteBuilderImpl(this);</b>
+<i>1463</i>&nbsp;    }
+<i>1464</i>&nbsp;
+<b class="fc"><i>1465</i>&nbsp;    private final ClientContext clientCtx = new ClientContext() {</b>
+<i>1466</i>&nbsp;            @Override
+<i>1467</i>&nbsp;            public ClientInternalConf getConf() {
+<b class="fc"><i>1468</i>&nbsp;                return internalConf;</b>
+<i>1469</i>&nbsp;            }
+<i>1470</i>&nbsp;
+<i>1471</i>&nbsp;            @Override
+<i>1472</i>&nbsp;            public LedgerManager getLedgerManager() {
+<b class="fc"><i>1473</i>&nbsp;                return BookKeeper.this.getLedgerManager();</b>
+<i>1474</i>&nbsp;            }
+<i>1475</i>&nbsp;
+<i>1476</i>&nbsp;            @Override
+<i>1477</i>&nbsp;            public BookieWatcher getBookieWatcher() {
+<b class="nc"><i>1478</i>&nbsp;                return BookKeeper.this.getBookieWatcher();</b>
+<i>1479</i>&nbsp;            }
+<i>1480</i>&nbsp;
+<i>1481</i>&nbsp;            @Override
+<i>1482</i>&nbsp;            public EnsemblePlacementPolicy getPlacementPolicy() {
+<b class="nc"><i>1483</i>&nbsp;                return BookKeeper.this.getPlacementPolicy();</b>
+<i>1484</i>&nbsp;            }
+<i>1485</i>&nbsp;
+<i>1486</i>&nbsp;            @Override
+<i>1487</i>&nbsp;            public BookieClient getBookieClient() {
+<b class="fc"><i>1488</i>&nbsp;                return BookKeeper.this.getBookieClient();</b>
+<i>1489</i>&nbsp;            }
+<i>1490</i>&nbsp;
+<i>1491</i>&nbsp;            @Override
+<i>1492</i>&nbsp;            public OrderedExecutor getMainWorkerPool() {
+<b class="fc"><i>1493</i>&nbsp;                return BookKeeper.this.getMainWorkerPool();</b>
+<i>1494</i>&nbsp;            }
+<i>1495</i>&nbsp;
+<i>1496</i>&nbsp;            @Override
+<i>1497</i>&nbsp;            public OrderedScheduler getScheduler() {
+<b class="nc"><i>1498</i>&nbsp;                return BookKeeper.this.getScheduler();</b>
+<i>1499</i>&nbsp;            }
+<i>1500</i>&nbsp;
+<i>1501</i>&nbsp;            @Override
+<i>1502</i>&nbsp;            public BookKeeperClientStats getClientStats() {
+<b class="fc"><i>1503</i>&nbsp;                return clientStats;</b>
+<i>1504</i>&nbsp;            }
+<i>1505</i>&nbsp;
+<i>1506</i>&nbsp;            @Override
+<i>1507</i>&nbsp;            public boolean isClientClosed() {
+<b class="nc"><i>1508</i>&nbsp;                return BookKeeper.this.isClosed();</b>
+<i>1509</i>&nbsp;            }
+<i>1510</i>&nbsp;
+<i>1511</i>&nbsp;            @Override
+<i>1512</i>&nbsp;            public ByteBufAllocator getByteBufAllocator() {
+<b class="fc"><i>1513</i>&nbsp;                return allocator;</b>
+<i>1514</i>&nbsp;            }
+<i>1515</i>&nbsp;        };
+<i>1516</i>&nbsp;
+<i>1517</i>&nbsp;    ClientContext getClientCtx() {
+<b class="fc"><i>1518</i>&nbsp;        return clientCtx;</b>
+<i>1519</i>&nbsp;    }
+<i>1520</i>&nbsp;}
+</div>
+</div>
+
+<div class="footer">
+    
+    <div style="float:right;">generated on 2021-06-28 15:57</div>
+</div>
+</body>
+</html>

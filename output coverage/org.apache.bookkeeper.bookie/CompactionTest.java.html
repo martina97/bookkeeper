@@ -1,0 +1,1490 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CompactionTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$myBookieFenceLedgerTest.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.bookie</a> &gt; <span class="el_source">CompactionTest.java</span></div><h1>CompactionTest.java</h1><pre class="source lang-java linenums">/*
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.bookie;
+
+import static org.apache.bookkeeper.bookie.BookKeeperServerStats.ACTIVE_ENTRY_LOG_COUNT;
+import static org.apache.bookkeeper.bookie.BookKeeperServerStats.ACTIVE_ENTRY_LOG_SPACE_BYTES;
+import static org.apache.bookkeeper.bookie.BookKeeperServerStats.MAJOR_COMPACTION_COUNT;
+import static org.apache.bookkeeper.bookie.BookKeeperServerStats.MINOR_COMPACTION_COUNT;
+import static org.apache.bookkeeper.bookie.BookKeeperServerStats.RECLAIMED_COMPACTION_SPACE_BYTES;
+import static org.apache.bookkeeper.bookie.BookKeeperServerStats.RECLAIMED_DELETION_SPACE_BYTES;
+import static org.apache.bookkeeper.bookie.BookKeeperServerStats.THREAD_RUNTIME;
+import static org.apache.bookkeeper.bookie.TransactionalEntryLogCompactor.COMPACTED_SUFFIX;
+import static org.apache.bookkeeper.meta.MetadataDrivers.runFunctionWithLedgerManagerFactory;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import com.google.common.util.concurrent.UncheckedExecutionException;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import io.netty.buffer.UnpooledByteBufAllocator;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import org.apache.bookkeeper.bookie.LedgerDirsManager.NoWritableLedgerDirException;
+import org.apache.bookkeeper.client.BookKeeper;
+import org.apache.bookkeeper.client.BookKeeper.DigestType;
+import org.apache.bookkeeper.client.LedgerEntry;
+import org.apache.bookkeeper.client.LedgerHandle;
+import org.apache.bookkeeper.client.api.LedgerMetadata;
+import org.apache.bookkeeper.conf.ServerConfiguration;
+import org.apache.bookkeeper.conf.TestBKConfiguration;
+import org.apache.bookkeeper.meta.LedgerManager;
+import org.apache.bookkeeper.proto.BookieServer;
+import org.apache.bookkeeper.proto.BookkeeperInternalCallbacks.LedgerMetadataListener;
+import org.apache.bookkeeper.proto.BookkeeperInternalCallbacks.Processor;
+import org.apache.bookkeeper.proto.checksum.DigestManager;
+import org.apache.bookkeeper.stats.NullStatsLogger;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.apache.bookkeeper.test.TestStatsProvider;
+import org.apache.bookkeeper.util.DiskChecker;
+import org.apache.bookkeeper.util.HardLink;
+import org.apache.bookkeeper.util.TestUtils;
+import org.apache.bookkeeper.versioning.Version;
+import org.apache.bookkeeper.versioning.Versioned;
+import org.apache.zookeeper.AsyncCallback;
+import org.junit.Before;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * This class tests the entry log compaction functionality.
+ */
+public abstract class CompactionTest extends BookKeeperClusterTestCase {
+
+<span class="nc" id="L88">    private static final Logger LOG = LoggerFactory.getLogger(CompactionTest.class);</span>
+
+    private static final int ENTRY_SIZE = 1024;
+    private static final int NUM_BOOKIES = 1;
+
+    private final boolean isThrottleByBytes;
+    private final DigestType digestType;
+    private final byte[] passwdBytes;
+    private final int numEntries;
+    private final int gcWaitTime;
+    private final double minorCompactionThreshold;
+    private final double majorCompactionThreshold;
+    private final long minorCompactionInterval;
+    private final long majorCompactionInterval;
+    private final String msg;
+
+    public CompactionTest(boolean isByBytes) {
+<span class="nc" id="L105">        super(NUM_BOOKIES);</span>
+
+<span class="nc" id="L107">        this.isThrottleByBytes = isByBytes;</span>
+<span class="nc" id="L108">        this.digestType = DigestType.CRC32;</span>
+<span class="nc" id="L109">        this.passwdBytes = &quot;&quot;.getBytes();</span>
+<span class="nc" id="L110">        numEntries = 100;</span>
+<span class="nc" id="L111">        gcWaitTime = 1000;</span>
+<span class="nc" id="L112">        minorCompactionThreshold = 0.1f;</span>
+<span class="nc" id="L113">        majorCompactionThreshold = 0.5f;</span>
+<span class="nc" id="L114">        minorCompactionInterval = 2 * gcWaitTime / 1000;</span>
+<span class="nc" id="L115">        majorCompactionInterval = 4 * gcWaitTime / 1000;</span>
+
+        // a dummy message
+<span class="nc" id="L118">        StringBuilder msgSB = new StringBuilder();</span>
+<span class="nc bnc" id="L119" title="All 2 branches missed.">        for (int i = 0; i &lt; ENTRY_SIZE; i++) {</span>
+<span class="nc" id="L120">            msgSB.append(&quot;a&quot;);</span>
+        }
+<span class="nc" id="L122">        msg = msgSB.toString();</span>
+<span class="nc" id="L123">    }</span>
+
+    @Before
+    @Override
+    public void setUp() throws Exception {
+        // Set up the configuration properties needed.
+<span class="nc" id="L129">        baseConf.setEntryLogSizeLimit(numEntries * ENTRY_SIZE);</span>
+        // Disable skip list for compaction
+<span class="nc" id="L131">        baseConf.setGcWaitTime(gcWaitTime);</span>
+<span class="nc" id="L132">        baseConf.setFlushInterval(100);</span>
+<span class="nc" id="L133">        baseConf.setMinorCompactionThreshold(minorCompactionThreshold);</span>
+<span class="nc" id="L134">        baseConf.setMajorCompactionThreshold(majorCompactionThreshold);</span>
+<span class="nc" id="L135">        baseConf.setMinorCompactionInterval(minorCompactionInterval);</span>
+<span class="nc" id="L136">        baseConf.setMajorCompactionInterval(majorCompactionInterval);</span>
+<span class="nc" id="L137">        baseConf.setEntryLogFilePreAllocationEnabled(false);</span>
+<span class="nc" id="L138">        baseConf.setLedgerStorageClass(InterleavedLedgerStorage.class.getName());</span>
+<span class="nc" id="L139">        baseConf.setIsThrottleByBytes(this.isThrottleByBytes);</span>
+<span class="nc" id="L140">        baseConf.setIsForceGCAllowWhenNoSpace(false);</span>
+
+<span class="nc" id="L142">        super.setUp();</span>
+<span class="nc" id="L143">    }</span>
+
+    private GarbageCollectorThread getGCThread() {
+<span class="nc" id="L146">        assertEquals(1, bs.size());</span>
+<span class="nc" id="L147">        BookieServer server = bs.get(0);</span>
+<span class="nc" id="L148">        return ((InterleavedLedgerStorage) server.getBookie().ledgerStorage).gcThread;</span>
+    }
+
+    LedgerHandle[] prepareData(int numEntryLogs, boolean changeNum)
+        throws Exception {
+        // since an entry log file can hold at most 100 entries
+        // first ledger write 2 entries, which is less than low water mark
+<span class="nc" id="L155">        int num1 = 2;</span>
+        // third ledger write more than high water mark entries
+<span class="nc" id="L157">        int num3 = (int) (numEntries * 0.7f);</span>
+        // second ledger write remaining entries, which is higher than low water mark
+        // and less than high water mark
+<span class="nc" id="L160">        int num2 = numEntries - num3 - num1;</span>
+
+<span class="nc" id="L162">        LedgerHandle[] lhs = new LedgerHandle[3];</span>
+<span class="nc bnc" id="L163" title="All 2 branches missed.">        for (int i = 0; i &lt; 3; ++i) {</span>
+<span class="nc" id="L164">            lhs[i] = bkc.createLedger(NUM_BOOKIES, NUM_BOOKIES, digestType, passwdBytes);</span>
+        }
+
+<span class="nc bnc" id="L167" title="All 2 branches missed.">        for (int n = 0; n &lt; numEntryLogs; n++) {</span>
+<span class="nc bnc" id="L168" title="All 2 branches missed.">            for (int k = 0; k &lt; num1; k++) {</span>
+<span class="nc" id="L169">                lhs[0].addEntry(msg.getBytes());</span>
+            }
+<span class="nc bnc" id="L171" title="All 2 branches missed.">            for (int k = 0; k &lt; num2; k++) {</span>
+<span class="nc" id="L172">                lhs[1].addEntry(msg.getBytes());</span>
+            }
+<span class="nc bnc" id="L174" title="All 2 branches missed.">            for (int k = 0; k &lt; num3; k++) {</span>
+<span class="nc" id="L175">                lhs[2].addEntry(msg.getBytes());</span>
+            }
+<span class="nc bnc" id="L177" title="All 2 branches missed.">            if (changeNum) {</span>
+<span class="nc" id="L178">                --num2;</span>
+<span class="nc" id="L179">                ++num3;</span>
+            }
+        }
+
+<span class="nc" id="L183">        return lhs;</span>
+    }
+
+    private void verifyLedger(long lid, long startEntryId, long endEntryId) throws Exception {
+<span class="nc" id="L187">        LedgerHandle lh = bkc.openLedger(lid, digestType, passwdBytes);</span>
+<span class="nc" id="L188">        Enumeration&lt;LedgerEntry&gt; entries = lh.readEntries(startEntryId, endEntryId);</span>
+<span class="nc bnc" id="L189" title="All 2 branches missed.">        while (entries.hasMoreElements()) {</span>
+<span class="nc" id="L190">            LedgerEntry entry = entries.nextElement();</span>
+<span class="nc" id="L191">            assertEquals(msg, new String(entry.getEntry()));</span>
+<span class="nc" id="L192">        }</span>
+<span class="nc" id="L193">    }</span>
+
+    @Test
+    public void testDisableCompaction() throws Exception {
+        // prepare data
+<span class="nc" id="L198">        LedgerHandle[] lhs = prepareData(3, false);</span>
+
+        // disable compaction
+<span class="nc" id="L201">        baseConf.setMinorCompactionThreshold(0.0f);</span>
+<span class="nc" id="L202">        baseConf.setMajorCompactionThreshold(0.0f);</span>
+
+        // restart bookies
+<span class="nc" id="L205">        restartBookies(baseConf);</span>
+
+<span class="nc" id="L207">        long lastMinorCompactionTime = getGCThread().lastMinorCompactionTime;</span>
+<span class="nc" id="L208">        long lastMajorCompactionTime = getGCThread().lastMajorCompactionTime;</span>
+
+        // remove ledger2 and ledger3
+        // so entry log 1 and 2 would have ledger1 entries left
+<span class="nc" id="L212">        bkc.deleteLedger(lhs[1].getId());</span>
+<span class="nc" id="L213">        bkc.deleteLedger(lhs[2].getId());</span>
+<span class="nc" id="L214">        LOG.info(&quot;Finished deleting the ledgers contains most entries.&quot;);</span>
+
+<span class="nc" id="L216">        assertFalse(getGCThread().enableMajorCompaction);</span>
+<span class="nc" id="L217">        assertFalse(getGCThread().enableMinorCompaction);</span>
+<span class="nc" id="L218">        getGCThread().triggerGC().get();</span>
+
+        // after garbage collection, compaction should not be executed
+<span class="nc" id="L221">        assertEquals(lastMinorCompactionTime, getGCThread().lastMinorCompactionTime);</span>
+<span class="nc" id="L222">        assertEquals(lastMajorCompactionTime, getGCThread().lastMajorCompactionTime);</span>
+
+        // entry logs ([0,1].log) should not be compacted.
+<span class="nc bnc" id="L225" title="All 2 branches missed.">        for (File ledgerDirectory : tmpDirs) {</span>
+<span class="nc" id="L226">            assertTrue(&quot;Not Found entry log file ([0,1].log that should have been compacted in ledgerDirectory: &quot;</span>
+<span class="nc" id="L227">                            + ledgerDirectory, TestUtils.hasLogFiles(ledgerDirectory, false, 0, 1));</span>
+<span class="nc" id="L228">        }</span>
+<span class="nc" id="L229">    }</span>
+
+    @Test
+    public void testForceGarbageCollection() throws Exception {
+<span class="nc" id="L233">        ServerConfiguration conf = newServerConfiguration();</span>
+<span class="nc" id="L234">        conf.setGcWaitTime(60000);</span>
+<span class="nc" id="L235">        conf.setMinorCompactionInterval(120000);</span>
+<span class="nc" id="L236">        conf.setMajorCompactionInterval(240000);</span>
+<span class="nc" id="L237">        LedgerDirsManager dirManager = new LedgerDirsManager(conf, conf.getLedgerDirs(),</span>
+<span class="nc" id="L238">                new DiskChecker(conf.getDiskUsageThreshold(), conf.getDiskUsageWarnThreshold()));</span>
+<span class="nc" id="L239">        CheckpointSource cp = new CheckpointSource() {</span>
+            @Override
+            public Checkpoint newCheckpoint() {
+                // Do nothing.
+<span class="nc" id="L243">                return null;</span>
+            }
+
+            @Override
+            public void checkpointComplete(Checkpoint checkPoint, boolean compact)
+                throws IOException {
+                // Do nothing.
+<span class="nc" id="L250">            }</span>
+        };
+<span class="nc bnc" id="L252" title="All 2 branches missed.">        for (File journalDir : conf.getJournalDirs()) {</span>
+<span class="nc" id="L253">            Bookie.checkDirectoryStructure(journalDir);</span>
+        }
+<span class="nc bnc" id="L255" title="All 2 branches missed.">        for (File dir : dirManager.getAllLedgerDirs()) {</span>
+<span class="nc" id="L256">            Bookie.checkDirectoryStructure(dir);</span>
+<span class="nc" id="L257">        }</span>
+<span class="nc" id="L258">        runFunctionWithLedgerManagerFactory(conf, lmf -&gt; {</span>
+<span class="nc" id="L259">            try (LedgerManager lm = lmf.newLedgerManager()) {</span>
+<span class="nc" id="L260">                InterleavedLedgerStorage storage = new InterleavedLedgerStorage();</span>
+<span class="nc" id="L261">                storage.initialize(</span>
+                    conf,
+                    lm,
+                    dirManager,
+                    dirManager,
+                    null,
+                    cp,
+                    Checkpointer.NULL,
+                    NullStatsLogger.INSTANCE,
+                    UnpooledByteBufAllocator.DEFAULT);
+<span class="nc" id="L271">                storage.start();</span>
+<span class="nc" id="L272">                long startTime = System.currentTimeMillis();</span>
+<span class="nc" id="L273">                storage.gcThread.enableForceGC();</span>
+<span class="nc" id="L274">                storage.gcThread.triggerGC().get(); //major</span>
+<span class="nc" id="L275">                storage.gcThread.triggerGC().get(); //minor</span>
+                // Minor and Major compaction times should be larger than when we started
+                // this test.
+<span class="nc bnc" id="L278" title="All 4 branches missed.">                assertTrue(&quot;Minor or major compaction did not trigger even on forcing.&quot;,</span>
+                    storage.gcThread.lastMajorCompactionTime &gt; startTime
+                        &amp;&amp; storage.gcThread.lastMinorCompactionTime &gt; startTime);
+<span class="nc" id="L281">                storage.shutdown();</span>
+<span class="nc" id="L282">            } catch (Exception e) {</span>
+<span class="nc" id="L283">                throw new UncheckedExecutionException(e.getMessage(), e);</span>
+<span class="nc" id="L284">            }</span>
+<span class="nc" id="L285">            return null;</span>
+        });
+<span class="nc" id="L287">    }</span>
+
+    @Test
+    public void testMinorCompaction() throws Exception {
+        // prepare data
+<span class="nc" id="L292">        LedgerHandle[] lhs = prepareData(3, false);</span>
+
+<span class="nc bnc" id="L294" title="All 2 branches missed.">        for (LedgerHandle lh : lhs) {</span>
+<span class="nc" id="L295">            lh.close();</span>
+        }
+
+        // disable major compaction
+<span class="nc" id="L299">        baseConf.setMajorCompactionThreshold(0.0f);</span>
+<span class="nc" id="L300">        baseConf.setGcWaitTime(60000);</span>
+<span class="nc" id="L301">        baseConf.setMinorCompactionInterval(120000);</span>
+<span class="nc" id="L302">        baseConf.setMajorCompactionInterval(240000);</span>
+
+        // restart bookies
+<span class="nc" id="L305">        restartBookies(baseConf);</span>
+
+<span class="nc" id="L307">        getGCThread().enableForceGC();</span>
+<span class="nc" id="L308">        getGCThread().triggerGC().get();</span>
+<span class="nc" id="L309">        assertTrue(</span>
+                &quot;ACTIVE_ENTRY_LOG_COUNT should have been updated&quot;,
+<span class="nc" id="L311">                getStatsProvider(0)</span>
+<span class="nc" id="L312">                        .getGauge(&quot;bookie.gc.&quot; + ACTIVE_ENTRY_LOG_COUNT)</span>
+<span class="nc bnc" id="L313" title="All 2 branches missed.">                        .getSample().intValue() &gt; 0);</span>
+<span class="nc" id="L314">        assertTrue(</span>
+                &quot;ACTIVE_ENTRY_LOG_SPACE_BYTES should have been updated&quot;,
+<span class="nc" id="L316">                getStatsProvider(0)</span>
+<span class="nc" id="L317">                        .getGauge(&quot;bookie.gc.&quot; + ACTIVE_ENTRY_LOG_SPACE_BYTES)</span>
+<span class="nc bnc" id="L318" title="All 2 branches missed.">                        .getSample().intValue() &gt; 0);</span>
+
+<span class="nc" id="L320">        long lastMinorCompactionTime = getGCThread().lastMinorCompactionTime;</span>
+<span class="nc" id="L321">        long lastMajorCompactionTime = getGCThread().lastMajorCompactionTime;</span>
+<span class="nc" id="L322">        assertFalse(getGCThread().enableMajorCompaction);</span>
+<span class="nc" id="L323">        assertTrue(getGCThread().enableMinorCompaction);</span>
+
+        // remove ledger2 and ledger3
+<span class="nc" id="L326">        bkc.deleteLedger(lhs[1].getId());</span>
+<span class="nc" id="L327">        bkc.deleteLedger(lhs[2].getId());</span>
+
+<span class="nc" id="L329">        LOG.info(&quot;Finished deleting the ledgers contains most entries.&quot;);</span>
+<span class="nc" id="L330">        getGCThread().enableForceGC();</span>
+<span class="nc" id="L331">        getGCThread().triggerGC().get();</span>
+
+        // after garbage collection, major compaction should not be executed
+<span class="nc" id="L334">        assertEquals(lastMajorCompactionTime, getGCThread().lastMajorCompactionTime);</span>
+<span class="nc bnc" id="L335" title="All 2 branches missed.">        assertTrue(getGCThread().lastMinorCompactionTime &gt; lastMinorCompactionTime);</span>
+
+        // entry logs ([0,1,2].log) should be compacted.
+<span class="nc bnc" id="L338" title="All 2 branches missed.">        for (File ledgerDirectory : tmpDirs) {</span>
+<span class="nc" id="L339">            assertFalse(&quot;Found entry log file ([0,1,2].log that should have not been compacted in ledgerDirectory: &quot;</span>
+<span class="nc" id="L340">                            + ledgerDirectory, TestUtils.hasLogFiles(ledgerDirectory, true, 0, 1, 2));</span>
+<span class="nc" id="L341">        }</span>
+
+        // even though entry log files are removed, we still can access entries for ledger1
+        // since those entries have been compacted to a new entry log
+<span class="nc" id="L345">        verifyLedger(lhs[0].getId(), 0, lhs[0].getLastAddConfirmed());</span>
+
+<span class="nc" id="L347">        assertTrue(</span>
+                &quot;RECLAIMED_COMPACTION_SPACE_BYTES should have been updated&quot;,
+<span class="nc" id="L349">                getStatsProvider(0)</span>
+<span class="nc" id="L350">                        .getCounter(&quot;bookie.gc.&quot; + RECLAIMED_COMPACTION_SPACE_BYTES)</span>
+<span class="nc bnc" id="L351" title="All 2 branches missed.">                        .get().intValue() &gt; 0);</span>
+<span class="nc" id="L352">        assertTrue(</span>
+                &quot;RECLAIMED_DELETION_SPACE_BYTES should have been updated&quot;,
+<span class="nc" id="L354">                getStatsProvider(0)</span>
+<span class="nc" id="L355">                        .getCounter(&quot;bookie.gc.&quot; + RECLAIMED_DELETION_SPACE_BYTES)</span>
+<span class="nc bnc" id="L356" title="All 2 branches missed.">                        .get().intValue() &gt; 0);</span>
+<span class="nc" id="L357">    }</span>
+
+    @Test
+    public void testMinorCompactionWithNoWritableLedgerDirs() throws Exception {
+        // prepare data
+<span class="nc" id="L362">        LedgerHandle[] lhs = prepareData(3, false);</span>
+
+<span class="nc bnc" id="L364" title="All 2 branches missed.">        for (LedgerHandle lh : lhs) {</span>
+<span class="nc" id="L365">            lh.close();</span>
+        }
+
+        // disable major compaction
+<span class="nc" id="L369">        baseConf.setMajorCompactionThreshold(0.0f);</span>
+<span class="nc" id="L370">        baseConf.setGcWaitTime(60000);</span>
+<span class="nc" id="L371">        baseConf.setMinorCompactionInterval(120000);</span>
+<span class="nc" id="L372">        baseConf.setMajorCompactionInterval(240000);</span>
+
+        // restart bookies
+<span class="nc" id="L375">        restartBookies(baseConf);</span>
+
+<span class="nc" id="L377">        long lastMinorCompactionTime = getGCThread().lastMinorCompactionTime;</span>
+<span class="nc" id="L378">        long lastMajorCompactionTime = getGCThread().lastMajorCompactionTime;</span>
+<span class="nc" id="L379">        assertFalse(getGCThread().enableMajorCompaction);</span>
+<span class="nc" id="L380">        assertTrue(getGCThread().enableMinorCompaction);</span>
+
+<span class="nc bnc" id="L382" title="All 2 branches missed.">        for (BookieServer bookieServer : bs) {</span>
+<span class="nc" id="L383">            Bookie bookie = bookieServer.getBookie();</span>
+<span class="nc" id="L384">            LedgerDirsManager ledgerDirsManager = bookie.getLedgerDirsManager();</span>
+<span class="nc" id="L385">            List&lt;File&gt; ledgerDirs = ledgerDirsManager.getAllLedgerDirs();</span>
+            // if all the discs are full then Major and Minor compaction would be disabled since
+            // 'isForceGCAllowWhenNoSpace' is not enabled. Check LedgerDirsListener of interleavedLedgerStorage.
+<span class="nc bnc" id="L388" title="All 2 branches missed.">            for (File ledgerDir : ledgerDirs) {</span>
+<span class="nc" id="L389">                ledgerDirsManager.addToFilledDirs(ledgerDir);</span>
+<span class="nc" id="L390">            }</span>
+<span class="nc" id="L391">        }</span>
+
+        // remove ledger2 and ledger3
+<span class="nc" id="L394">        bkc.deleteLedger(lhs[1].getId());</span>
+<span class="nc" id="L395">        bkc.deleteLedger(lhs[2].getId());</span>
+
+<span class="nc" id="L397">        LOG.info(&quot;Finished deleting the ledgers contains most entries.&quot;);</span>
+<span class="nc" id="L398">        getGCThread().triggerGC().get();</span>
+
+        // after garbage collection, major compaction should not be executed
+<span class="nc" id="L401">        assertEquals(lastMajorCompactionTime, getGCThread().lastMajorCompactionTime);</span>
+<span class="nc" id="L402">        assertEquals(lastMinorCompactionTime, getGCThread().lastMinorCompactionTime);</span>
+
+        // entry logs ([0,1,2].log) should still remain, because both major and Minor compaction are disabled.
+<span class="nc bnc" id="L405" title="All 2 branches missed.">        for (File ledgerDirectory : tmpDirs) {</span>
+<span class="nc" id="L406">            assertTrue(</span>
+                    &quot;All the entry log files ([0,1,2].log are not available, which is not expected&quot; + ledgerDirectory,
+<span class="nc" id="L408">                    TestUtils.hasLogFiles(ledgerDirectory, false, 0, 1, 2));</span>
+<span class="nc" id="L409">        }</span>
+<span class="nc" id="L410">    }</span>
+
+    @Test
+    public void testMinorCompactionWithNoWritableLedgerDirsButIsForceGCAllowWhenNoSpaceIsSet() throws Exception {
+<span class="nc" id="L414">        stopAllBookies();</span>
+<span class="nc" id="L415">        ServerConfiguration conf = newServerConfiguration();</span>
+        // disable major compaction
+<span class="nc" id="L417">        conf.setMajorCompactionThreshold(0.0f);</span>
+        // here we are setting isForceGCAllowWhenNoSpace to true, so Major and Minor compaction wont be disabled in case
+        // when discs are full
+<span class="nc" id="L420">        conf.setIsForceGCAllowWhenNoSpace(true);</span>
+<span class="nc" id="L421">        conf.setGcWaitTime(600000);</span>
+<span class="nc" id="L422">        conf.setMinorCompactionInterval(120000);</span>
+<span class="nc" id="L423">        conf.setMajorCompactionInterval(240000);</span>
+        // We need at least 2 ledger dirs because compaction will flush ledger cache, and will
+        // trigger relocateIndexFileAndFlushHeader. If we only have one ledger dir, compaction will always fail
+        // when there's no writeable ledger dir.
+<span class="nc" id="L427">        File ledgerDir1 = createTempDir(&quot;ledger&quot;, &quot;test1&quot;);</span>
+<span class="nc" id="L428">        File ledgerDir2 = createTempDir(&quot;ledger&quot;, &quot;test2&quot;);</span>
+<span class="nc" id="L429">        File journalDir = createTempDir(&quot;journal&quot;, &quot;test&quot;);</span>
+<span class="nc" id="L430">        String[] ledgerDirNames = new String[]{</span>
+<span class="nc" id="L431">            ledgerDir1.getPath(),</span>
+<span class="nc" id="L432">            ledgerDir2.getPath()</span>
+        };
+<span class="nc" id="L434">        conf.setLedgerDirNames(ledgerDirNames);</span>
+<span class="nc" id="L435">        conf.setJournalDirName(journalDir.getPath());</span>
+<span class="nc" id="L436">        BookieServer server = startBookie(conf);</span>
+<span class="nc" id="L437">        bs.add(server);</span>
+<span class="nc" id="L438">        bsConfs.add(conf);</span>
+        // prepare data
+<span class="nc" id="L440">        LedgerHandle[] lhs = prepareData(3, false);</span>
+
+<span class="nc bnc" id="L442" title="All 2 branches missed.">        for (LedgerHandle lh : lhs) {</span>
+<span class="nc" id="L443">            lh.close();</span>
+        }
+
+<span class="nc" id="L446">        long lastMinorCompactionTime = getGCThread().lastMinorCompactionTime;</span>
+<span class="nc" id="L447">        long lastMajorCompactionTime = getGCThread().lastMajorCompactionTime;</span>
+<span class="nc" id="L448">        assertFalse(getGCThread().enableMajorCompaction);</span>
+<span class="nc" id="L449">        assertTrue(getGCThread().enableMinorCompaction);</span>
+
+<span class="nc bnc" id="L451" title="All 2 branches missed.">        for (BookieServer bookieServer : bs) {</span>
+<span class="nc" id="L452">            Bookie bookie = bookieServer.getBookie();</span>
+<span class="nc" id="L453">            bookie.ledgerStorage.flush();</span>
+<span class="nc" id="L454">            bookie.dirsMonitor.shutdown();</span>
+<span class="nc" id="L455">            LedgerDirsManager ledgerDirsManager = bookie.getLedgerDirsManager();</span>
+<span class="nc" id="L456">            List&lt;File&gt; ledgerDirs = ledgerDirsManager.getAllLedgerDirs();</span>
+            // Major and Minor compaction are not disabled even though discs are full. Check LedgerDirsListener of
+            // interleavedLedgerStorage.
+<span class="nc bnc" id="L459" title="All 2 branches missed.">            for (File ledgerDir : ledgerDirs) {</span>
+<span class="nc" id="L460">                ledgerDirsManager.addToFilledDirs(ledgerDir);</span>
+<span class="nc" id="L461">            }</span>
+<span class="nc" id="L462">        }</span>
+
+        // remove ledger2 and ledger3
+<span class="nc" id="L465">        bkc.deleteLedger(lhs[1].getId());</span>
+<span class="nc" id="L466">        bkc.deleteLedger(lhs[2].getId());</span>
+
+<span class="nc" id="L468">        LOG.info(&quot;Finished deleting the ledgers contains most entries.&quot;);</span>
+<span class="nc" id="L469">        getGCThread().triggerGC(true, false, false).get();</span>
+
+        // after garbage collection, major compaction should not be executed
+<span class="nc" id="L472">        assertEquals(lastMajorCompactionTime, getGCThread().lastMajorCompactionTime);</span>
+<span class="nc bnc" id="L473" title="All 2 branches missed.">        assertTrue(getGCThread().lastMinorCompactionTime &gt; lastMinorCompactionTime);</span>
+
+        // though all discs are added to filled dirs list, compaction would succeed, because in EntryLogger for
+        // allocating newlog
+        // we get getWritableLedgerDirsForNewLog() of ledgerDirsManager instead of getWritableLedgerDirs()
+        // entry logs ([0,1,2].log) should be compacted.
+<span class="nc bnc" id="L479" title="All 2 branches missed.">        for (File ledgerDirectory : server.getBookie().getLedgerDirsManager().getAllLedgerDirs()) {</span>
+<span class="nc" id="L480">            assertFalse(&quot;Found entry log file ([0,1,2].log that should have not been compacted in ledgerDirectory: &quot;</span>
+<span class="nc" id="L481">                    + ledgerDirectory, TestUtils.hasLogFiles(ledgerDirectory.getParentFile(), true, 0, 1, 2));</span>
+<span class="nc" id="L482">        }</span>
+
+        // even entry log files are removed, we still can access entries for ledger1
+        // since those entries has been compacted to new entry log
+<span class="nc" id="L486">        verifyLedger(lhs[0].getId(), 0, lhs[0].getLastAddConfirmed());</span>
+
+        // for the sake of validity of test lets make sure that there is no writableLedgerDir in the bookies
+<span class="nc bnc" id="L489" title="All 2 branches missed.">        for (BookieServer bookieServer : bs) {</span>
+<span class="nc" id="L490">            Bookie bookie = bookieServer.getBookie();</span>
+<span class="nc" id="L491">            LedgerDirsManager ledgerDirsManager = bookie.getLedgerDirsManager();</span>
+            try {
+<span class="nc" id="L493">                List&lt;File&gt; ledgerDirs = ledgerDirsManager.getWritableLedgerDirs();</span>
+                // it is expected not to have any writableLedgerDirs since we added all of them to FilledDirs
+<span class="nc" id="L495">                fail(&quot;It is expected not to have any writableLedgerDirs&quot;);</span>
+<span class="nc" id="L496">            } catch (NoWritableLedgerDirException nwe) {</span>
+
+<span class="nc" id="L498">            }</span>
+<span class="nc" id="L499">        }</span>
+<span class="nc" id="L500">    }</span>
+
+    @Test
+    public void testMajorCompaction() throws Exception {
+
+        // prepare data
+<span class="nc" id="L506">        LedgerHandle[] lhs = prepareData(3, true);</span>
+
+<span class="nc bnc" id="L508" title="All 2 branches missed.">        for (LedgerHandle lh : lhs) {</span>
+<span class="nc" id="L509">            lh.close();</span>
+        }
+
+        // disable minor compaction
+<span class="nc" id="L513">        baseConf.setMinorCompactionThreshold(0.0f);</span>
+<span class="nc" id="L514">        baseConf.setGcWaitTime(60000);</span>
+<span class="nc" id="L515">        baseConf.setMinorCompactionInterval(120000);</span>
+<span class="nc" id="L516">        baseConf.setMajorCompactionInterval(240000);</span>
+
+        // restart bookies
+<span class="nc" id="L519">        restartBookies(baseConf);</span>
+
+<span class="nc" id="L521">        long lastMinorCompactionTime = getGCThread().lastMinorCompactionTime;</span>
+<span class="nc" id="L522">        long lastMajorCompactionTime = getGCThread().lastMajorCompactionTime;</span>
+<span class="nc" id="L523">        assertTrue(getGCThread().enableMajorCompaction);</span>
+<span class="nc" id="L524">        assertFalse(getGCThread().enableMinorCompaction);</span>
+
+        // remove ledger1 and ledger3
+<span class="nc" id="L527">        bkc.deleteLedger(lhs[0].getId());</span>
+<span class="nc" id="L528">        bkc.deleteLedger(lhs[2].getId());</span>
+<span class="nc" id="L529">        LOG.info(&quot;Finished deleting the ledgers contains most entries.&quot;);</span>
+<span class="nc" id="L530">        getGCThread().enableForceGC();</span>
+<span class="nc" id="L531">        getGCThread().triggerGC().get();</span>
+
+        // after garbage collection, minor compaction should not be executed
+<span class="nc bnc" id="L534" title="All 2 branches missed.">        assertTrue(getGCThread().lastMinorCompactionTime &gt; lastMinorCompactionTime);</span>
+<span class="nc bnc" id="L535" title="All 2 branches missed.">        assertTrue(getGCThread().lastMajorCompactionTime &gt; lastMajorCompactionTime);</span>
+
+        // entry logs ([0,1,2].log) should be compacted
+<span class="nc bnc" id="L538" title="All 2 branches missed.">        for (File ledgerDirectory : tmpDirs) {</span>
+<span class="nc" id="L539">            assertFalse(&quot;Found entry log file ([0,1,2].log that should have not been compacted in ledgerDirectory: &quot;</span>
+<span class="nc" id="L540">                      + ledgerDirectory, TestUtils.hasLogFiles(ledgerDirectory, true, 0, 1, 2));</span>
+<span class="nc" id="L541">        }</span>
+
+        // even entry log files are removed, we still can access entries for ledger2
+        // since those entries has been compacted to new entry log
+<span class="nc" id="L545">        verifyLedger(lhs[1].getId(), 0, lhs[1].getLastAddConfirmed());</span>
+<span class="nc" id="L546">    }</span>
+
+    @Test
+    public void testCompactionPersistence() throws Exception {
+        /*
+         * for this test scenario we are assuming that there will be only one
+         * bookie in the cluster
+         */
+<span class="nc" id="L554">        assertEquals(&quot;Numbers of Bookies in this cluster&quot;, 1, numBookies);</span>
+        /*
+         * this test is for validating EntryLogCompactor, so make sure
+         * TransactionalCompaction is not enabled.
+         */
+<span class="nc" id="L559">        assertFalse(&quot;Bookies must be using EntryLogCompactor&quot;, baseConf.getUseTransactionalCompaction());</span>
+        // prepare data
+<span class="nc" id="L561">        LedgerHandle[] lhs = prepareData(3, true);</span>
+
+<span class="nc bnc" id="L563" title="All 2 branches missed.">        for (LedgerHandle lh : lhs) {</span>
+<span class="nc" id="L564">            lh.close();</span>
+        }
+
+        // disable minor compaction
+<span class="nc" id="L568">        baseConf.setMinorCompactionThreshold(0.0f);</span>
+<span class="nc" id="L569">        baseConf.setGcWaitTime(60000);</span>
+<span class="nc" id="L570">        baseConf.setMinorCompactionInterval(120000);</span>
+<span class="nc" id="L571">        baseConf.setMajorCompactionInterval(240000);</span>
+
+        // restart bookies
+<span class="nc" id="L574">        restartBookies(baseConf);</span>
+
+<span class="nc" id="L576">        long lastMinorCompactionTime = getGCThread().lastMinorCompactionTime;</span>
+<span class="nc" id="L577">        long lastMajorCompactionTime = getGCThread().lastMajorCompactionTime;</span>
+<span class="nc" id="L578">        assertTrue(getGCThread().enableMajorCompaction);</span>
+<span class="nc" id="L579">        assertFalse(getGCThread().enableMinorCompaction);</span>
+
+        // remove ledger1 and ledger3
+<span class="nc" id="L582">        bkc.deleteLedger(lhs[0].getId());</span>
+<span class="nc" id="L583">        bkc.deleteLedger(lhs[2].getId());</span>
+<span class="nc" id="L584">        LOG.info(&quot;Finished deleting the ledgers contains most entries.&quot;);</span>
+<span class="nc" id="L585">        getGCThread().enableForceGC();</span>
+<span class="nc" id="L586">        getGCThread().triggerGC().get();</span>
+
+        // after garbage collection, minor compaction should not be executed
+<span class="nc bnc" id="L589" title="All 2 branches missed.">        assertTrue(getGCThread().lastMinorCompactionTime &gt; lastMinorCompactionTime);</span>
+<span class="nc bnc" id="L590" title="All 2 branches missed.">        assertTrue(getGCThread().lastMajorCompactionTime &gt; lastMajorCompactionTime);</span>
+
+        // entry logs ([0,1,2].log) should be compacted
+<span class="nc bnc" id="L593" title="All 2 branches missed.">        for (File ledgerDirectory : tmpDirs) {</span>
+<span class="nc" id="L594">            assertFalse(&quot;Found entry log file ([0,1,2].log that should have not been compacted in ledgerDirectory: &quot;</span>
+<span class="nc" id="L595">                    + ledgerDirectory, TestUtils.hasLogFiles(ledgerDirectory, true, 0, 1, 2));</span>
+<span class="nc" id="L596">        }</span>
+
+        // even entry log files are removed, we still can access entries for
+        // ledger2
+        // since those entries has been compacted to new entry log
+<span class="nc" id="L601">        long ledgerId = lhs[1].getId();</span>
+<span class="nc" id="L602">        long lastAddConfirmed = lhs[1].getLastAddConfirmed();</span>
+<span class="nc" id="L603">        verifyLedger(ledgerId, 0, lastAddConfirmed);</span>
+
+        /*
+         * there is only one bookie in the cluster so we should be able to read
+         * entries from this bookie.
+         */
+<span class="nc" id="L609">        ServerConfiguration bookieServerConfig = bs.get(0).getBookie().conf;</span>
+<span class="nc" id="L610">        ServerConfiguration newBookieConf = new ServerConfiguration(bookieServerConfig);</span>
+        /*
+         * by reusing bookieServerConfig and setting metadataServiceUri to null
+         * we can create/start new Bookie instance using the same data
+         * (journal/ledger/index) of the existing BookeieServer for our testing
+         * purpose.
+         */
+<span class="nc" id="L617">        newBookieConf.setMetadataServiceUri(null);</span>
+<span class="nc" id="L618">        Bookie newbookie = new Bookie(newBookieConf);</span>
+
+<span class="nc" id="L620">        DigestManager digestManager = DigestManager.instantiate(ledgerId, passwdBytes,</span>
+<span class="nc" id="L621">                BookKeeper.DigestType.toProtoDigestType(digestType), UnpooledByteBufAllocator.DEFAULT,</span>
+<span class="nc" id="L622">                baseClientConf.getUseV2WireProtocol());</span>
+
+<span class="nc bnc" id="L624" title="All 2 branches missed.">        for (long entryId = 0; entryId &lt;= lastAddConfirmed; entryId++) {</span>
+<span class="nc" id="L625">            ByteBuf readEntryBufWithChecksum = newbookie.readEntry(ledgerId, entryId);</span>
+<span class="nc" id="L626">            ByteBuf readEntryBuf = digestManager.verifyDigestAndReturnData(entryId, readEntryBufWithChecksum);</span>
+<span class="nc" id="L627">            byte[] readEntryBytes = new byte[readEntryBuf.readableBytes()];</span>
+<span class="nc" id="L628">            readEntryBuf.readBytes(readEntryBytes);</span>
+<span class="nc" id="L629">            assertEquals(msg, new String(readEntryBytes));</span>
+        }
+<span class="nc" id="L631">    }</span>
+
+    @Test
+    public void testCompactionWhenLedgerDirsAreFull() throws Exception {
+        /*
+         * for this test scenario we are assuming that there will be only one
+         * bookie in the cluster
+         */
+<span class="nc" id="L639">        assertEquals(&quot;Numbers of Bookies in this cluster&quot;, 1, bsConfs.size());</span>
+<span class="nc" id="L640">        ServerConfiguration serverConfig = bsConfs.get(0);</span>
+<span class="nc" id="L641">        File ledgerDir = serverConfig.getLedgerDirs()[0];</span>
+<span class="nc" id="L642">        assertEquals(&quot;Number of Ledgerdirs for this bookie&quot;, 1, serverConfig.getLedgerDirs().length);</span>
+<span class="nc bnc" id="L643" title="All 2 branches missed.">        assertTrue(&quot;indexdirs should be configured to null&quot;, null == serverConfig.getIndexDirs());</span>
+        /*
+         * this test is for validating EntryLogCompactor, so make sure
+         * TransactionalCompaction is not enabled.
+         */
+<span class="nc" id="L648">        assertFalse(&quot;Bookies must be using EntryLogCompactor&quot;, baseConf.getUseTransactionalCompaction());</span>
+        // prepare data
+<span class="nc" id="L650">        LedgerHandle[] lhs = prepareData(3, true);</span>
+
+<span class="nc bnc" id="L652" title="All 2 branches missed.">        for (LedgerHandle lh : lhs) {</span>
+<span class="nc" id="L653">            lh.close();</span>
+        }
+
+<span class="nc" id="L656">        bs.get(0).getBookie().getLedgerStorage().flush();</span>
+<span class="nc" id="L657">        assertTrue(</span>
+                &quot;entry log file ([0,1,2].log should be available in ledgerDirectory: &quot;
+<span class="nc" id="L659">                        + serverConfig.getLedgerDirs()[0],</span>
+<span class="nc" id="L660">                TestUtils.hasLogFiles(serverConfig.getLedgerDirs()[0], false, 0, 1, 2));</span>
+
+<span class="nc" id="L662">        long usableSpace = ledgerDir.getUsableSpace();</span>
+<span class="nc" id="L663">        long totalSpace = ledgerDir.getTotalSpace();</span>
+
+<span class="nc" id="L665">        baseConf.setForceReadOnlyBookie(true);</span>
+<span class="nc" id="L666">        baseConf.setIsForceGCAllowWhenNoSpace(true);</span>
+        // disable minor compaction
+<span class="nc" id="L668">        baseConf.setMinorCompactionThreshold(0.0f);</span>
+<span class="nc" id="L669">        baseConf.setGcWaitTime(60000);</span>
+<span class="nc" id="L670">        baseConf.setMinorCompactionInterval(120000);</span>
+<span class="nc" id="L671">        baseConf.setMajorCompactionInterval(240000);</span>
+<span class="nc" id="L672">        baseConf.setMinUsableSizeForEntryLogCreation(1);</span>
+<span class="nc" id="L673">        baseConf.setMinUsableSizeForIndexFileCreation(1);</span>
+<span class="nc" id="L674">        baseConf.setDiskUsageThreshold((1.0f - ((float) usableSpace / (float) totalSpace)) * 0.9f);</span>
+<span class="nc" id="L675">        baseConf.setDiskUsageWarnThreshold(0.0f);</span>
+
+        /*
+         * because of the value set for diskUsageThreshold, when bookie is
+         * restarted it wouldn't find any writableledgerdir. But we have set
+         * very low values for minUsableSizeForEntryLogCreation and
+         * minUsableSizeForIndexFileCreation, so it should be able to create
+         * EntryLog file and Index file for doing compaction.
+         */
+
+        // restart bookies
+<span class="nc" id="L686">        restartBookies(baseConf);</span>
+
+<span class="nc" id="L688">        assertFalse(&quot;There shouldn't be any writable ledgerDir&quot;,</span>
+<span class="nc" id="L689">                bs.get(0).getBookie().getLedgerDirsManager().hasWritableLedgerDirs());</span>
+
+<span class="nc" id="L691">        long lastMinorCompactionTime = getGCThread().lastMinorCompactionTime;</span>
+<span class="nc" id="L692">        long lastMajorCompactionTime = getGCThread().lastMajorCompactionTime;</span>
+<span class="nc" id="L693">        assertTrue(getGCThread().enableMajorCompaction);</span>
+<span class="nc" id="L694">        assertFalse(getGCThread().enableMinorCompaction);</span>
+
+        // remove ledger1 and ledger3
+<span class="nc" id="L697">        bkc.deleteLedger(lhs[0].getId());</span>
+<span class="nc" id="L698">        bkc.deleteLedger(lhs[2].getId());</span>
+<span class="nc" id="L699">        LOG.info(&quot;Finished deleting the ledgers contains most entries.&quot;);</span>
+<span class="nc" id="L700">        getGCThread().enableForceGC();</span>
+<span class="nc" id="L701">        getGCThread().triggerGC().get();</span>
+
+        // after garbage collection, minor compaction should not be executed
+<span class="nc bnc" id="L704" title="All 2 branches missed.">        assertTrue(getGCThread().lastMinorCompactionTime &gt; lastMinorCompactionTime);</span>
+<span class="nc bnc" id="L705" title="All 2 branches missed.">        assertTrue(getGCThread().lastMajorCompactionTime &gt; lastMajorCompactionTime);</span>
+
+        /*
+         * GarbageCollection should have succeeded, so no previous entrylog
+         * should be available.
+         */
+
+        // entry logs ([0,1,2].log) should be compacted
+<span class="nc bnc" id="L713" title="All 2 branches missed.">        for (File ledgerDirectory : tmpDirs) {</span>
+<span class="nc" id="L714">            assertFalse(&quot;Found entry log file ([0,1,2].log that should have not been compacted in ledgerDirectory: &quot;</span>
+<span class="nc" id="L715">                    + ledgerDirectory, TestUtils.hasLogFiles(ledgerDirectory, true, 0, 1, 2));</span>
+<span class="nc" id="L716">        }</span>
+
+        // even entry log files are removed, we still can access entries for
+        // ledger2
+        // since those entries has been compacted to new entry log
+<span class="nc" id="L721">        long ledgerId = lhs[1].getId();</span>
+<span class="nc" id="L722">        long lastAddConfirmed = lhs[1].getLastAddConfirmed();</span>
+<span class="nc" id="L723">        verifyLedger(ledgerId, 0, lastAddConfirmed);</span>
+<span class="nc" id="L724">    }</span>
+
+    @Test
+    public void testMajorCompactionAboveThreshold() throws Exception {
+        // prepare data
+<span class="nc" id="L729">        LedgerHandle[] lhs = prepareData(3, false);</span>
+
+<span class="nc bnc" id="L731" title="All 2 branches missed.">        for (LedgerHandle lh : lhs) {</span>
+<span class="nc" id="L732">            lh.close();</span>
+        }
+
+<span class="nc" id="L735">        long lastMinorCompactionTime = getGCThread().lastMinorCompactionTime;</span>
+<span class="nc" id="L736">        long lastMajorCompactionTime = getGCThread().lastMajorCompactionTime;</span>
+<span class="nc" id="L737">        assertTrue(getGCThread().enableMajorCompaction);</span>
+<span class="nc" id="L738">        assertTrue(getGCThread().enableMinorCompaction);</span>
+
+        // remove ledger1 and ledger2
+<span class="nc" id="L741">        bkc.deleteLedger(lhs[0].getId());</span>
+<span class="nc" id="L742">        bkc.deleteLedger(lhs[1].getId());</span>
+<span class="nc" id="L743">        LOG.info(&quot;Finished deleting the ledgers contains less entries.&quot;);</span>
+<span class="nc" id="L744">        getGCThread().enableForceGC();</span>
+<span class="nc" id="L745">        getGCThread().triggerGC().get();</span>
+
+        // after garbage collection, minor compaction should not be executed
+<span class="nc bnc" id="L748" title="All 2 branches missed.">        assertTrue(getGCThread().lastMinorCompactionTime &gt; lastMinorCompactionTime);</span>
+<span class="nc bnc" id="L749" title="All 2 branches missed.">        assertTrue(getGCThread().lastMajorCompactionTime &gt; lastMajorCompactionTime);</span>
+
+        // entry logs ([0,1,2].log) should not be compacted
+<span class="nc bnc" id="L752" title="All 2 branches missed.">        for (File ledgerDirectory : tmpDirs) {</span>
+<span class="nc" id="L753">            assertTrue(&quot;Not Found entry log file ([1,2].log that should have been compacted in ledgerDirectory: &quot;</span>
+<span class="nc" id="L754">                     + ledgerDirectory, TestUtils.hasLogFiles(ledgerDirectory, false, 0, 1, 2));</span>
+<span class="nc" id="L755">        }</span>
+<span class="nc" id="L756">    }</span>
+
+    @Test
+    public void testCompactionSmallEntryLogs() throws Exception {
+
+        // create a ledger to write a few entries
+<span class="nc" id="L762">        LedgerHandle alh = bkc.createLedger(NUM_BOOKIES, NUM_BOOKIES, digestType, &quot;&quot;.getBytes());</span>
+<span class="nc bnc" id="L763" title="All 2 branches missed.">        for (int i = 0; i &lt; 3; i++) {</span>
+<span class="nc" id="L764">           alh.addEntry(msg.getBytes());</span>
+        }
+<span class="nc" id="L766">        alh.close();</span>
+
+        // restart bookie to roll entry log files
+<span class="nc" id="L769">        restartBookies();</span>
+
+        // prepare data
+<span class="nc" id="L772">        LedgerHandle[] lhs = prepareData(3, false);</span>
+
+<span class="nc bnc" id="L774" title="All 2 branches missed.">        for (LedgerHandle lh : lhs) {</span>
+<span class="nc" id="L775">            lh.close();</span>
+        }
+
+        // remove ledger2 and ledger3
+<span class="nc" id="L779">        bkc.deleteLedger(lhs[1].getId());</span>
+<span class="nc" id="L780">        bkc.deleteLedger(lhs[2].getId());</span>
+<span class="nc" id="L781">        LOG.info(&quot;Finished deleting the ledgers contains most entries.&quot;);</span>
+        // restart bookies again to roll entry log files.
+<span class="nc" id="L783">        restartBookies();</span>
+
+<span class="nc" id="L785">        getGCThread().enableForceGC();</span>
+<span class="nc" id="L786">        getGCThread().triggerGC().get();</span>
+
+        // entry logs (0.log) should not be compacted
+        // entry logs ([1,2,3].log) should be compacted.
+<span class="nc bnc" id="L790" title="All 2 branches missed.">        for (File ledgerDirectory : tmpDirs) {</span>
+<span class="nc" id="L791">            assertTrue(&quot;Not Found entry log file ([0].log that should have been compacted in ledgerDirectory: &quot;</span>
+<span class="nc" id="L792">                     + ledgerDirectory, TestUtils.hasLogFiles(ledgerDirectory, true, 0));</span>
+<span class="nc" id="L793">            assertFalse(&quot;Found entry log file ([1,2,3].log that should have not been compacted in ledgerDirectory: &quot;</span>
+<span class="nc" id="L794">                      + ledgerDirectory, TestUtils.hasLogFiles(ledgerDirectory, true, 1, 2, 3));</span>
+<span class="nc" id="L795">        }</span>
+
+        // even entry log files are removed, we still can access entries for ledger1
+        // since those entries has been compacted to new entry log
+<span class="nc" id="L799">        verifyLedger(lhs[0].getId(), 0, lhs[0].getLastAddConfirmed());</span>
+<span class="nc" id="L800">    }</span>
+
+    /**
+     * Test that compaction doesnt add to index without having persisted
+     * entrylog first. This is needed because compaction doesn't go through the journal.
+     * {@see https://issues.apache.org/jira/browse/BOOKKEEPER-530}
+     * {@see https://issues.apache.org/jira/browse/BOOKKEEPER-664}
+     */
+    @Test
+    public void testCompactionSafety() throws Exception {
+<span class="nc" id="L810">        tearDown(); // I dont want the test infrastructure</span>
+<span class="nc" id="L811">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L812">        final Set&lt;Long&gt; ledgers = Collections.newSetFromMap(new ConcurrentHashMap&lt;Long, Boolean&gt;());</span>
+<span class="nc" id="L813">        LedgerManager manager = getLedgerManager(ledgers);</span>
+
+<span class="nc" id="L815">        File tmpDir = createTempDir(&quot;bkTest&quot;, &quot;.dir&quot;);</span>
+<span class="nc" id="L816">        File curDir = Bookie.getCurrentDirectory(tmpDir);</span>
+<span class="nc" id="L817">        Bookie.checkDirectoryStructure(curDir);</span>
+<span class="nc" id="L818">        conf.setLedgerDirNames(new String[] {tmpDir.toString()});</span>
+
+<span class="nc" id="L820">        conf.setEntryLogSizeLimit(EntryLogger.LOGFILE_HEADER_SIZE + 3 * (4 + ENTRY_SIZE));</span>
+<span class="nc" id="L821">        conf.setGcWaitTime(100);</span>
+<span class="nc" id="L822">        conf.setMinorCompactionThreshold(0.7f);</span>
+<span class="nc" id="L823">        conf.setMajorCompactionThreshold(0.0f);</span>
+<span class="nc" id="L824">        conf.setMinorCompactionInterval(1);</span>
+<span class="nc" id="L825">        conf.setMajorCompactionInterval(10);</span>
+<span class="nc" id="L826">        conf.setPageLimit(1);</span>
+
+<span class="nc" id="L828">        CheckpointSource checkpointSource = new CheckpointSource() {</span>
+<span class="nc" id="L829">                AtomicInteger idGen = new AtomicInteger(0);</span>
+<span class="nc" id="L830">                class MyCheckpoint implements CheckpointSource.Checkpoint {</span>
+<span class="nc" id="L831">                    int id = idGen.incrementAndGet();</span>
+                    @Override
+                    public int compareTo(CheckpointSource.Checkpoint o) {
+<span class="nc bnc" id="L834" title="All 2 branches missed.">                        if (o == CheckpointSource.Checkpoint.MAX) {</span>
+<span class="nc" id="L835">                            return -1;</span>
+<span class="nc bnc" id="L836" title="All 2 branches missed.">                        } else if (o == CheckpointSource.Checkpoint.MIN) {</span>
+<span class="nc" id="L837">                            return 1;</span>
+                        }
+<span class="nc" id="L839">                        return id - ((MyCheckpoint) o).id;</span>
+                    }
+                }
+
+                @Override
+                public CheckpointSource.Checkpoint newCheckpoint() {
+<span class="nc" id="L845">                    return new MyCheckpoint();</span>
+                }
+
+                public void checkpointComplete(CheckpointSource.Checkpoint checkpoint, boolean compact)
+                        throws IOException {
+<span class="nc" id="L850">                }</span>
+            };
+<span class="nc" id="L852">        final byte[] key = &quot;foobar&quot;.getBytes();</span>
+<span class="nc" id="L853">        File log0 = new File(curDir, &quot;0.log&quot;);</span>
+<span class="nc" id="L854">        LedgerDirsManager dirs = new LedgerDirsManager(conf, conf.getLedgerDirs(),</span>
+<span class="nc" id="L855">                new DiskChecker(conf.getDiskUsageThreshold(), conf.getDiskUsageWarnThreshold()));</span>
+<span class="nc" id="L856">        assertFalse(&quot;Log shouldnt exist&quot;, log0.exists());</span>
+<span class="nc" id="L857">        InterleavedLedgerStorage storage = new InterleavedLedgerStorage();</span>
+<span class="nc" id="L858">        storage.initialize(</span>
+            conf,
+            manager,
+            dirs,
+            dirs,
+            null,
+            checkpointSource,
+            Checkpointer.NULL,
+            NullStatsLogger.INSTANCE,
+            UnpooledByteBufAllocator.DEFAULT);
+<span class="nc" id="L868">        ledgers.add(1L);</span>
+<span class="nc" id="L869">        ledgers.add(2L);</span>
+<span class="nc" id="L870">        ledgers.add(3L);</span>
+<span class="nc" id="L871">        storage.setMasterKey(1, key);</span>
+<span class="nc" id="L872">        storage.setMasterKey(2, key);</span>
+<span class="nc" id="L873">        storage.setMasterKey(3, key);</span>
+<span class="nc" id="L874">        storage.addEntry(genEntry(1, 1, ENTRY_SIZE));</span>
+<span class="nc" id="L875">        storage.addEntry(genEntry(2, 1, ENTRY_SIZE));</span>
+<span class="nc" id="L876">        storage.addEntry(genEntry(2, 2, ENTRY_SIZE));</span>
+<span class="nc" id="L877">        storage.addEntry(genEntry(3, 2, ENTRY_SIZE));</span>
+<span class="nc" id="L878">        storage.flush();</span>
+<span class="nc" id="L879">        storage.shutdown();</span>
+
+<span class="nc" id="L881">        assertTrue(&quot;Log should exist&quot;, log0.exists());</span>
+<span class="nc" id="L882">        ledgers.remove(2L);</span>
+<span class="nc" id="L883">        ledgers.remove(3L);</span>
+
+<span class="nc" id="L885">        storage = new InterleavedLedgerStorage();</span>
+<span class="nc" id="L886">        storage.initialize(</span>
+            conf,
+            manager,
+            dirs, dirs, null,
+            checkpointSource,
+            Checkpointer.NULL,
+            NullStatsLogger.INSTANCE,
+            UnpooledByteBufAllocator.DEFAULT);
+<span class="nc" id="L894">        storage.start();</span>
+<span class="nc bnc" id="L895" title="All 2 branches missed.">        for (int i = 0; i &lt; 10; i++) {</span>
+<span class="nc bnc" id="L896" title="All 2 branches missed.">            if (!log0.exists()) {</span>
+<span class="nc" id="L897">                break;</span>
+            }
+<span class="nc" id="L899">            Thread.sleep(1000);</span>
+<span class="nc" id="L900">            storage.entryLogger.flush(); // simulate sync thread</span>
+        }
+<span class="nc" id="L902">        assertFalse(&quot;Log shouldnt exist&quot;, log0.exists());</span>
+
+<span class="nc" id="L904">        ledgers.add(4L);</span>
+<span class="nc" id="L905">        storage.setMasterKey(4, key);</span>
+<span class="nc" id="L906">        storage.addEntry(genEntry(4, 1, ENTRY_SIZE)); // force ledger 1 page to flush</span>
+<span class="nc" id="L907">        storage.shutdown();</span>
+
+<span class="nc" id="L909">        storage = new InterleavedLedgerStorage();</span>
+<span class="nc" id="L910">        storage.initialize(</span>
+            conf,
+            manager,
+            dirs,
+            dirs,
+            null,
+            checkpointSource,
+            Checkpointer.NULL,
+            NullStatsLogger.INSTANCE,
+            UnpooledByteBufAllocator.DEFAULT);
+<span class="nc" id="L920">        storage.getEntry(1, 1); // entry should exist</span>
+<span class="nc" id="L921">    }</span>
+
+    private LedgerManager getLedgerManager(final Set&lt;Long&gt; ledgers) {
+<span class="nc" id="L924">        LedgerManager manager = new LedgerManager() {</span>
+                @Override
+                public CompletableFuture&lt;Versioned&lt;LedgerMetadata&gt;&gt; createLedgerMetadata(long lid,
+                                                                                         LedgerMetadata metadata) {
+<span class="nc" id="L928">                    unsupported();</span>
+<span class="nc" id="L929">                    return null;</span>
+                }
+                @Override
+                public CompletableFuture&lt;Void&gt; removeLedgerMetadata(long ledgerId, Version version) {
+<span class="nc" id="L933">                    unsupported();</span>
+<span class="nc" id="L934">                    return null;</span>
+                }
+                @Override
+                public CompletableFuture&lt;Versioned&lt;LedgerMetadata&gt;&gt; readLedgerMetadata(long ledgerId) {
+<span class="nc" id="L938">                    unsupported();</span>
+<span class="nc" id="L939">                    return null;</span>
+                }
+                @Override
+                public CompletableFuture&lt;Versioned&lt;LedgerMetadata&gt;&gt; writeLedgerMetadata(long ledgerId,
+                                                                                        LedgerMetadata metadata,
+                                                                                        Version currentVersion) {
+<span class="nc" id="L945">                    unsupported();</span>
+<span class="nc" id="L946">                    return null;</span>
+                }
+                @Override
+                public void asyncProcessLedgers(Processor&lt;Long&gt; processor,
+                                                AsyncCallback.VoidCallback finalCb,
+                        Object context, int successRc, int failureRc) {
+<span class="nc" id="L952">                    unsupported();</span>
+<span class="nc" id="L953">                }</span>
+                @Override
+                public void registerLedgerMetadataListener(long ledgerId,
+                        LedgerMetadataListener listener) {
+<span class="nc" id="L957">                    unsupported();</span>
+<span class="nc" id="L958">                }</span>
+                @Override
+                public void unregisterLedgerMetadataListener(long ledgerId,
+                        LedgerMetadataListener listener) {
+<span class="nc" id="L962">                    unsupported();</span>
+<span class="nc" id="L963">                }</span>
+                @Override
+<span class="nc" id="L965">                public void close() throws IOException {}</span>
+
+                void unsupported() {
+<span class="nc" id="L968">                    LOG.error(&quot;Unsupported operation called&quot;, new Exception());</span>
+<span class="nc" id="L969">                    throw new RuntimeException(&quot;Unsupported op&quot;);</span>
+                }
+
+                @Override
+                public LedgerRangeIterator getLedgerRanges(long zkOpTimeoutMs) {
+<span class="nc" id="L974">                    final AtomicBoolean hasnext = new AtomicBoolean(true);</span>
+<span class="nc" id="L975">                    return new LedgerManager.LedgerRangeIterator() {</span>
+                        @Override
+                        public boolean hasNext() throws IOException {
+<span class="nc" id="L978">                            return hasnext.get();</span>
+                        }
+                        @Override
+                        public LedgerManager.LedgerRange next() throws IOException {
+<span class="nc" id="L982">                            hasnext.set(false);</span>
+<span class="nc" id="L983">                            return new LedgerManager.LedgerRange(ledgers);</span>
+                        }
+                    };
+                 }
+            };
+<span class="nc" id="L988">        return manager;</span>
+    }
+
+    /**
+     * Test that compaction should execute silently when there is no entry logs
+     * to compact. {@see https://issues.apache.org/jira/browse/BOOKKEEPER-700}
+     */
+    @Test
+    public void testWhenNoLogsToCompact() throws Exception {
+<span class="nc" id="L997">        tearDown(); // I dont want the test infrastructure</span>
+<span class="nc" id="L998">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L999">        File tmpDir = createTempDir(&quot;bkTest&quot;, &quot;.dir&quot;);</span>
+<span class="nc" id="L1000">        File curDir = Bookie.getCurrentDirectory(tmpDir);</span>
+<span class="nc" id="L1001">        Bookie.checkDirectoryStructure(curDir);</span>
+<span class="nc" id="L1002">        conf.setLedgerDirNames(new String[] { tmpDir.toString() });</span>
+
+<span class="nc" id="L1004">        LedgerDirsManager dirs = new LedgerDirsManager(conf, conf.getLedgerDirs(),</span>
+<span class="nc" id="L1005">                new DiskChecker(conf.getDiskUsageThreshold(), conf.getDiskUsageWarnThreshold()));</span>
+<span class="nc" id="L1006">        final Set&lt;Long&gt; ledgers = Collections</span>
+<span class="nc" id="L1007">                .newSetFromMap(new ConcurrentHashMap&lt;Long, Boolean&gt;());</span>
+<span class="nc" id="L1008">        LedgerManager manager = getLedgerManager(ledgers);</span>
+<span class="nc" id="L1009">        CheckpointSource checkpointSource = new CheckpointSource() {</span>
+
+            @Override
+            public Checkpoint newCheckpoint() {
+<span class="nc" id="L1013">                return null;</span>
+            }
+
+            @Override
+            public void checkpointComplete(Checkpoint checkpoint,
+                    boolean compact) throws IOException {
+<span class="nc" id="L1019">            }</span>
+        };
+<span class="nc" id="L1021">        InterleavedLedgerStorage storage = new InterleavedLedgerStorage();</span>
+<span class="nc" id="L1022">        storage.initialize(</span>
+            conf,
+            manager,
+            dirs,
+            dirs,
+            null,
+            checkpointSource,
+            Checkpointer.NULL,
+            NullStatsLogger.INSTANCE,
+            UnpooledByteBufAllocator.DEFAULT);
+
+<span class="nc" id="L1033">        double threshold = 0.1;</span>
+        // shouldn't throw exception
+<span class="nc" id="L1035">        storage.gcThread.doCompactEntryLogs(threshold);</span>
+<span class="nc" id="L1036">    }</span>
+
+    /**
+     * Test extractMetaFromEntryLogs optimized method to avoid excess memory usage.
+     */
+    public void testExtractMetaFromEntryLogs() throws Exception {
+        // Always run this test with Throttle enabled.
+<span class="nc" id="L1043">        baseConf.setIsThrottleByBytes(true);</span>
+        // restart bookies
+<span class="nc" id="L1045">        restartBookies(baseConf);</span>
+<span class="nc" id="L1046">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L1047">        File tmpDir = createTempDir(&quot;bkTest&quot;, &quot;.dir&quot;);</span>
+<span class="nc" id="L1048">        File curDir = Bookie.getCurrentDirectory(tmpDir);</span>
+<span class="nc" id="L1049">        Bookie.checkDirectoryStructure(curDir);</span>
+<span class="nc" id="L1050">        conf.setLedgerDirNames(new String[] { tmpDir.toString() });</span>
+
+<span class="nc" id="L1052">        LedgerDirsManager dirs = new LedgerDirsManager(conf, conf.getLedgerDirs(),</span>
+<span class="nc" id="L1053">            new DiskChecker(conf.getDiskUsageThreshold(), conf.getDiskUsageWarnThreshold()));</span>
+<span class="nc" id="L1054">        final Set&lt;Long&gt; ledgers = Collections</span>
+<span class="nc" id="L1055">            .newSetFromMap(new ConcurrentHashMap&lt;Long, Boolean&gt;());</span>
+
+<span class="nc" id="L1057">        LedgerManager manager = getLedgerManager(ledgers);</span>
+
+<span class="nc" id="L1059">        CheckpointSource checkpointSource = new CheckpointSource() {</span>
+
+            @Override
+            public Checkpoint newCheckpoint() {
+<span class="nc" id="L1063">                return null;</span>
+            }
+
+            @Override
+            public void checkpointComplete(Checkpoint checkpoint,
+                                           boolean compact) throws IOException {
+<span class="nc" id="L1069">            }</span>
+        };
+<span class="nc" id="L1071">        InterleavedLedgerStorage storage = new InterleavedLedgerStorage();</span>
+<span class="nc" id="L1072">        storage.initialize(conf, manager, dirs, dirs, null, checkpointSource,</span>
+            Checkpointer.NULL, NullStatsLogger.INSTANCE, UnpooledByteBufAllocator.DEFAULT);
+
+<span class="nc bnc" id="L1075" title="All 2 branches missed.">        for (long ledger = 0; ledger &lt;= 10; ledger++) {</span>
+<span class="nc" id="L1076">            ledgers.add(ledger);</span>
+<span class="nc bnc" id="L1077" title="All 2 branches missed.">            for (int entry = 1; entry &lt;= 50; entry++) {</span>
+                try {
+<span class="nc" id="L1079">                    storage.addEntry(genEntry(ledger, entry, ENTRY_SIZE));</span>
+<span class="nc" id="L1080">                } catch (IOException e) {</span>
+                    //ignore exception on failure to add entry.
+<span class="nc" id="L1082">                }</span>
+            }
+        }
+
+<span class="nc" id="L1086">        storage.flush();</span>
+<span class="nc" id="L1087">        storage.shutdown();</span>
+
+<span class="nc" id="L1089">        storage = new InterleavedLedgerStorage();</span>
+<span class="nc" id="L1090">        storage.initialize(conf, manager, dirs, dirs, null, checkpointSource,</span>
+                           Checkpointer.NULL, NullStatsLogger.INSTANCE, UnpooledByteBufAllocator.DEFAULT);
+
+<span class="nc" id="L1093">        long startingEntriesCount = storage.gcThread.entryLogger.getLeastUnflushedLogId()</span>
+            - storage.gcThread.scannedLogId;
+<span class="nc" id="L1095">        LOG.info(&quot;The old Log Entry count is: &quot; + startingEntriesCount);</span>
+
+<span class="nc" id="L1097">        Map&lt;Long, EntryLogMetadata&gt; entryLogMetaData = new HashMap&lt;&gt;();</span>
+<span class="nc" id="L1098">        long finalEntriesCount = storage.gcThread.entryLogger.getLeastUnflushedLogId()</span>
+            - storage.gcThread.scannedLogId;
+<span class="nc" id="L1100">        LOG.info(&quot;The latest Log Entry count is: &quot; + finalEntriesCount);</span>
+
+<span class="nc bnc" id="L1102" title="All 2 branches missed.">        assertTrue(&quot;The GC did not clean up entries...&quot;, startingEntriesCount != finalEntriesCount);</span>
+<span class="nc bnc" id="L1103" title="All 2 branches missed.">        assertTrue(&quot;Entries Count is zero&quot;, finalEntriesCount == 0);</span>
+<span class="nc" id="L1104">    }</span>
+
+    private ByteBuf genEntry(long ledger, long entry, int size) {
+<span class="nc" id="L1107">        ByteBuf bb = Unpooled.buffer(size);</span>
+<span class="nc" id="L1108">        bb.writeLong(ledger);</span>
+<span class="nc" id="L1109">        bb.writeLong(entry);</span>
+<span class="nc bnc" id="L1110" title="All 2 branches missed.">        while (bb.isWritable()) {</span>
+<span class="nc" id="L1111">            bb.writeByte((byte) 0xFF);</span>
+        }
+<span class="nc" id="L1113">        return bb;</span>
+    }
+
+    /**
+     * Suspend garbage collection when suspendMajor/suspendMinor is set.
+     */
+    @Test
+    public void testSuspendGarbageCollection() throws Exception {
+<span class="nc" id="L1121">        ServerConfiguration conf = newServerConfiguration();</span>
+<span class="nc" id="L1122">        conf.setGcWaitTime(500);</span>
+<span class="nc" id="L1123">        conf.setMinorCompactionInterval(1);</span>
+<span class="nc" id="L1124">        conf.setMajorCompactionInterval(2);</span>
+<span class="nc" id="L1125">        runFunctionWithLedgerManagerFactory(conf, lmf -&gt; {</span>
+<span class="nc" id="L1126">            try (LedgerManager lm = lmf.newLedgerManager()) {</span>
+<span class="nc" id="L1127">                testSuspendGarbageCollection(conf, lm);</span>
+<span class="nc" id="L1128">            } catch (Exception e) {</span>
+<span class="nc" id="L1129">                throw new UncheckedExecutionException(e.getMessage(), e);</span>
+<span class="nc" id="L1130">            }</span>
+<span class="nc" id="L1131">            return null;</span>
+        });
+<span class="nc" id="L1133">    }</span>
+
+    private void testSuspendGarbageCollection(ServerConfiguration conf,
+                                              LedgerManager lm) throws Exception {
+<span class="nc" id="L1137">        LedgerDirsManager dirManager = new LedgerDirsManager(conf, conf.getLedgerDirs(),</span>
+<span class="nc" id="L1138">                new DiskChecker(conf.getDiskUsageThreshold(), conf.getDiskUsageWarnThreshold()));</span>
+<span class="nc" id="L1139">        CheckpointSource cp = new CheckpointSource() {</span>
+            @Override
+            public Checkpoint newCheckpoint() {
+                // Do nothing.
+<span class="nc" id="L1143">                return null;</span>
+            }
+
+            @Override
+            public void checkpointComplete(Checkpoint checkPoint, boolean compact)
+                throws IOException {
+                // Do nothing.
+<span class="nc" id="L1150">            }</span>
+        };
+<span class="nc bnc" id="L1152" title="All 2 branches missed.">        for (File journalDir : conf.getJournalDirs()) {</span>
+<span class="nc" id="L1153">            Bookie.checkDirectoryStructure(journalDir);</span>
+        }
+<span class="nc bnc" id="L1155" title="All 2 branches missed.">        for (File dir : dirManager.getAllLedgerDirs()) {</span>
+<span class="nc" id="L1156">            Bookie.checkDirectoryStructure(dir);</span>
+<span class="nc" id="L1157">        }</span>
+<span class="nc" id="L1158">        InterleavedLedgerStorage storage = new InterleavedLedgerStorage();</span>
+<span class="nc" id="L1159">        TestStatsProvider stats = new TestStatsProvider();</span>
+<span class="nc" id="L1160">        storage.initialize(</span>
+            conf,
+            lm,
+            dirManager,
+            dirManager,
+            null,
+            cp,
+            Checkpointer.NULL,
+<span class="nc" id="L1168">            stats.getStatsLogger(&quot;storage&quot;),</span>
+            UnpooledByteBufAllocator.DEFAULT);
+<span class="nc" id="L1170">        storage.start();</span>
+
+<span class="nc" id="L1172">        int majorCompactions = stats.getCounter(&quot;storage.gc.&quot; + MAJOR_COMPACTION_COUNT).get().intValue();</span>
+<span class="nc" id="L1173">        int minorCompactions = stats.getCounter(&quot;storage.gc.&quot; + MINOR_COMPACTION_COUNT).get().intValue();</span>
+<span class="nc" id="L1174">        Thread.sleep(conf.getMajorCompactionInterval() * 1000</span>
+<span class="nc" id="L1175">                + conf.getGcWaitTime());</span>
+<span class="nc" id="L1176">        assertTrue(</span>
+                &quot;Major compaction should have happened&quot;,
+<span class="nc bnc" id="L1178" title="All 2 branches missed.">                stats.getCounter(&quot;storage.gc.&quot; + MAJOR_COMPACTION_COUNT).get() &gt; majorCompactions);</span>
+
+        // test suspend Major GC.
+<span class="nc" id="L1181">        storage.gcThread.suspendMajorGC();</span>
+
+<span class="nc" id="L1183">        Thread.sleep(1000);</span>
+<span class="nc" id="L1184">        long startTime = System.currentTimeMillis();</span>
+<span class="nc" id="L1185">        majorCompactions = stats.getCounter(&quot;storage.gc.&quot; + MAJOR_COMPACTION_COUNT).get().intValue();</span>
+<span class="nc" id="L1186">        Thread.sleep(conf.getMajorCompactionInterval() * 1000</span>
+<span class="nc" id="L1187">                   + conf.getGcWaitTime());</span>
+<span class="nc bnc" id="L1188" title="All 2 branches missed.">        assertTrue(&quot;major compaction triggered while suspended&quot;,</span>
+                storage.gcThread.lastMajorCompactionTime &lt; startTime);
+<span class="nc" id="L1190">        assertTrue(&quot;major compaction triggered while suspended&quot;,</span>
+<span class="nc bnc" id="L1191" title="All 2 branches missed.">                stats.getCounter(&quot;storage.gc.&quot; + MAJOR_COMPACTION_COUNT).get() == majorCompactions);</span>
+
+        // test suspend Major GC.
+<span class="nc" id="L1194">        Thread.sleep(conf.getMinorCompactionInterval() * 1000</span>
+<span class="nc" id="L1195">                + conf.getGcWaitTime());</span>
+<span class="nc" id="L1196">        assertTrue(</span>
+                &quot;Minor compaction should have happened&quot;,
+<span class="nc bnc" id="L1198" title="All 2 branches missed.">                stats.getCounter(&quot;storage.gc.&quot; + MINOR_COMPACTION_COUNT).get() &gt; minorCompactions);</span>
+
+        // test suspend Minor GC.
+<span class="nc" id="L1201">        storage.gcThread.suspendMinorGC();</span>
+
+<span class="nc" id="L1203">        Thread.sleep(1000);</span>
+<span class="nc" id="L1204">        startTime = System.currentTimeMillis();</span>
+<span class="nc" id="L1205">        minorCompactions = stats.getCounter(&quot;storage.gc.&quot; + MINOR_COMPACTION_COUNT).get().intValue();</span>
+<span class="nc" id="L1206">        Thread.sleep(conf.getMajorCompactionInterval() * 1000</span>
+<span class="nc" id="L1207">                   + conf.getGcWaitTime());</span>
+<span class="nc bnc" id="L1208" title="All 2 branches missed.">        assertTrue(&quot;minor compaction triggered while suspended&quot;,</span>
+                storage.gcThread.lastMinorCompactionTime &lt; startTime);
+<span class="nc" id="L1210">        assertTrue(&quot;minor compaction triggered while suspended&quot;,</span>
+<span class="nc bnc" id="L1211" title="All 2 branches missed.">                stats.getCounter(&quot;storage.gc.&quot; + MINOR_COMPACTION_COUNT).get() == minorCompactions);</span>
+
+        // test resume
+<span class="nc" id="L1214">        storage.gcThread.resumeMinorGC();</span>
+<span class="nc" id="L1215">        storage.gcThread.resumeMajorGC();</span>
+
+<span class="nc" id="L1217">        Thread.sleep((conf.getMajorCompactionInterval() + conf.getMinorCompactionInterval()) * 1000</span>
+<span class="nc" id="L1218">                + (conf.getGcWaitTime() * 2));</span>
+<span class="nc" id="L1219">        assertTrue(</span>
+                &quot;Major compaction should have happened&quot;,
+<span class="nc bnc" id="L1221" title="All 2 branches missed.">                stats.getCounter(&quot;storage.gc.&quot; + MAJOR_COMPACTION_COUNT).get() &gt; majorCompactions);</span>
+<span class="nc" id="L1222">        assertTrue(</span>
+                &quot;Minor compaction should have happened&quot;,
+<span class="nc bnc" id="L1224" title="All 2 branches missed.">                stats.getCounter(&quot;storage.gc.&quot; + MINOR_COMPACTION_COUNT).get() &gt; minorCompactions);</span>
+<span class="nc" id="L1225">        assertTrue(</span>
+                &quot;gcThreadRunttime should be non-zero&quot;,
+<span class="nc bnc" id="L1227" title="All 2 branches missed.">                stats.getOpStatsLogger(&quot;storage.gc.&quot; + THREAD_RUNTIME).getSuccessCount() &gt; 0);</span>
+
+<span class="nc" id="L1229">    }</span>
+
+    @Test
+    public void testRecoverIndexWhenIndexIsPartiallyFlush() throws Exception {
+        // prepare data
+<span class="nc" id="L1234">        LedgerHandle[] lhs = prepareData(3, false);</span>
+
+<span class="nc bnc" id="L1236" title="All 2 branches missed.">        for (LedgerHandle lh : lhs) {</span>
+<span class="nc" id="L1237">            lh.close();</span>
+        }
+
+        // disable compaction
+<span class="nc" id="L1241">        baseConf.setMinorCompactionThreshold(0.0f);</span>
+<span class="nc" id="L1242">        baseConf.setMajorCompactionThreshold(0.0f);</span>
+<span class="nc" id="L1243">        baseConf.setGcWaitTime(600000);</span>
+
+        // restart bookies
+<span class="nc" id="L1246">        restartBookies(baseConf);</span>
+
+<span class="nc" id="L1248">        Bookie bookie = bs.get(0).getBookie();</span>
+<span class="nc" id="L1249">        InterleavedLedgerStorage storage = (InterleavedLedgerStorage) bookie.ledgerStorage;</span>
+
+        // remove ledger2 and ledger3
+<span class="nc" id="L1252">        bkc.deleteLedger(lhs[1].getId());</span>
+<span class="nc" id="L1253">        bkc.deleteLedger(lhs[2].getId());</span>
+
+<span class="nc" id="L1255">        LOG.info(&quot;Finished deleting the ledgers contains most entries.&quot;);</span>
+
+<span class="nc" id="L1257">        MockTransactionalEntryLogCompactor partialCompactionWorker = new MockTransactionalEntryLogCompactor(</span>
+            ((InterleavedLedgerStorage) bookie.ledgerStorage).gcThread);
+
+<span class="nc bnc" id="L1260" title="All 2 branches missed.">        for (long logId = 0; logId &lt; 3; logId++) {</span>
+<span class="nc" id="L1261">            EntryLogMetadata meta = storage.entryLogger.getEntryLogMetadata(logId);</span>
+<span class="nc" id="L1262">            partialCompactionWorker.compactWithIndexFlushFailure(meta);</span>
+        }
+
+        // entry logs ([0,1,2].log) should not be compacted because of partial flush throw IOException
+<span class="nc bnc" id="L1266" title="All 2 branches missed.">        for (File ledgerDirectory : tmpDirs) {</span>
+<span class="nc" id="L1267">            assertTrue(&quot;Entry log file ([0,1,2].log should not be compacted in ledgerDirectory: &quot;</span>
+<span class="nc" id="L1268">                + ledgerDirectory, TestUtils.hasLogFiles(ledgerDirectory, true, 0, 1, 2));</span>
+<span class="nc" id="L1269">        }</span>
+
+        // entries should be available
+<span class="nc" id="L1272">        verifyLedger(lhs[0].getId(), 0, lhs[0].getLastAddConfirmed());</span>
+
+        // But we should see .compacted file with index flush failure
+<span class="nc" id="L1275">        assertEquals(findCompactedEntryLogFiles().size(), 3);</span>
+
+        // Now try to recover those flush failed index files
+<span class="nc" id="L1278">        partialCompactionWorker.cleanUpAndRecover();</span>
+
+        // There should be no .compacted files after recovery
+<span class="nc" id="L1281">        assertEquals(findCompactedEntryLogFiles().size(), 0);</span>
+
+        // compaction worker should recover partial flushed index and delete [0,1,2].log
+<span class="nc bnc" id="L1284" title="All 2 branches missed.">        for (File ledgerDirectory : tmpDirs) {</span>
+<span class="nc" id="L1285">            assertFalse(&quot;Entry log file ([0,1,2].log should have been compacted in ledgerDirectory: &quot;</span>
+<span class="nc" id="L1286">                + ledgerDirectory, TestUtils.hasLogFiles(ledgerDirectory, true, 0, 1, 2));</span>
+<span class="nc" id="L1287">        }</span>
+
+        // even entry log files are removed, we still can access entries for ledger1
+        // since those entries has been compacted to new entry log
+<span class="nc" id="L1291">        verifyLedger(lhs[0].getId(), 0, lhs[0].getLastAddConfirmed());</span>
+<span class="nc" id="L1292">    }</span>
+
+    @Test
+    public void testCompactionFailureShouldNotResultInDuplicatedData() throws Exception {
+        // prepare data
+<span class="nc" id="L1297">        LedgerHandle[] lhs = prepareData(5, false);</span>
+
+<span class="nc bnc" id="L1299" title="All 2 branches missed.">        for (LedgerHandle lh : lhs) {</span>
+<span class="nc" id="L1300">            lh.close();</span>
+        }
+
+        // disable compaction
+<span class="nc" id="L1304">        baseConf.setMinorCompactionThreshold(0.0f);</span>
+<span class="nc" id="L1305">        baseConf.setMajorCompactionThreshold(0.0f);</span>
+<span class="nc" id="L1306">        baseConf.setUseTransactionalCompaction(true);</span>
+
+        // restart bookies
+<span class="nc" id="L1309">        restartBookies(baseConf);</span>
+
+        // remove ledger2 and ledger3
+<span class="nc" id="L1312">        bkc.deleteLedger(lhs[1].getId());</span>
+<span class="nc" id="L1313">        bkc.deleteLedger(lhs[2].getId());</span>
+
+<span class="nc" id="L1315">        LOG.info(&quot;Finished deleting the ledgers contains most entries.&quot;);</span>
+<span class="nc" id="L1316">        Thread.sleep(baseConf.getMajorCompactionInterval() * 1000</span>
+<span class="nc" id="L1317">            + baseConf.getGcWaitTime());</span>
+<span class="nc" id="L1318">        Bookie bookie = bs.get(0).getBookie();</span>
+<span class="nc" id="L1319">        InterleavedLedgerStorage storage = (InterleavedLedgerStorage) bookie.ledgerStorage;</span>
+
+<span class="nc" id="L1321">        List&lt;File&gt; ledgerDirs = bookie.getLedgerDirsManager().getAllLedgerDirs();</span>
+<span class="nc" id="L1322">        List&lt;Long&gt; usageBeforeCompaction = new ArrayList&lt;&gt;();</span>
+<span class="nc" id="L1323">        ledgerDirs.forEach(file -&gt; usageBeforeCompaction.add(getDirectorySpaceUsage(file)));</span>
+
+<span class="nc" id="L1325">        MockTransactionalEntryLogCompactor partialCompactionWorker = new MockTransactionalEntryLogCompactor(</span>
+            ((InterleavedLedgerStorage) bookie.ledgerStorage).gcThread);
+
+<span class="nc bnc" id="L1328" title="All 2 branches missed.">        for (long logId = 0; logId &lt; 5; logId++) {</span>
+<span class="nc" id="L1329">            EntryLogMetadata meta = storage.entryLogger.getEntryLogMetadata(logId);</span>
+<span class="nc" id="L1330">            partialCompactionWorker.compactWithLogFlushFailure(meta);</span>
+        }
+
+        // entry logs ([0-4].log) should not be compacted because of failure in flush compaction log
+<span class="nc bnc" id="L1334" title="All 2 branches missed.">        for (File ledgerDirectory : tmpDirs) {</span>
+<span class="nc" id="L1335">            assertTrue(&quot;Entry log file ([0,1,2].log should not be compacted in ledgerDirectory: &quot;</span>
+<span class="nc" id="L1336">                + ledgerDirectory, TestUtils.hasLogFiles(ledgerDirectory, true, 0, 1, 2, 3, 4));</span>
+<span class="nc" id="L1337">        }</span>
+        // even entry log files are removed, we still can access entries for ledger1
+        // since those entries has been compacted to new entry log
+<span class="nc" id="L1340">        verifyLedger(lhs[0].getId(), 0, lhs[0].getLastAddConfirmed());</span>
+
+<span class="nc" id="L1342">        List&lt;Long&gt; freeSpaceAfterCompactionFailed = new ArrayList&lt;&gt;();</span>
+<span class="nc" id="L1343">        ledgerDirs.forEach(file -&gt; freeSpaceAfterCompactionFailed.add(getDirectorySpaceUsage(file)));</span>
+
+        // No extra data is generated after compaction fail
+<span class="nc bnc" id="L1346" title="All 2 branches missed.">        for (int i = 0; i &lt; usageBeforeCompaction.size(); i++) {</span>
+<span class="nc" id="L1347">            assertEquals(usageBeforeCompaction.get(i), freeSpaceAfterCompactionFailed.get(i));</span>
+        }
+
+        // now enable normal compaction
+<span class="nc" id="L1351">        baseConf.setMajorCompactionThreshold(0.5f);</span>
+
+        // restart bookies
+<span class="nc" id="L1354">        restartBookies(baseConf);</span>
+
+<span class="nc" id="L1356">        Thread.sleep(baseConf.getMajorCompactionInterval() * 1000</span>
+<span class="nc" id="L1357">            + baseConf.getGcWaitTime());</span>
+        // compaction worker should compact [0-4].log
+<span class="nc bnc" id="L1359" title="All 2 branches missed.">        for (File ledgerDirectory : tmpDirs) {</span>
+<span class="nc" id="L1360">            assertFalse(&quot;Entry log file ([0,1,2].log should have been compacted in ledgerDirectory: &quot;</span>
+<span class="nc" id="L1361">                + ledgerDirectory, TestUtils.hasLogFiles(ledgerDirectory, true, 0, 1, 2, 3, 4));</span>
+<span class="nc" id="L1362">        }</span>
+
+        // even entry log files are removed, we still can access entries for ledger1
+        // since those entries has been compacted to new entry log
+<span class="nc" id="L1366">        verifyLedger(lhs[0].getId(), 0, lhs[0].getLastAddConfirmed());</span>
+<span class="nc" id="L1367">    }</span>
+
+    private long getDirectorySpaceUsage(File dir) {
+<span class="nc" id="L1370">        long size = 0;</span>
+<span class="nc bnc" id="L1371" title="All 2 branches missed.">        for (File file : dir.listFiles()) {</span>
+<span class="nc" id="L1372">            size += file.length();</span>
+        }
+<span class="nc" id="L1374">        return size;</span>
+    }
+
+    private Set&lt;File&gt; findCompactedEntryLogFiles() {
+<span class="nc" id="L1378">        Set&lt;File&gt; compactedLogFiles = new HashSet&lt;&gt;();</span>
+<span class="nc bnc" id="L1379" title="All 2 branches missed.">        for (File ledgerDirectory : tmpDirs) {</span>
+<span class="nc" id="L1380">            File[] files = Bookie.getCurrentDirectory(ledgerDirectory).listFiles(</span>
+<span class="nc" id="L1381">                file -&gt; file.getName().endsWith(COMPACTED_SUFFIX));</span>
+<span class="nc bnc" id="L1382" title="All 2 branches missed.">            if (files != null) {</span>
+<span class="nc" id="L1383">                Collections.addAll(compactedLogFiles, files);</span>
+            }
+<span class="nc" id="L1385">        }</span>
+<span class="nc" id="L1386">        return compactedLogFiles;</span>
+    }
+
+    private static class MockTransactionalEntryLogCompactor extends TransactionalEntryLogCompactor {
+
+        public MockTransactionalEntryLogCompactor(GarbageCollectorThread gcThread) {
+<span class="nc" id="L1392">            super(gcThread.conf,</span>
+                  gcThread.entryLogger,
+                  gcThread.ledgerStorage,
+                  (long entry) -&gt; {
+<span class="nc" id="L1396">                gcThread.removeEntryLog(entry);</span>
+<span class="nc" id="L1397">            });</span>
+<span class="nc" id="L1398">        }</span>
+
+        synchronized void compactWithIndexFlushFailure(EntryLogMetadata metadata) {
+<span class="nc" id="L1401">            LOG.info(&quot;Compacting entry log {}.&quot;, metadata.getEntryLogId());</span>
+<span class="nc" id="L1402">            CompactionPhase scanEntryLog = new ScanEntryLogPhase(metadata);</span>
+<span class="nc bnc" id="L1403" title="All 2 branches missed.">            if (!scanEntryLog.run()) {</span>
+<span class="nc" id="L1404">                LOG.info(&quot;Compaction for {} end in ScanEntryLogPhase.&quot;, metadata.getEntryLogId());</span>
+<span class="nc" id="L1405">                return;</span>
+            }
+<span class="nc" id="L1407">            File compactionLogFile = entryLogger.getCurCompactionLogFile();</span>
+<span class="nc" id="L1408">            CompactionPhase flushCompactionLog = new FlushCompactionLogPhase(metadata.getEntryLogId());</span>
+<span class="nc bnc" id="L1409" title="All 2 branches missed.">            if (!flushCompactionLog.run()) {</span>
+<span class="nc" id="L1410">                LOG.info(&quot;Compaction for {} end in FlushCompactionLogPhase.&quot;, metadata.getEntryLogId());</span>
+<span class="nc" id="L1411">                return;</span>
+            }
+<span class="nc" id="L1413">            File compactedLogFile = getCompactedLogFile(compactionLogFile, metadata.getEntryLogId());</span>
+<span class="nc" id="L1414">            CompactionPhase partialFlushIndexPhase = new PartialFlushIndexPhase(compactedLogFile);</span>
+<span class="nc bnc" id="L1415" title="All 2 branches missed.">            if (!partialFlushIndexPhase.run()) {</span>
+<span class="nc" id="L1416">                LOG.info(&quot;Compaction for {} end in PartialFlushIndexPhase.&quot;, metadata.getEntryLogId());</span>
+<span class="nc" id="L1417">                return;</span>
+            }
+<span class="nc" id="L1419">            logRemovalListener.removeEntryLog(metadata.getEntryLogId());</span>
+<span class="nc" id="L1420">            LOG.info(&quot;Compacted entry log : {}.&quot;, metadata.getEntryLogId());</span>
+<span class="nc" id="L1421">        }</span>
+
+        synchronized void compactWithLogFlushFailure(EntryLogMetadata metadata) {
+<span class="nc" id="L1424">            LOG.info(&quot;Compacting entry log {}&quot;, metadata.getEntryLogId());</span>
+<span class="nc" id="L1425">            CompactionPhase scanEntryLog = new ScanEntryLogPhase(metadata);</span>
+<span class="nc bnc" id="L1426" title="All 2 branches missed.">            if (!scanEntryLog.run()) {</span>
+<span class="nc" id="L1427">                LOG.info(&quot;Compaction for {} end in ScanEntryLogPhase.&quot;, metadata.getEntryLogId());</span>
+<span class="nc" id="L1428">                return;</span>
+            }
+<span class="nc" id="L1430">            File compactionLogFile = entryLogger.getCurCompactionLogFile();</span>
+<span class="nc" id="L1431">            CompactionPhase logFlushFailurePhase = new LogFlushFailurePhase(metadata.getEntryLogId());</span>
+<span class="nc bnc" id="L1432" title="All 2 branches missed.">            if (!logFlushFailurePhase.run()) {</span>
+<span class="nc" id="L1433">                LOG.info(&quot;Compaction for {} end in FlushCompactionLogPhase.&quot;, metadata.getEntryLogId());</span>
+<span class="nc" id="L1434">                return;</span>
+            }
+<span class="nc" id="L1436">            File compactedLogFile = getCompactedLogFile(compactionLogFile, metadata.getEntryLogId());</span>
+<span class="nc" id="L1437">            CompactionPhase updateIndex = new UpdateIndexPhase(compactedLogFile);</span>
+<span class="nc bnc" id="L1438" title="All 2 branches missed.">            if (!updateIndex.run()) {</span>
+<span class="nc" id="L1439">                LOG.info(&quot;Compaction for entry log {} end in UpdateIndexPhase.&quot;, metadata.getEntryLogId());</span>
+<span class="nc" id="L1440">                return;</span>
+            }
+<span class="nc" id="L1442">            logRemovalListener.removeEntryLog(metadata.getEntryLogId());</span>
+<span class="nc" id="L1443">            LOG.info(&quot;Compacted entry log : {}.&quot;, metadata.getEntryLogId());</span>
+<span class="nc" id="L1444">        }</span>
+
+        private class PartialFlushIndexPhase extends UpdateIndexPhase {
+
+<span class="nc" id="L1448">            public PartialFlushIndexPhase(File compactedLogFile) {</span>
+<span class="nc" id="L1449">                super(compactedLogFile);</span>
+<span class="nc" id="L1450">            }</span>
+
+            @Override
+            void start() throws IOException {
+<span class="nc bnc" id="L1454" title="All 4 branches missed.">                if (compactedLogFile != null &amp;&amp; compactedLogFile.exists()) {</span>
+<span class="nc" id="L1455">                    File dir = compactedLogFile.getParentFile();</span>
+<span class="nc" id="L1456">                    String compactedFilename = compactedLogFile.getName();</span>
+                    // create a hard link &quot;x.log&quot; for file &quot;x.log.y.compacted&quot;
+<span class="nc" id="L1458">                    this.newEntryLogFile = new File(dir, compactedFilename.substring(0,</span>
+<span class="nc" id="L1459">                                compactedFilename.indexOf(&quot;.log&quot;) + 4));</span>
+<span class="nc" id="L1460">                    File hardlinkFile = new File(dir, newEntryLogFile.getName());</span>
+<span class="nc bnc" id="L1461" title="All 2 branches missed.">                    if (!hardlinkFile.exists()) {</span>
+<span class="nc" id="L1462">                        HardLink.createHardLink(compactedLogFile, hardlinkFile);</span>
+                    }
+<span class="nc bnc" id="L1464" title="All 2 branches missed.">                    assertTrue(offsets.size() &gt; 1);</span>
+                    // only flush index for one entry location
+<span class="nc" id="L1466">                    EntryLocation el = offsets.get(0);</span>
+<span class="nc" id="L1467">                    ledgerStorage.updateEntriesLocations(offsets);</span>
+<span class="nc" id="L1468">                    ledgerStorage.flushEntriesLocationsIndex();</span>
+<span class="nc" id="L1469">                    throw new IOException(&quot;Flush ledger index encounter exception&quot;);</span>
+                }
+<span class="nc" id="L1471">            }</span>
+        }
+
+        private class LogFlushFailurePhase extends FlushCompactionLogPhase {
+
+<span class="nc" id="L1476">            LogFlushFailurePhase(long compactingLogId) {</span>
+<span class="nc" id="L1477">                super(compactingLogId);</span>
+<span class="nc" id="L1478">            }</span>
+
+            @Override
+            void start() throws IOException {
+                // flush the current compaction log
+<span class="nc" id="L1483">                entryLogger.flushCompactionLog();</span>
+<span class="nc" id="L1484">                throw new IOException(&quot;Encounter IOException when trying to flush compaction log&quot;);</span>
+            }
+        }
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

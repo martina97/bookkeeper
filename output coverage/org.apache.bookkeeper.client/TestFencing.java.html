@@ -1,0 +1,431 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TestFencing.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">TestFencing.java</span></div><h1>TestFencing.java</h1><pre class="source lang-java linenums">/*
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.client;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
+
+import org.apache.bookkeeper.client.BookKeeper.DigestType;
+import org.apache.bookkeeper.conf.ClientConfiguration;
+import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * This unit test tests ledger fencing.
+ *
+ */
+public class TestFencing extends BookKeeperClusterTestCase {
+<span class="nc" id="L43">    private static final Logger LOG = LoggerFactory.getLogger(TestFencing.class);</span>
+
+    private final DigestType digestType;
+
+    public TestFencing() {
+<span class="nc" id="L48">        super(10);</span>
+<span class="nc" id="L49">        this.digestType = DigestType.CRC32;</span>
+<span class="nc" id="L50">    }</span>
+
+    /**
+     * Basic fencing test. Create ledger, write to it,
+     * open ledger, write again (should fail).
+     */
+    @Test
+    public void testBasicFencing() throws Exception {
+        /*
+         * Create ledger.
+         */
+<span class="nc" id="L61">        LedgerHandle writelh = null;</span>
+<span class="nc" id="L62">        writelh = bkc.createLedger(digestType, &quot;password&quot;.getBytes());</span>
+
+<span class="nc" id="L64">        String tmp = &quot;BookKeeper is cool!&quot;;</span>
+<span class="nc bnc" id="L65" title="All 2 branches missed.">        for (int i = 0; i &lt; 10; i++) {</span>
+<span class="nc" id="L66">            writelh.addEntry(tmp.getBytes());</span>
+        }
+
+        /*
+         * Try to open ledger.
+         */
+<span class="nc" id="L72">        LedgerHandle readlh = bkc.openLedger(writelh.getId(), digestType, &quot;password&quot;.getBytes());</span>
+        // should have triggered recovery and fencing
+
+        try {
+<span class="nc" id="L76">            writelh.addEntry(tmp.getBytes());</span>
+<span class="nc" id="L77">            LOG.error(&quot;Should have thrown an exception&quot;);</span>
+<span class="nc" id="L78">            fail(&quot;Should have thrown an exception when trying to write&quot;);</span>
+<span class="nc" id="L79">        } catch (BKException.BKLedgerFencedException e) {</span>
+            // correct behaviour
+<span class="nc" id="L81">        }</span>
+
+        /*
+         * Check if has recovered properly.
+         */
+<span class="nc" id="L86">        assertTrue(&quot;Has not recovered correctly: &quot; + readlh.getLastAddConfirmed()</span>
+<span class="nc" id="L87">                   + &quot; original &quot; + writelh.getLastAddConfirmed(),</span>
+<span class="nc bnc" id="L88" title="All 2 branches missed.">                   readlh.getLastAddConfirmed() == writelh.getLastAddConfirmed());</span>
+<span class="nc" id="L89">    }</span>
+
+<span class="nc" id="L91">    private static int threadCount = 0;</span>
+
+    class LedgerOpenThread extends Thread {
+        private final long ledgerId;
+<span class="nc" id="L95">        private long lastConfirmedEntry = 0;</span>
+
+
+        private final int tid;
+        private final DigestType digestType;
+        private final CyclicBarrier barrier;
+
+        LedgerOpenThread (int tid, DigestType digestType, long ledgerId, CyclicBarrier barrier)
+<span class="nc" id="L103">                throws Exception {</span>
+<span class="nc" id="L104">            super(&quot;TestFencing-LedgerOpenThread-&quot; + threadCount++);</span>
+<span class="nc" id="L105">            this.tid = tid;</span>
+<span class="nc" id="L106">            this.ledgerId = ledgerId;</span>
+<span class="nc" id="L107">            this.digestType = digestType;</span>
+<span class="nc" id="L108">            this.barrier = barrier;</span>
+<span class="nc" id="L109">        }</span>
+
+        @Override
+        public void run() {
+<span class="nc" id="L113">            LOG.info(&quot;Thread {} started.&quot;, tid);</span>
+<span class="nc" id="L114">            LedgerHandle lh = null;</span>
+<span class="nc" id="L115">            BookKeeper bk = null;</span>
+            try {
+<span class="nc" id="L117">                barrier.await();</span>
+                while (true) {
+                    try {
+<span class="nc" id="L120">                        bk = new BookKeeper(new ClientConfiguration(baseClientConf), bkc.getZkHandle());</span>
+
+<span class="nc" id="L122">                        lh = bk.openLedger(ledgerId,</span>
+<span class="nc" id="L123">                                           digestType, &quot;&quot;.getBytes());</span>
+<span class="nc" id="L124">                        lastConfirmedEntry = lh.getLastAddConfirmed();</span>
+<span class="nc" id="L125">                        lh.close();</span>
+                        break;
+<span class="nc" id="L127">                    } catch (BKException.BKMetadataVersionException zke) {</span>
+<span class="nc" id="L128">                        LOG.info(&quot;Contention with someone else recovering&quot;);</span>
+<span class="nc" id="L129">                    } catch (BKException.BKLedgerRecoveryException bkre) {</span>
+<span class="nc" id="L130">                        LOG.info(&quot;Contention with someone else recovering&quot;);</span>
+                    } finally {
+<span class="nc bnc" id="L132" title="All 2 branches missed.">                        if (lh != null) {</span>
+<span class="nc" id="L133">                            lh.close();</span>
+                        }
+<span class="nc bnc" id="L135" title="All 2 branches missed.">                        if (bk != null) {</span>
+<span class="nc" id="L136">                            bk.close();</span>
+<span class="nc" id="L137">                            bk = null;</span>
+                        }
+<span class="nc" id="L139">                    }</span>
+                }
+<span class="nc" id="L141">            } catch (Exception e) {</span>
+                // just exit, test should spot bad last add confirmed
+<span class="nc" id="L143">                LOG.error(&quot;Exception occurred &quot;, e);</span>
+<span class="nc" id="L144">            }</span>
+<span class="nc" id="L145">            LOG.info(&quot;Thread {} exiting, lastConfirmedEntry = {}&quot;, tid, lastConfirmedEntry);</span>
+<span class="nc" id="L146">        }</span>
+
+        long getLastConfirmedEntry() {
+<span class="nc" id="L149">            return lastConfirmedEntry;</span>
+        }
+    }
+
+    /**
+     * Try to open a ledger many times in parallel.
+     * All opens should result in a ledger with an equals number of
+     * entries.
+     */
+    @Test
+    public void testManyOpenParallel() throws Exception {
+        /*
+         * Create ledger.
+         */
+<span class="nc" id="L163">        final LedgerHandle writelh = bkc.createLedger(digestType, &quot;&quot;.getBytes());</span>
+
+<span class="nc" id="L165">        final int numRecovery = 10;</span>
+
+<span class="nc" id="L167">        final String tmp = &quot;BookKeeper is cool!&quot;;</span>
+<span class="nc" id="L168">        final CountDownLatch latch = new CountDownLatch(numRecovery);</span>
+<span class="nc" id="L169">        Thread writethread = new Thread() {</span>
+                public void run() {
+                    try {
+                        while (true) {
+<span class="nc" id="L173">                            writelh.addEntry(tmp.getBytes());</span>
+<span class="nc" id="L174">                            latch.countDown();</span>
+                        }
+<span class="nc" id="L176">                    } catch (Exception e) {</span>
+<span class="nc" id="L177">                        LOG.info(&quot;Exception adding entry&quot;, e);</span>
+                    }
+<span class="nc" id="L179">                }</span>
+            };
+<span class="nc" id="L181">        writethread.start();</span>
+
+
+<span class="nc" id="L184">        CyclicBarrier barrier = new CyclicBarrier(numRecovery + 1);</span>
+<span class="nc" id="L185">        LedgerOpenThread[] threads = new LedgerOpenThread[numRecovery];</span>
+<span class="nc bnc" id="L186" title="All 2 branches missed.">        for (int i = 0; i &lt; numRecovery; i++) {</span>
+<span class="nc" id="L187">            threads[i] = new LedgerOpenThread(i, digestType, writelh.getId(), barrier);</span>
+<span class="nc" id="L188">            threads[i].start();</span>
+        }
+<span class="nc" id="L190">        latch.await();</span>
+<span class="nc" id="L191">        barrier.await(); // should trigger threads to go</span>
+
+<span class="nc" id="L193">        writethread.join();</span>
+<span class="nc" id="L194">        long lastConfirmed = writelh.getLastAddConfirmed();</span>
+
+<span class="nc bnc" id="L196" title="All 2 branches missed.">        for (int i = 0; i &lt; numRecovery; i++) {</span>
+<span class="nc" id="L197">            threads[i].join();</span>
+<span class="nc" id="L198">            assertTrue(&quot;Added confirmed is incorrect&quot;,</span>
+<span class="nc bnc" id="L199" title="All 2 branches missed.">                       lastConfirmed &lt;= threads[i].getLastConfirmedEntry());</span>
+        }
+<span class="nc" id="L201">    }</span>
+
+    /**
+     * Test that opening a ledger in norecovery mode
+     * doesn't fence off a ledger.
+     */
+    @Test
+    public void testNoRecoveryOpen() throws Exception {
+        /*
+         * Create ledger.
+         */
+<span class="nc" id="L212">        LedgerHandle writelh = null;</span>
+<span class="nc" id="L213">        writelh = bkc.createLedger(digestType, &quot;&quot;.getBytes());</span>
+
+<span class="nc" id="L215">        String tmp = &quot;BookKeeper is cool!&quot;;</span>
+<span class="nc" id="L216">        final int numEntries = 10;</span>
+<span class="nc bnc" id="L217" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L218">            writelh.addEntry(tmp.getBytes());</span>
+        }
+
+        /*
+         * Try to open ledger.
+         */
+<span class="nc" id="L224">        LedgerHandle readlh = bkc.openLedgerNoRecovery(writelh.getId(),</span>
+<span class="nc" id="L225">                                                        digestType, &quot;&quot;.getBytes());</span>
+<span class="nc" id="L226">        long numReadable = readlh.getLastAddConfirmed();</span>
+<span class="nc" id="L227">        LOG.error(&quot;numRead &quot; + numReadable);</span>
+<span class="nc" id="L228">        readlh.readEntries(1, numReadable);</span>
+
+        // should not have triggered recovery and fencing
+<span class="nc" id="L231">        writelh.addEntry(tmp.getBytes());</span>
+        try {
+<span class="nc" id="L233">            readlh.readEntries(numReadable + 1, numReadable + 1);</span>
+<span class="nc" id="L234">            fail(&quot;Shouldn't have been able to read this far&quot;);</span>
+<span class="nc" id="L235">        } catch (BKException.BKReadException e) {</span>
+            // all is good
+<span class="nc" id="L237">        }</span>
+
+<span class="nc" id="L239">        writelh.addEntry(tmp.getBytes());</span>
+<span class="nc" id="L240">        long numReadable2 = readlh.getLastAddConfirmed();</span>
+<span class="nc" id="L241">        assertEquals(&quot;Number of readable entries hasn't changed&quot;, numReadable2, numReadable);</span>
+<span class="nc" id="L242">        readlh.close();</span>
+
+<span class="nc" id="L244">        writelh.addEntry(tmp.getBytes());</span>
+<span class="nc" id="L245">        writelh.close();</span>
+<span class="nc" id="L246">    }</span>
+
+    /**
+     * create a ledger and write entries.
+     * kill a bookie in the ensemble. Recover.
+     * Fence the ledger. Kill another bookie. Recover.
+     */
+    @Test
+    public void testFencingInteractionWithBookieRecovery() throws Exception {
+<span class="nc" id="L255">        System.setProperty(&quot;digestType&quot;, digestType.toString());</span>
+<span class="nc" id="L256">        System.setProperty(&quot;passwd&quot;, &quot;testPasswd&quot;);</span>
+
+<span class="nc" id="L258">        BookKeeperAdmin admin = new BookKeeperAdmin(zkUtil.getZooKeeperConnectString());</span>
+
+<span class="nc" id="L260">        LedgerHandle writelh = bkc.createLedger(digestType, &quot;testPasswd&quot;.getBytes());</span>
+
+<span class="nc" id="L262">        String tmp = &quot;Foobar&quot;;</span>
+
+<span class="nc" id="L264">        final int numEntries = 10;</span>
+<span class="nc bnc" id="L265" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L266">            writelh.addEntry(tmp.getBytes());</span>
+        }
+
+<span class="nc" id="L269">        BookieSocketAddress bookieToKill = writelh.getLedgerMetadata().getEnsembleAt(numEntries).get(0);</span>
+<span class="nc" id="L270">        killBookie(bookieToKill);</span>
+
+        // write entries to change ensemble
+<span class="nc bnc" id="L273" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L274">            writelh.addEntry(tmp.getBytes());</span>
+        }
+
+<span class="nc" id="L277">        admin.recoverBookieData(bookieToKill);</span>
+
+<span class="nc bnc" id="L279" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L280">            writelh.addEntry(tmp.getBytes());</span>
+        }
+
+<span class="nc" id="L283">        LedgerHandle readlh = bkc.openLedger(writelh.getId(),</span>
+<span class="nc" id="L284">                                             digestType, &quot;testPasswd&quot;.getBytes());</span>
+        try {
+<span class="nc" id="L286">            writelh.addEntry(tmp.getBytes());</span>
+<span class="nc" id="L287">            LOG.error(&quot;Should have thrown an exception&quot;);</span>
+<span class="nc" id="L288">            fail(&quot;Should have thrown an exception when trying to write&quot;);</span>
+<span class="nc" id="L289">        } catch (BKException.BKLedgerFencedException e) {</span>
+            // correct behaviour
+<span class="nc" id="L291">        }</span>
+
+<span class="nc" id="L293">        readlh.close();</span>
+<span class="nc" id="L294">        writelh.close();</span>
+<span class="nc" id="L295">    }</span>
+
+    /**
+     * create a ledger and write entries.
+     * Fence the ledger. Kill a bookie. Recover.
+     * Ensure that recover doesn't reallow adding
+     */
+    @Test
+    public void testFencingInteractionWithBookieRecovery2() throws Exception {
+<span class="nc" id="L304">        System.setProperty(&quot;digestType&quot;, digestType.toString());</span>
+<span class="nc" id="L305">        System.setProperty(&quot;passwd&quot;, &quot;testPasswd&quot;);</span>
+
+<span class="nc" id="L307">        BookKeeperAdmin admin = new BookKeeperAdmin(zkUtil.getZooKeeperConnectString());</span>
+
+<span class="nc" id="L309">        LedgerHandle writelh = bkc.createLedger(digestType, &quot;testPasswd&quot;.getBytes());</span>
+
+<span class="nc" id="L311">        String tmp = &quot;Foobar&quot;;</span>
+
+<span class="nc" id="L313">        final int numEntries = 10;</span>
+<span class="nc bnc" id="L314" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L315">            writelh.addEntry(tmp.getBytes());</span>
+        }
+
+<span class="nc" id="L318">        LedgerHandle readlh = bkc.openLedger(writelh.getId(),</span>
+<span class="nc" id="L319">                                             digestType, &quot;testPasswd&quot;.getBytes());</span>
+        // should be fenced by now
+<span class="nc" id="L321">        BookieSocketAddress bookieToKill = writelh.getLedgerMetadata().getEnsembleAt(numEntries).get(0);</span>
+<span class="nc" id="L322">        killBookie(bookieToKill);</span>
+<span class="nc" id="L323">        admin.recoverBookieData(bookieToKill);</span>
+
+        try {
+<span class="nc" id="L326">            writelh.addEntry(tmp.getBytes());</span>
+<span class="nc" id="L327">            LOG.error(&quot;Should have thrown an exception&quot;);</span>
+<span class="nc" id="L328">            fail(&quot;Should have thrown an exception when trying to write&quot;);</span>
+<span class="nc" id="L329">        } catch (BKException.BKLedgerFencedException e) {</span>
+            // correct behaviour
+<span class="nc" id="L331">        }</span>
+
+<span class="nc" id="L333">        readlh.close();</span>
+<span class="nc" id="L334">        writelh.close();</span>
+<span class="nc" id="L335">    }</span>
+
+    /**
+     * create a ledger and write entries.
+     * sleep a bookie
+     * Ensure that fencing proceeds even with the bookie sleeping
+     */
+    @Test
+    public void testFencingWithHungBookie() throws Exception {
+<span class="nc" id="L344">        LedgerHandle writelh = bkc.createLedger(digestType, &quot;testPasswd&quot;.getBytes());</span>
+
+<span class="nc" id="L346">        String tmp = &quot;Foobar&quot;;</span>
+
+<span class="nc" id="L348">        final int numEntries = 10;</span>
+<span class="nc bnc" id="L349" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L350">            writelh.addEntry(tmp.getBytes());</span>
+        }
+
+<span class="nc" id="L353">        CountDownLatch sleepLatch = new CountDownLatch(1);</span>
+<span class="nc" id="L354">        sleepBookie(writelh.getLedgerMetadata().getAllEnsembles().get(0L).get(1), sleepLatch);</span>
+
+<span class="nc" id="L356">        LedgerHandle readlh = bkc.openLedger(writelh.getId(),</span>
+<span class="nc" id="L357">                                             digestType, &quot;testPasswd&quot;.getBytes());</span>
+
+        try {
+<span class="nc" id="L360">            writelh.addEntry(tmp.getBytes());</span>
+<span class="nc" id="L361">            LOG.error(&quot;Should have thrown an exception&quot;);</span>
+<span class="nc" id="L362">            fail(&quot;Should have thrown an exception when trying to write&quot;);</span>
+<span class="nc" id="L363">        } catch (BKException.BKLedgerFencedException e) {</span>
+            // correct behaviour
+<span class="nc" id="L365">        }</span>
+
+<span class="nc" id="L367">        sleepLatch.countDown();</span>
+<span class="nc" id="L368">        readlh.close();</span>
+<span class="nc" id="L369">        writelh.close();</span>
+<span class="nc" id="L370">    }</span>
+
+    /**
+     * Test that fencing doesn't work with a bad password.
+     */
+    @Test
+    public void testFencingBadPassword() throws Exception {
+        /*
+         * Create ledger.
+         */
+<span class="nc" id="L380">        LedgerHandle writelh = null;</span>
+<span class="nc" id="L381">        writelh = bkc.createLedger(digestType, &quot;password1&quot;.getBytes());</span>
+
+<span class="nc" id="L383">        String tmp = &quot;BookKeeper is cool!&quot;;</span>
+<span class="nc bnc" id="L384" title="All 2 branches missed.">        for (int i = 0; i &lt; 10; i++) {</span>
+<span class="nc" id="L385">            writelh.addEntry(tmp.getBytes());</span>
+        }
+
+        /*
+         * Try to open ledger.
+         */
+        try {
+<span class="nc" id="L392">            bkc.openLedger(writelh.getId(), digestType, &quot;badPassword&quot;.getBytes());</span>
+<span class="nc" id="L393">            fail(&quot;Should not have been able to open with a bad password&quot;);</span>
+<span class="nc" id="L394">        } catch (BKException.BKUnauthorizedAccessException uue) {</span>
+            // correct behaviour
+<span class="nc" id="L396">        }</span>
+        // should have triggered recovery and fencing
+
+<span class="nc" id="L399">        writelh.addEntry(tmp.getBytes());</span>
+<span class="nc" id="L400">    }</span>
+
+    @Test
+    public void testFencingAndRestartBookies() throws Exception {
+<span class="nc" id="L404">        LedgerHandle writelh = null;</span>
+<span class="nc" id="L405">        writelh = bkc.createLedger(digestType, &quot;password&quot;.getBytes());</span>
+
+<span class="nc" id="L407">        String tmp = &quot;BookKeeper is cool!&quot;;</span>
+<span class="nc bnc" id="L408" title="All 2 branches missed.">        for (int i = 0; i &lt; 10; i++) {</span>
+<span class="nc" id="L409">            writelh.addEntry(tmp.getBytes());</span>
+        }
+
+        /*
+         * Try to open ledger.
+         */
+<span class="nc" id="L415">        LedgerHandle readlh = bkc.openLedger(writelh.getId(), digestType,</span>
+<span class="nc" id="L416">                                             &quot;password&quot;.getBytes());</span>
+
+<span class="nc" id="L418">        restartBookies();</span>
+
+        try {
+<span class="nc" id="L421">            writelh.addEntry(tmp.getBytes());</span>
+<span class="nc" id="L422">            LOG.error(&quot;Should have thrown an exception&quot;);</span>
+<span class="nc" id="L423">            fail(&quot;Should have thrown an exception when trying to write&quot;);</span>
+<span class="nc" id="L424">        } catch (BKException.BKLedgerFencedException e) {</span>
+            // correct behaviour
+<span class="nc" id="L426">        }</span>
+
+<span class="nc" id="L428">        readlh.close();</span>
+<span class="nc" id="L429">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

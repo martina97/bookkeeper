@@ -1,0 +1,460 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TestDelayEnsembleChange.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">TestDelayEnsembleChange.java</span></div><h1>TestDelayEnsembleChange.java</h1><pre class="source lang-java linenums">/*
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.client;
+
+import static org.apache.bookkeeper.bookie.BookKeeperServerStats.NEW_ENSEMBLE_TIME;
+import static org.apache.bookkeeper.bookie.BookKeeperServerStats.REPLACE_BOOKIE_TIME;
+import static org.apache.bookkeeper.bookie.BookKeeperServerStats.WATCHER_SCOPE;
+import static org.apache.bookkeeper.client.BookKeeperClientStats.CLIENT_SCOPE;
+import static org.apache.bookkeeper.client.BookKeeperClientStats.LEDGER_ENSEMBLE_BOOKIE_DISTRIBUTION;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+import io.netty.buffer.ByteBuf;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicLong;
+
+import org.apache.bookkeeper.client.BookKeeper.DigestType;
+import org.apache.bookkeeper.client.api.LedgerMetadata;
+import org.apache.bookkeeper.conf.ServerConfiguration;
+import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.proto.BookkeeperInternalCallbacks.ReadEntryCallback;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.junit.Before;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Test a delayed ensemble change.
+ */
+public class TestDelayEnsembleChange extends BookKeeperClusterTestCase {
+
+<span class="nc" id="L55">    private static final Logger logger = LoggerFactory.getLogger(TestDelayEnsembleChange.class);</span>
+
+    final DigestType digestType;
+<span class="nc" id="L58">    final byte[] testPasswd = &quot;&quot;.getBytes();</span>
+
+    public TestDelayEnsembleChange() {
+<span class="nc" id="L61">        super(5);</span>
+<span class="nc" id="L62">        this.digestType = DigestType.CRC32;</span>
+<span class="nc" id="L63">    }</span>
+
+    @Before
+    @Override
+    public void setUp() throws Exception {
+<span class="nc" id="L68">        baseClientConf.setDelayEnsembleChange(true);</span>
+<span class="nc" id="L69">        super.setUp();</span>
+<span class="nc" id="L70">    }</span>
+
+    private static class VerificationCallback implements ReadEntryCallback {
+        final CountDownLatch latch;
+        final AtomicLong numSuccess;
+        final AtomicLong numMissing;
+        final AtomicLong numFailure;
+
+<span class="nc" id="L78">        VerificationCallback(int numRequests) {</span>
+<span class="nc" id="L79">            latch = new CountDownLatch(numRequests);</span>
+<span class="nc" id="L80">            numSuccess = new AtomicLong(0L);</span>
+<span class="nc" id="L81">            numMissing = new AtomicLong(0L);</span>
+<span class="nc" id="L82">            numFailure = new AtomicLong(0L);</span>
+<span class="nc" id="L83">        }</span>
+
+        @Override
+        public void readEntryComplete(int rc, long ledgerId, long entryId, ByteBuf buffer, Object ctx) {
+<span class="nc bnc" id="L87" title="All 2 branches missed.">            if (rc == BKException.Code.OK) {</span>
+<span class="nc" id="L88">                numSuccess.incrementAndGet();</span>
+<span class="nc bnc" id="L89" title="All 4 branches missed.">            } else if (rc == BKException.Code.NoSuchEntryException</span>
+                    || rc == BKException.Code.NoSuchLedgerExistsException) {
+<span class="nc" id="L91">                logger.error(&quot;Missed entry({}, {}) from host {}.&quot;, ledgerId, entryId, ctx);</span>
+<span class="nc" id="L92">                numMissing.incrementAndGet();</span>
+            } else {
+<span class="nc" id="L94">                logger.error(&quot;Failed to get entry({}, {}) from host {} : {}&quot;,</span>
+<span class="nc" id="L95">                        ledgerId, entryId, ctx, rc);</span>
+<span class="nc" id="L96">                numFailure.incrementAndGet();</span>
+            }
+<span class="nc" id="L98">            latch.countDown();</span>
+<span class="nc" id="L99">        }</span>
+    }
+
+    private void verifyEntries(LedgerHandle lh, long startEntry, long untilEntry,
+                               long expectedSuccess, long expectedMissing) throws Exception {
+<span class="nc" id="L104">        LedgerMetadata md = lh.getLedgerMetadata();</span>
+
+<span class="nc bnc" id="L106" title="All 2 branches missed.">        for (long eid = startEntry; eid &lt; untilEntry; eid++) {</span>
+<span class="nc" id="L107">            List&lt;BookieSocketAddress&gt; addresses = md.getEnsembleAt(eid);</span>
+<span class="nc" id="L108">            VerificationCallback callback = new VerificationCallback(addresses.size());</span>
+<span class="nc bnc" id="L109" title="All 2 branches missed.">            for (BookieSocketAddress addr : addresses) {</span>
+<span class="nc" id="L110">                bkc.getBookieClient().readEntry(addr, lh.getId(), eid,</span>
+                                                callback, addr, 0, null);
+<span class="nc" id="L112">            }</span>
+<span class="nc" id="L113">            callback.latch.await();</span>
+<span class="nc" id="L114">            assertEquals(expectedSuccess, callback.numSuccess.get());</span>
+<span class="nc" id="L115">            assertEquals(expectedMissing, callback.numMissing.get());</span>
+<span class="nc" id="L116">            assertEquals(0, callback.numFailure.get());</span>
+        }
+<span class="nc" id="L118">    }</span>
+
+    private void verifyEntriesRange(LedgerHandle lh, long startEntry, long untilEntry,
+                                    long expectedSuccess, long expectedMissing) throws Exception {
+<span class="nc" id="L122">        LedgerMetadata md = lh.getLedgerMetadata();</span>
+
+<span class="nc bnc" id="L124" title="All 2 branches missed.">        for (long eid = startEntry; eid &lt; untilEntry; eid++) {</span>
+<span class="nc" id="L125">            List&lt;BookieSocketAddress&gt; addresses = md.getEnsembleAt(eid);</span>
+<span class="nc" id="L126">            VerificationCallback callback = new VerificationCallback(addresses.size());</span>
+<span class="nc bnc" id="L127" title="All 2 branches missed.">            for (BookieSocketAddress addr : addresses) {</span>
+<span class="nc" id="L128">                bkc.getBookieClient().readEntry(addr, lh.getId(), eid,</span>
+                                                callback, addr, 0, null);
+<span class="nc" id="L130">            }</span>
+<span class="nc" id="L131">            callback.latch.await();</span>
+<span class="nc bnc" id="L132" title="All 2 branches missed.">            assertTrue(expectedSuccess &gt;= callback.numSuccess.get());</span>
+<span class="nc bnc" id="L133" title="All 2 branches missed.">            assertTrue(expectedMissing &lt;= callback.numMissing.get());</span>
+<span class="nc" id="L134">            assertEquals(0, callback.numFailure.get());</span>
+        }
+<span class="nc" id="L136">    }</span>
+
+    @Test
+    public void testNotChangeEnsembleIfNotBrokenAckQuorum() throws Exception {
+<span class="nc" id="L140">        LedgerHandle lh = bkc.createLedger(5, 5, 3, digestType, testPasswd);</span>
+
+<span class="nc" id="L142">        byte[] data = &quot;foobar&quot;.getBytes();</span>
+
+<span class="nc" id="L144">        int numEntries = 10;</span>
+<span class="nc bnc" id="L145" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L146">            lh.addEntry(data);</span>
+        }
+
+        // kill two bookies, but we still have 3 bookies for the ack quorum.
+<span class="nc" id="L150">        ServerConfiguration conf0 = killBookie(lh.getCurrentEnsemble().get(0));</span>
+<span class="nc" id="L151">        ServerConfiguration conf1 = killBookie(lh.getCurrentEnsemble().get(1));</span>
+
+<span class="nc bnc" id="L153" title="All 2 branches missed.">        for (int i = numEntries; i &lt; 2 * numEntries; i++) {</span>
+<span class="nc" id="L154">            lh.addEntry(data);</span>
+        }
+
+        // ensure there is no ensemble changed
+<span class="nc" id="L158">        assertEquals(&quot;There should be no ensemble change if delaying ensemble change is enabled.&quot;,</span>
+<span class="nc" id="L159">                     1, lh.getLedgerMetadata().getAllEnsembles().size());</span>
+
+<span class="nc" id="L161">        bsConfs.add(conf0);</span>
+<span class="nc" id="L162">        bs.add(startBookie(conf0));</span>
+<span class="nc" id="L163">        bsConfs.add(conf1);</span>
+<span class="nc" id="L164">        bs.add(startBookie(conf1));</span>
+
+<span class="nc bnc" id="L166" title="All 2 branches missed.">        for (int i = 2 * numEntries; i &lt; 3 * numEntries; i++) {</span>
+<span class="nc" id="L167">            lh.addEntry(data);</span>
+        }
+
+        // ensure there is no ensemble changed
+<span class="nc" id="L171">        assertEquals(&quot;There should be no ensemble change if delaying ensemble change is enabled.&quot;,</span>
+<span class="nc" id="L172">                     1, lh.getLedgerMetadata().getAllEnsembles().size());</span>
+
+        // check entries
+<span class="nc" id="L175">        verifyEntries(lh, 0, numEntries, 5, 0);</span>
+<span class="nc" id="L176">        verifyEntries(lh, numEntries, 2 * numEntries, 3, 2);</span>
+<span class="nc" id="L177">        verifyEntries(lh, 2 * numEntries, 3 * numEntries, 5, 0);</span>
+<span class="nc" id="L178">    }</span>
+
+    @Test
+    public void testChangeEnsembleIfBrokenAckQuorum() throws Exception {
+<span class="nc" id="L182">        startNewBookie();</span>
+<span class="nc" id="L183">        startNewBookie();</span>
+<span class="nc" id="L184">        startNewBookie();</span>
+
+<span class="nc" id="L186">        bkc.getTestStatsProvider().clear();</span>
+<span class="nc" id="L187">        LedgerHandle lh = bkc.createLedger(5, 5, 3, digestType, testPasswd);</span>
+
+<span class="nc" id="L189">        byte[] data = &quot;foobar&quot;.getBytes();</span>
+
+<span class="nc" id="L191">        int numEntries = 5;</span>
+<span class="nc bnc" id="L192" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L193">            lh.addEntry(data);</span>
+        }
+
+<span class="nc bnc" id="L196" title="All 2 branches missed.">        for (BookieSocketAddress addr : lh.getLedgerMetadata().getAllEnsembles().get(0L)) {</span>
+<span class="nc" id="L197">            assertTrue(</span>
+                    LEDGER_ENSEMBLE_BOOKIE_DISTRIBUTION + &quot; should be &gt; 0 for &quot; + addr,
+<span class="nc bnc" id="L199" title="All 2 branches missed.">                    bkc.getTestStatsProvider().getCounter(</span>
+                            CLIENT_SCOPE + &quot;.&quot; + LEDGER_ENSEMBLE_BOOKIE_DISTRIBUTION + &quot;-&quot; + addr)
+<span class="nc" id="L201">                            .get() &gt; 0);</span>
+<span class="nc" id="L202">        }</span>
+<span class="nc" id="L203">        assertTrue(</span>
+                &quot;Stats should have captured a new ensemble&quot;,
+<span class="nc" id="L205">                bkc.getTestStatsProvider().getOpStatsLogger(</span>
+                        CLIENT_SCOPE + &quot;.&quot; + WATCHER_SCOPE + &quot;.&quot; + NEW_ENSEMBLE_TIME)
+<span class="nc bnc" id="L207" title="All 2 branches missed.">                        .getSuccessCount() &gt; 0);</span>
+<span class="nc" id="L208">        assertTrue(</span>
+                &quot;Stats should not have captured an ensemble change&quot;,
+<span class="nc" id="L210">                bkc.getTestStatsProvider().getOpStatsLogger(</span>
+                        CLIENT_SCOPE + &quot;.&quot; + WATCHER_SCOPE + &quot;.&quot; + REPLACE_BOOKIE_TIME)
+<span class="nc bnc" id="L212" title="All 2 branches missed.">                        .getSuccessCount() == 0);</span>
+
+<span class="nc" id="L214">        logger.info(&quot;Kill bookie 0 and write {} entries.&quot;, numEntries);</span>
+
+        // kill two bookies, but we still have 3 bookies for the ack quorum.
+<span class="nc" id="L217">        ServerConfiguration conf0 = killBookie(lh.getCurrentEnsemble().get(0));</span>
+
+<span class="nc bnc" id="L219" title="All 2 branches missed.">        for (int i = numEntries; i &lt; 2 * numEntries; i++) {</span>
+<span class="nc" id="L220">            lh.addEntry(data);</span>
+        }
+
+        // ensure there is no ensemble changed
+<span class="nc" id="L224">        assertEquals(&quot;There should be no ensemble change if delaying ensemble change is enabled.&quot;,</span>
+<span class="nc" id="L225">                     1, lh.getLedgerMetadata().getAllEnsembles().size());</span>
+<span class="nc" id="L226">        assertTrue(</span>
+                &quot;Stats should not have captured an ensemble change&quot;,
+<span class="nc" id="L228">                bkc.getTestStatsProvider().getOpStatsLogger(</span>
+                        CLIENT_SCOPE + &quot;.&quot; + WATCHER_SCOPE + &quot;.&quot; + REPLACE_BOOKIE_TIME)
+<span class="nc bnc" id="L230" title="All 2 branches missed.">                        .getSuccessCount() == 0);</span>
+
+<span class="nc" id="L232">        logger.info(&quot;Kill bookie 1 and write another {} entries.&quot;, numEntries);</span>
+
+<span class="nc" id="L234">        ServerConfiguration conf1 = killBookie(lh.getCurrentEnsemble().get(1));</span>
+
+<span class="nc bnc" id="L236" title="All 2 branches missed.">        for (int i = 2 * numEntries; i &lt; 3 * numEntries; i++) {</span>
+<span class="nc" id="L237">            lh.addEntry(data);</span>
+        }
+
+        // ensure there is no ensemble changed
+<span class="nc" id="L241">        assertEquals(&quot;There should be no ensemble change if delaying ensemble change is enabled.&quot;,</span>
+<span class="nc" id="L242">                     1, lh.getLedgerMetadata().getAllEnsembles().size());</span>
+
+<span class="nc" id="L244">        logger.info(&quot;Kill bookie 2 and write another {} entries.&quot;, numEntries);</span>
+
+<span class="nc" id="L246">        ServerConfiguration conf2 = killBookie(lh.getCurrentEnsemble().get(2));</span>
+
+<span class="nc bnc" id="L248" title="All 2 branches missed.">        for (int i = 3 * numEntries; i &lt; 4 * numEntries; i++) {</span>
+<span class="nc" id="L249">            lh.addEntry(data);</span>
+        }
+
+        // ensemble change should kick in
+<span class="nc" id="L253">        assertEquals(&quot;There should be ensemble change if ack quorum couldn't be formed.&quot;,</span>
+<span class="nc" id="L254">                     2, lh.getLedgerMetadata().getAllEnsembles().size());</span>
+<span class="nc" id="L255">        assertTrue(</span>
+                &quot;Stats should have captured an ensemble change&quot;,
+<span class="nc" id="L257">                bkc.getTestStatsProvider().getOpStatsLogger(</span>
+                        CLIENT_SCOPE + &quot;.&quot; + WATCHER_SCOPE + &quot;.&quot; + REPLACE_BOOKIE_TIME)
+<span class="nc bnc" id="L259" title="All 2 branches missed.">                        .getSuccessCount() &gt; 0);</span>
+
+<span class="nc" id="L261">        List&lt;BookieSocketAddress&gt; firstFragment = lh.getLedgerMetadata().getEnsembleAt(0);</span>
+<span class="nc" id="L262">        List&lt;BookieSocketAddress&gt; secondFragment = lh.getLedgerMetadata().getEnsembleAt(3 * numEntries);</span>
+<span class="nc" id="L263">        assertFalse(firstFragment.get(0).equals(secondFragment.get(0)));</span>
+<span class="nc" id="L264">        assertFalse(firstFragment.get(1).equals(secondFragment.get(1)));</span>
+<span class="nc" id="L265">        assertFalse(firstFragment.get(2).equals(secondFragment.get(2)));</span>
+<span class="nc" id="L266">        assertEquals(firstFragment.get(3), secondFragment.get(3));</span>
+<span class="nc" id="L267">        assertEquals(firstFragment.get(4), secondFragment.get(4));</span>
+
+<span class="nc" id="L269">        bsConfs.add(conf0);</span>
+<span class="nc" id="L270">        bs.add(startBookie(conf0));</span>
+<span class="nc" id="L271">        bsConfs.add(conf1);</span>
+<span class="nc" id="L272">        bs.add(startBookie(conf1));</span>
+<span class="nc" id="L273">        bsConfs.add(conf2);</span>
+<span class="nc" id="L274">        bs.add(startBookie(conf2));</span>
+
+<span class="nc bnc" id="L276" title="All 2 branches missed.">        for (int i = 4 * numEntries; i &lt; 5 * numEntries; i++) {</span>
+<span class="nc" id="L277">            lh.addEntry(data);</span>
+        }
+
+        // ensure there is no ensemble changed
+<span class="nc" id="L281">        assertEquals(&quot;There should be no ensemble change if delaying ensemble change is enabled.&quot;,</span>
+<span class="nc" id="L282">                     2, lh.getLedgerMetadata().getAllEnsembles().size());</span>
+
+        // check entries
+<span class="nc" id="L285">        verifyEntries(lh, 0, numEntries, 5, 0);</span>
+<span class="nc" id="L286">        verifyEntries(lh, numEntries, 2 * numEntries, 4, 1);</span>
+<span class="nc" id="L287">        verifyEntries(lh, 2 * numEntries, 3 * numEntries, 3, 2);</span>
+<span class="nc" id="L288">        verifyEntries(lh, 3 * numEntries, 4 * numEntries, 5, 0);</span>
+<span class="nc" id="L289">        verifyEntries(lh, 4 * numEntries, 5 * numEntries, 5, 0);</span>
+<span class="nc" id="L290">    }</span>
+
+    @Test
+    public void testEnsembleChangeWithNotEnoughBookies() throws Exception {
+<span class="nc" id="L294">        startNewBookie();</span>
+
+<span class="nc" id="L296">        LedgerHandle lh = bkc.createLedger(5, 5, 3, digestType, testPasswd);</span>
+
+<span class="nc" id="L298">        byte[] data = &quot;foobar&quot;.getBytes();</span>
+
+<span class="nc" id="L300">        int numEntries = 10;</span>
+<span class="nc bnc" id="L301" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L302">            lh.addEntry(data);</span>
+        }
+
+<span class="nc" id="L305">        logger.info(&quot;Killed 3 bookies and add {} more entries : {}&quot;, numEntries, lh.getLedgerMetadata());</span>
+
+        // kill three bookies, but we only have 2 new bookies for ensemble change.
+<span class="nc" id="L308">        ServerConfiguration conf0 = killBookie(lh.getCurrentEnsemble().get(0));</span>
+<span class="nc" id="L309">        ServerConfiguration conf1 = killBookie(lh.getCurrentEnsemble().get(1));</span>
+<span class="nc" id="L310">        ServerConfiguration conf2 = killBookie(lh.getCurrentEnsemble().get(2));</span>
+
+<span class="nc bnc" id="L312" title="All 2 branches missed.">        for (int i = numEntries; i &lt; 2 * numEntries; i++) {</span>
+<span class="nc" id="L313">            lh.addEntry(data);</span>
+        }
+
+<span class="nc" id="L316">        logger.info(&quot;Ledger metadata after killed bookies : {}&quot;, lh.getLedgerMetadata());</span>
+
+        // ensure there is ensemble changed
+<span class="nc" id="L319">        assertEquals(&quot;There should be ensemble change if ack quorum is broken.&quot;,</span>
+<span class="nc" id="L320">                     2, lh.getLedgerMetadata().getAllEnsembles().size());</span>
+
+<span class="nc" id="L322">        bsConfs.add(conf0);</span>
+<span class="nc" id="L323">        bs.add(startBookie(conf0));</span>
+<span class="nc" id="L324">        bsConfs.add(conf1);</span>
+<span class="nc" id="L325">        bs.add(startBookie(conf1));</span>
+<span class="nc" id="L326">        bsConfs.add(conf2);</span>
+<span class="nc" id="L327">        bs.add(startBookie(conf2));</span>
+
+<span class="nc bnc" id="L329" title="All 2 branches missed.">        for (int i = 2 * numEntries; i &lt; 3 * numEntries; i++) {</span>
+<span class="nc" id="L330">            lh.addEntry(data);</span>
+        }
+
+        // ensure there is no ensemble changed
+<span class="nc" id="L334">        assertEquals(&quot;There should be no ensemble change after adding failed bookies back.&quot;,</span>
+<span class="nc" id="L335">                     2, lh.getLedgerMetadata().getAllEnsembles().size());</span>
+
+        // check entries
+<span class="nc" id="L338">        verifyEntries(lh, 0, numEntries, 5, 0);</span>
+<span class="nc" id="L339">        verifyEntries(lh, numEntries, 2 * numEntries, 3, 2);</span>
+<span class="nc" id="L340">        verifyEntries(lh, 2 * numEntries, 3 * numEntries, 5, 0);</span>
+<span class="nc" id="L341">    }</span>
+
+    @Test
+    public void testEnsembleChangeWithMoreBookieFailures() throws Exception {
+<span class="nc bnc" id="L345" title="All 2 branches missed.">        for (int i = 0; i &lt; 5; i++) {</span>
+<span class="nc" id="L346">            startNewBookie();</span>
+        }
+
+<span class="nc" id="L349">        LedgerHandle lh = bkc.createLedger(5, 5, 3, digestType, testPasswd);</span>
+
+<span class="nc" id="L351">        byte[] data = &quot;foobar&quot;.getBytes();</span>
+
+<span class="nc" id="L353">        int numEntries = 10;</span>
+<span class="nc bnc" id="L354" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L355">            logger.info(&quot;Add entry {}&quot;, i);</span>
+<span class="nc" id="L356">            lh.addEntry(data);</span>
+        }
+
+<span class="nc" id="L359">        logger.info(&quot;Killed 5 bookies and add {} more entries : {}&quot;, numEntries, lh.getLedgerMetadata());</span>
+
+        // kill 5 bookies to introduce more bookie failure
+<span class="nc" id="L362">        List&lt;ServerConfiguration&gt; confs = new ArrayList&lt;ServerConfiguration&gt;(5);</span>
+<span class="nc bnc" id="L363" title="All 2 branches missed.">        for (int i = 0; i &lt; 5; i++) {</span>
+<span class="nc" id="L364">            confs.add(killBookie(lh.getCurrentEnsemble().get(i)));</span>
+        }
+
+<span class="nc bnc" id="L367" title="All 2 branches missed.">        for (int i = numEntries; i &lt; 2 * numEntries; i++) {</span>
+<span class="nc" id="L368">            logger.info(&quot;Add entry {}&quot;, i);</span>
+<span class="nc" id="L369">            lh.addEntry(data);</span>
+        }
+
+<span class="nc" id="L372">        logger.info(&quot;Ledger metadata after killed bookies : {}&quot;, lh.getLedgerMetadata());</span>
+
+        // ensure there is no ensemble changed
+<span class="nc" id="L375">        assertEquals(&quot;There should be ensemble change if breaking ack quorum.&quot;,</span>
+<span class="nc" id="L376">                     2, lh.getLedgerMetadata().getAllEnsembles().size());</span>
+
+<span class="nc bnc" id="L378" title="All 2 branches missed.">        for (ServerConfiguration conf : confs) {</span>
+<span class="nc" id="L379">            bsConfs.add(conf);</span>
+<span class="nc" id="L380">            bs.add(startBookie(conf));</span>
+<span class="nc" id="L381">        }</span>
+
+<span class="nc bnc" id="L383" title="All 2 branches missed.">        for (int i = 2 * numEntries; i &lt; 3 * numEntries; i++) {</span>
+<span class="nc" id="L384">            logger.info(&quot;Add entry {}&quot;, i);</span>
+<span class="nc" id="L385">            lh.addEntry(data);</span>
+        }
+
+        // ensure there is no ensemble changed
+<span class="nc" id="L389">        assertEquals(&quot;There should not be ensemble changed if delaying ensemble change is enabled.&quot;,</span>
+<span class="nc" id="L390">                     2, lh.getLedgerMetadata().getAllEnsembles().size());</span>
+
+        // check entries
+<span class="nc" id="L393">        verifyEntries(lh, 0, numEntries, 5, 0);</span>
+<span class="nc" id="L394">        verifyEntriesRange(lh, numEntries, 2 * numEntries, 5, 0);</span>
+<span class="nc" id="L395">        verifyEntries(lh, 2 * numEntries, 3 * numEntries, 5, 0);</span>
+<span class="nc" id="L396">    }</span>
+
+    @Test
+    public void testChangeEnsembleIfBookieReadOnly() throws Exception {
+<span class="nc" id="L400">        LedgerHandle lh = bkc.createLedger(3, 3, 2, digestType, testPasswd);</span>
+
+<span class="nc" id="L402">        byte[] data = &quot;foobar&quot;.getBytes();</span>
+
+<span class="nc" id="L404">        int numEntries = 10;</span>
+<span class="nc bnc" id="L405" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L406">            lh.addEntry(data);</span>
+        }
+
+        // kill two bookies, but we still have 3 bookies for the ack quorum.
+<span class="nc" id="L410">        setBookieToReadOnly(lh.getCurrentEnsemble().get(0));</span>
+
+<span class="nc bnc" id="L412" title="All 2 branches missed.">        for (int i = numEntries; i &lt; 2 * numEntries; i++) {</span>
+<span class="nc" id="L413">            lh.addEntry(data);</span>
+        }
+
+        // ensure there is no ensemble changed
+<span class="nc" id="L417">        assertEquals(&quot;The ensemble should change when a bookie is readonly even if we delay ensemble change.&quot;,</span>
+<span class="nc" id="L418">            2, lh.getLedgerMetadata().getAllEnsembles().size());</span>
+
+<span class="nc" id="L420">    }</span>
+
+    @Test
+    public void testChangeEnsembleSecondBookieReadOnly() throws Exception {
+<span class="nc" id="L424">        LedgerHandle lh = bkc.createLedger(3, 3, 2, digestType, testPasswd);</span>
+
+<span class="nc" id="L426">        byte[] data = &quot;foobar&quot;.getBytes();</span>
+
+<span class="nc" id="L428">        int numEntries = 10;</span>
+<span class="nc bnc" id="L429" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L430">            lh.addEntry(data);</span>
+        }
+
+<span class="nc" id="L433">        BookieSocketAddress failedBookie = lh.getCurrentEnsemble().get(0);</span>
+<span class="nc" id="L434">        BookieSocketAddress readOnlyBookie = lh.getCurrentEnsemble().get(1);</span>
+<span class="nc" id="L435">        ServerConfiguration conf0 = killBookie(failedBookie);</span>
+
+<span class="nc bnc" id="L437" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L438">            lh.addEntry(data);</span>
+        }
+
+<span class="nc" id="L441">        assertEquals(&quot;There should be ensemble change if delaying ensemble change is enabled.&quot;,</span>
+<span class="nc" id="L442">            1, lh.getLedgerMetadata().getAllEnsembles().size());</span>
+
+        // kill two bookies, but we still have 3 bookies for the ack quorum.
+<span class="nc" id="L445">        setBookieToReadOnly(readOnlyBookie);</span>
+
+<span class="nc bnc" id="L447" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L448">            lh.addEntry(data);</span>
+        }
+
+        // ensure there is no ensemble changed
+<span class="nc" id="L452">        assertEquals(&quot;The ensemble should change when a bookie is readonly even if we delay ensemble change.&quot;,</span>
+<span class="nc" id="L453">            2, lh.getLedgerMetadata().getAllEnsembles().size());</span>
+<span class="nc" id="L454">        assertEquals(3, lh.getCurrentEnsemble().size());</span>
+<span class="nc" id="L455">        assertFalse(lh.getCurrentEnsemble().contains(failedBookie));</span>
+<span class="nc" id="L456">        assertFalse(lh.getCurrentEnsemble().contains(readOnlyBookie));</span>
+<span class="nc" id="L457">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

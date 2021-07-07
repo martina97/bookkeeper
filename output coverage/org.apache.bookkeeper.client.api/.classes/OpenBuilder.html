@@ -1,0 +1,122 @@
+
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html id="htmlId">
+<head>
+  <title>Coverage Report :: OpenBuilder</title>
+  <style type="text/css">
+    @import "../../.css/coverage.css";
+  </style>
+</head>
+
+<body>
+<div class="header"></div>
+
+<div class="content">
+<div class="breadCrumbs">
+    [ <a href="../../index.html">all classes</a> ]
+    [ <a href="../index.html">org.apache.bookkeeper.client.api</a> ]
+</div>
+
+<h1>Coverage Summary for Class: OpenBuilder (org.apache.bookkeeper.client.api)</h1>
+
+<table class="coverageStats">
+<tr>
+  <th class="name">Class</th>
+</tr>
+<tr>
+  <td class="name">OpenBuilder</td>
+</tr>
+
+</table>
+
+<br/>
+<br/>
+
+
+<div class="sourceCode"><i>1</i>&nbsp;/**
+<i>2</i>&nbsp; *
+<i>3</i>&nbsp; * Licensed to the Apache Software Foundation (ASF) under one
+<i>4</i>&nbsp; * or more contributor license agreements.  See the NOTICE file
+<i>5</i>&nbsp; * distributed with this work for additional information
+<i>6</i>&nbsp; * regarding copyright ownership.  The ASF licenses this file
+<i>7</i>&nbsp; * to you under the Apache License, Version 2.0 (the
+<i>8</i>&nbsp; * &quot;License&quot;); you may not use this file except in compliance
+<i>9</i>&nbsp; * with the License.  You may obtain a copy of the License at
+<i>10</i>&nbsp; *
+<i>11</i>&nbsp; *   http://www.apache.org/licenses/LICENSE-2.0
+<i>12</i>&nbsp; *
+<i>13</i>&nbsp; * Unless required by applicable law or agreed to in writing,
+<i>14</i>&nbsp; * software distributed under the License is distributed on an
+<i>15</i>&nbsp; * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+<i>16</i>&nbsp; * KIND, either express or implied.  See the License for the
+<i>17</i>&nbsp; * specific language governing permissions and limitations
+<i>18</i>&nbsp; * under the License.
+<i>19</i>&nbsp; *
+<i>20</i>&nbsp; */
+<i>21</i>&nbsp;package org.apache.bookkeeper.client.api;
+<i>22</i>&nbsp;
+<i>23</i>&nbsp;import org.apache.bookkeeper.common.annotation.InterfaceAudience.Public;
+<i>24</i>&nbsp;import org.apache.bookkeeper.common.annotation.InterfaceStability.Unstable;
+<i>25</i>&nbsp;import org.apache.bookkeeper.conf.ClientConfiguration;
+<i>26</i>&nbsp;
+<i>27</i>&nbsp;/**
+<i>28</i>&nbsp; * Builder-style interface to open exiting ledgers.
+<i>29</i>&nbsp; *
+<i>30</i>&nbsp; * @since 4.6
+<i>31</i>&nbsp; */
+<i>32</i>&nbsp;@Public
+<i>33</i>&nbsp;@Unstable
+<i>34</i>&nbsp;public interface OpenBuilder extends OpBuilder&lt;ReadHandle&gt; {
+<i>35</i>&nbsp;
+<i>36</i>&nbsp;    /**
+<i>37</i>&nbsp;     * Set the id of the ledger to be opened.
+<i>38</i>&nbsp;     *
+<i>39</i>&nbsp;     * @param ledgerId
+<i>40</i>&nbsp;     *
+<i>41</i>&nbsp;     * @return the builder itself
+<i>42</i>&nbsp;     */
+<i>43</i>&nbsp;    OpenBuilder withLedgerId(long ledgerId);
+<i>44</i>&nbsp;
+<i>45</i>&nbsp;    /**
+<i>46</i>&nbsp;     * Define to open the ledger in recovery mode or in readonly mode. In recovery mode the ledger will be fenced and
+<i>47</i>&nbsp;     * the writer of the ledger will be prevented from issuing other writes to the ledger. It defaults to &#39;false&#39;
+<i>48</i>&nbsp;     *
+<i>49</i>&nbsp;     * @param recovery recovery mode
+<i>50</i>&nbsp;     *
+<i>51</i>&nbsp;     * @return the builder itself
+<i>52</i>&nbsp;     */
+<i>53</i>&nbsp;    OpenBuilder withRecovery(boolean recovery);
+<i>54</i>&nbsp;
+<i>55</i>&nbsp;    /**
+<i>56</i>&nbsp;     * Sets the password to be used to open the ledger. It defauls to an empty password
+<i>57</i>&nbsp;     *
+<i>58</i>&nbsp;     * @param password the password to unlock the ledger
+<i>59</i>&nbsp;     *
+<i>60</i>&nbsp;     * @return the builder itself
+<i>61</i>&nbsp;     */
+<i>62</i>&nbsp;    OpenBuilder withPassword(byte[] password);
+<i>63</i>&nbsp;
+<i>64</i>&nbsp;    /**
+<i>65</i>&nbsp;     * Sets the expected digest type used to check the contents of the ledger. It defaults to {@link DigestType#CRC32}.
+<i>66</i>&nbsp;     * If {@link ClientConfiguration#setEnableDigestTypeAutodetection(boolean) } is set to true this value is ignored
+<i>67</i>&nbsp;     * and the digest type is read directly from metadata
+<i>68</i>&nbsp;     *
+<i>69</i>&nbsp;     * @param digestType the type of digest
+<i>70</i>&nbsp;     *
+<i>71</i>&nbsp;     * @return the builder itself
+<i>72</i>&nbsp;     */
+<i>73</i>&nbsp;    OpenBuilder withDigestType(DigestType digestType);
+<i>74</i>&nbsp;
+<i>75</i>&nbsp;}
+</div>
+</div>
+
+<div class="footer">
+    
+    <div style="float:right;">generated on 2021-06-28 15:57</div>
+</div>
+</body>
+</html>

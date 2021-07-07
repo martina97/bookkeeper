@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PendingAddOpTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">PendingAddOpTest.java</span></div><h1>PendingAddOpTest.java</h1><pre class="source lang-java linenums">/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+package org.apache.bookkeeper.client;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import java.util.concurrent.atomic.AtomicInteger;
+import org.apache.bookkeeper.client.BKException.Code;
+import org.apache.bookkeeper.client.api.WriteFlag;
+import org.apache.bookkeeper.common.util.OrderedExecutor;
+import org.apache.bookkeeper.proto.BookieClient;
+import org.apache.bookkeeper.stats.NullStatsLogger;
+import org.junit.Before;
+import org.junit.Test;
+
+/**
+ * Unit test of {@link PendingAddOp}.
+ */
+<span class="nc" id="L42">public class PendingAddOpTest {</span>
+
+    private LedgerHandle lh;
+    private ClientContext mockClientContext;
+
+    private ByteBuf payload;
+
+    @Before
+    public void setup() {
+<span class="nc" id="L51">        BookKeeperClientStats clientStats = BookKeeperClientStats.newInstance(NullStatsLogger.INSTANCE);</span>
+<span class="nc" id="L52">        BookieClient bookieClient = mock(BookieClient.class);</span>
+<span class="nc" id="L53">        OrderedExecutor mainWorkerPool = mock(OrderedExecutor.class);</span>
+<span class="nc" id="L54">        mockClientContext = mock(ClientContext.class);</span>
+<span class="nc" id="L55">        when(mockClientContext.getBookieClient()).thenReturn(bookieClient);</span>
+<span class="nc" id="L56">        when(mockClientContext.getConf()).thenReturn(ClientInternalConf.defaultValues());</span>
+<span class="nc" id="L57">        when(mockClientContext.getMainWorkerPool()).thenReturn(mainWorkerPool);</span>
+<span class="nc" id="L58">        when(mockClientContext.getClientStats()).thenReturn(clientStats);</span>
+
+<span class="nc" id="L60">        lh = mock(LedgerHandle.class);</span>
+<span class="nc" id="L61">        when(lh.getDistributionSchedule())</span>
+<span class="nc" id="L62">            .thenReturn(new RoundRobinDistributionSchedule(3, 3, 2));</span>
+<span class="nc" id="L63">        byte[] data = &quot;test-pending-add-op&quot;.getBytes(UTF_8);</span>
+<span class="nc" id="L64">        payload = Unpooled.wrappedBuffer(data);</span>
+<span class="nc" id="L65">        payload.writerIndex(data.length);</span>
+<span class="nc" id="L66">    }</span>
+
+    @Test
+    public void testExecuteAfterCancelled() {
+<span class="nc" id="L70">        AtomicInteger rcHolder = new AtomicInteger(-0xdead);</span>
+<span class="nc" id="L71">        PendingAddOp op = PendingAddOp.create(</span>
+<span class="nc" id="L72">                lh, mockClientContext, lh.getCurrentEnsemble(),</span>
+                payload, WriteFlag.NONE,
+                (rc, handle, entryId, qwcLatency, ctx) -&gt; {
+<span class="nc" id="L75">                    rcHolder.set(rc);</span>
+<span class="nc" id="L76">                }, null);</span>
+<span class="nc" id="L77">        assertSame(lh, op.lh);</span>
+
+        // cancel the op.
+<span class="nc" id="L80">        op.submitCallback(Code.NotEnoughBookiesException);</span>
+        // if a op is cancelled, it is not recycled until it has been run.
+<span class="nc" id="L82">        assertSame(lh, op.lh);</span>
+<span class="nc" id="L83">        assertEquals(Code.NotEnoughBookiesException, rcHolder.get());</span>
+
+<span class="nc" id="L85">        op.run();</span>
+        // after the op is run, the object is recycled.
+<span class="nc" id="L87">        assertNull(op.lh);</span>
+<span class="nc" id="L88">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

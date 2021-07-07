@@ -1,0 +1,272 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>LedgerCloseTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">LedgerCloseTest.java</span></div><h1>LedgerCloseTest.java</h1><pre class="source lang-java linenums">/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.bookkeeper.client;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
+
+import io.netty.buffer.ByteBuf;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.apache.bookkeeper.bookie.Bookie;
+import org.apache.bookkeeper.bookie.BookieException;
+import org.apache.bookkeeper.client.AsyncCallback.AddCallback;
+import org.apache.bookkeeper.client.BookKeeper.DigestType;
+import org.apache.bookkeeper.conf.ClientConfiguration;
+import org.apache.bookkeeper.conf.ServerConfiguration;
+import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.proto.BookkeeperInternalCallbacks.GenericCallback;
+import org.apache.bookkeeper.proto.BookkeeperInternalCallbacks.WriteCallback;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.apache.bookkeeper.test.TestCallbacks.AddCallbackFuture;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * This class tests the ledger close logic.
+ */
+@SuppressWarnings(&quot;deprecation&quot;)
+public class LedgerCloseTest extends BookKeeperClusterTestCase {
+
+<span class="nc" id="L57">    private static final Logger LOG = LoggerFactory.getLogger(LedgerCloseTest.class);</span>
+
+    static final int READ_TIMEOUT = 1;
+
+    final DigestType digestType;
+
+    public LedgerCloseTest() {
+<span class="nc" id="L64">        super(6);</span>
+<span class="nc" id="L65">        this.digestType = DigestType.CRC32;</span>
+        // set timeout to a large value which disable it.
+<span class="nc" id="L67">        baseClientConf.setReadTimeout(99999);</span>
+<span class="nc" id="L68">        baseConf.setGcWaitTime(999999);</span>
+<span class="nc" id="L69">    }</span>
+
+    @Test
+    public void testLedgerCloseWithConsistentLength() throws Exception {
+<span class="nc" id="L73">        ClientConfiguration conf = new ClientConfiguration();</span>
+<span class="nc" id="L74">        conf.setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+<span class="nc" id="L75">        conf.setReadTimeout(1);</span>
+
+<span class="nc" id="L77">        BookKeeper bkc = new BookKeeper(conf);</span>
+<span class="nc" id="L78">        LedgerHandle lh = bkc.createLedger(6, 3, DigestType.CRC32, new byte[] {});</span>
+<span class="nc" id="L79">        final CountDownLatch latch = new CountDownLatch(1);</span>
+<span class="nc" id="L80">        stopBKCluster();</span>
+<span class="nc" id="L81">        final AtomicInteger i = new AtomicInteger(0xdeadbeef);</span>
+<span class="nc" id="L82">        AsyncCallback.AddCallback cb = new AsyncCallback.AddCallback() {</span>
+            @Override
+            public void addComplete(int rc, LedgerHandle lh, long entryId, Object ctx) {
+<span class="nc" id="L85">                i.set(rc);</span>
+<span class="nc" id="L86">                latch.countDown();</span>
+<span class="nc" id="L87">            }</span>
+        };
+<span class="nc" id="L89">        lh.asyncAddEntry(&quot;Test Entry&quot;.getBytes(), cb, null);</span>
+<span class="nc" id="L90">        latch.await();</span>
+<span class="nc" id="L91">        assertEquals(i.get(), BKException.Code.NotEnoughBookiesException);</span>
+<span class="nc" id="L92">        assertEquals(0, lh.getLength());</span>
+<span class="nc" id="L93">        assertEquals(LedgerHandle.INVALID_ENTRY_ID, lh.getLastAddConfirmed());</span>
+<span class="nc" id="L94">        startBKCluster(zkUtil.getMetadataServiceUri());</span>
+<span class="nc" id="L95">        LedgerHandle newLh = bkc.openLedger(lh.getId(), DigestType.CRC32, new byte[] {});</span>
+<span class="nc" id="L96">        assertEquals(0, newLh.getLength());</span>
+<span class="nc" id="L97">        assertEquals(LedgerHandle.INVALID_ENTRY_ID, newLh.getLastAddConfirmed());</span>
+<span class="nc" id="L98">    }</span>
+
+    @Test
+    public void testLedgerCloseDuringUnrecoverableErrors() throws Exception {
+<span class="nc" id="L102">        int numEntries = 3;</span>
+<span class="nc" id="L103">        LedgerHandle lh = bkc.createLedger(3, 3, 3, digestType, &quot;&quot;.getBytes());</span>
+<span class="nc" id="L104">        verifyMetadataConsistency(numEntries, lh);</span>
+<span class="nc" id="L105">    }</span>
+
+    @Test
+    public void testLedgerCheckerShouldnotSelectInvalidLastFragments() throws Exception {
+<span class="nc" id="L109">        int numEntries = 10;</span>
+<span class="nc" id="L110">        LedgerHandle lh = bkc.createLedger(3, 3, 3, digestType, &quot;&quot;.getBytes());</span>
+        // Add some entries before bookie failures
+<span class="nc bnc" id="L112" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L113">            lh.addEntry(&quot;data&quot;.getBytes());</span>
+        }
+<span class="nc" id="L115">        numEntries = 4; // add n*ensemleSize+1 entries async after bookies</span>
+                        // failed.
+<span class="nc" id="L117">        verifyMetadataConsistency(numEntries, lh);</span>
+
+<span class="nc" id="L119">        LedgerChecker checker = new LedgerChecker(bkc);</span>
+<span class="nc" id="L120">        CheckerCallback cb = new CheckerCallback();</span>
+<span class="nc" id="L121">        checker.checkLedger(lh, cb);</span>
+<span class="nc" id="L122">        Set&lt;LedgerFragment&gt; result = cb.waitAndGetResult();</span>
+<span class="nc" id="L123">        assertEquals(&quot;No fragments should be selected&quot;, 0, result.size());</span>
+<span class="nc" id="L124">    }</span>
+
+<span class="nc" id="L126">    class CheckerCallback implements GenericCallback&lt;Set&lt;LedgerFragment&gt;&gt; {</span>
+<span class="nc" id="L127">        private Set&lt;LedgerFragment&gt; result = null;</span>
+<span class="nc" id="L128">        private CountDownLatch latch = new CountDownLatch(1);</span>
+
+        public void operationComplete(int rc, Set&lt;LedgerFragment&gt; result) {
+<span class="nc" id="L131">            this.result = result;</span>
+<span class="nc" id="L132">            latch.countDown();</span>
+<span class="nc" id="L133">        }</span>
+
+        Set&lt;LedgerFragment&gt; waitAndGetResult() throws InterruptedException {
+<span class="nc" id="L136">            latch.await();</span>
+<span class="nc" id="L137">            return result;</span>
+        }
+    }
+
+    private void verifyMetadataConsistency(int numEntries, LedgerHandle lh)
+            throws Exception {
+<span class="nc" id="L143">        final CountDownLatch addDoneLatch = new CountDownLatch(1);</span>
+<span class="nc" id="L144">        final CountDownLatch deadIOLatch = new CountDownLatch(1);</span>
+<span class="nc" id="L145">        final CountDownLatch recoverDoneLatch = new CountDownLatch(1);</span>
+<span class="nc" id="L146">        final CountDownLatch failedLatch = new CountDownLatch(1);</span>
+        // kill first bookie to replace with a unauthorize bookie
+<span class="nc" id="L148">        BookieSocketAddress bookie = lh.getCurrentEnsemble().get(0);</span>
+<span class="nc" id="L149">        ServerConfiguration conf = killBookie(bookie);</span>
+        // replace a unauthorize bookie
+<span class="nc" id="L151">        startUnauthorizedBookie(conf, addDoneLatch);</span>
+        // kill second bookie to replace with a dead bookie
+<span class="nc" id="L153">        bookie = lh.getCurrentEnsemble().get(1);</span>
+<span class="nc" id="L154">        conf = killBookie(bookie);</span>
+        // replace a slow dead bookie
+<span class="nc" id="L156">        startDeadBookie(conf, deadIOLatch);</span>
+
+        // tried to add entries
+<span class="nc bnc" id="L159" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L160">            lh.asyncAddEntry(&quot;data&quot;.getBytes(), new AddCallback() {</span>
+                @Override
+                public void addComplete(int rc, LedgerHandle lh, long entryId, Object ctx) {
+<span class="nc bnc" id="L163" title="All 2 branches missed.">                    if (BKException.Code.OK != rc) {</span>
+<span class="nc" id="L164">                        failedLatch.countDown();</span>
+<span class="nc" id="L165">                        deadIOLatch.countDown();</span>
+                    }
+<span class="nc bnc" id="L167" title="All 2 branches missed.">                    if (0 == entryId) {</span>
+                        try {
+<span class="nc" id="L169">                            recoverDoneLatch.await();</span>
+<span class="nc" id="L170">                        } catch (InterruptedException ie) {</span>
+<span class="nc" id="L171">                            Thread.currentThread().interrupt();</span>
+<span class="nc" id="L172">                        }</span>
+                    }
+<span class="nc" id="L174">                }</span>
+            }, null);
+        }
+        // add finished
+<span class="nc" id="L178">        addDoneLatch.countDown();</span>
+        // wait until entries failed due to UnauthorizedAccessException
+<span class="nc" id="L180">        failedLatch.await();</span>
+        // simulate the ownership of this ledger is transfer to another host
+<span class="nc" id="L182">        LOG.info(&quot;Recover ledger {}.&quot;, lh.getId());</span>
+<span class="nc" id="L183">        ClientConfiguration newConf = new ClientConfiguration();</span>
+<span class="nc" id="L184">        newConf.addConfiguration(baseClientConf);</span>
+<span class="nc" id="L185">        BookKeeper newBkc = new BookKeeperTestClient(newConf.setReadTimeout(1));</span>
+<span class="nc" id="L186">        LedgerHandle recoveredLh = newBkc.openLedger(lh.getId(), digestType, &quot;&quot;.getBytes());</span>
+<span class="nc" id="L187">        LOG.info(&quot;Recover ledger {} done.&quot;, lh.getId());</span>
+<span class="nc" id="L188">        recoverDoneLatch.countDown();</span>
+        // wait a bit until add operations failed from second bookie due to IOException
+<span class="nc" id="L190">        TimeUnit.SECONDS.sleep(5);</span>
+        // open the ledger again to make sure we ge the right last confirmed.
+<span class="nc" id="L192">        LedgerHandle newLh = newBkc.openLedger(lh.getId(), digestType, &quot;&quot;.getBytes());</span>
+<span class="nc" id="L193">        assertEquals(&quot;Metadata should be consistent across different opened ledgers&quot;,</span>
+<span class="nc" id="L194">                recoveredLh.getLastAddConfirmed(), newLh.getLastAddConfirmed());</span>
+<span class="nc" id="L195">    }</span>
+
+    private void startUnauthorizedBookie(ServerConfiguration conf, final CountDownLatch latch)
+            throws Exception {
+<span class="nc" id="L199">        Bookie sBookie = new Bookie(conf) {</span>
+            @Override
+            public void addEntry(ByteBuf entry, boolean ackBeforeSync, WriteCallback cb, Object ctx, byte[] masterKey)
+                    throws IOException, BookieException {
+                try {
+<span class="nc" id="L204">                    latch.await();</span>
+<span class="nc" id="L205">                } catch (InterruptedException e) {</span>
+<span class="nc" id="L206">                    Thread.currentThread().interrupt();</span>
+<span class="nc" id="L207">                }</span>
+<span class="nc" id="L208">                throw BookieException.create(BookieException.Code.UnauthorizedAccessException);</span>
+            }
+
+            @Override
+            public void recoveryAddEntry(ByteBuf entry, WriteCallback cb, Object ctx, byte[] masterKey)
+                    throws IOException, BookieException {
+<span class="nc" id="L214">                throw new IOException(&quot;Dead bookie for recovery adds.&quot;);</span>
+            }
+        };
+<span class="nc" id="L217">        bsConfs.add(conf);</span>
+<span class="nc" id="L218">        bs.add(startBookie(conf, sBookie));</span>
+<span class="nc" id="L219">    }</span>
+
+    // simulate slow adds, then become normal when recover,
+    // so no ensemble change when recovering ledger on this bookie.
+    private void startDeadBookie(ServerConfiguration conf, final CountDownLatch latch) throws Exception {
+<span class="nc" id="L224">        Bookie dBookie = new Bookie(conf) {</span>
+            @Override
+            public void addEntry(ByteBuf entry, boolean ackBeforeSync, WriteCallback cb, Object ctx, byte[] masterKey)
+                    throws IOException, BookieException {
+                try {
+<span class="nc" id="L229">                    latch.await();</span>
+<span class="nc" id="L230">                } catch (InterruptedException e) {</span>
+<span class="nc" id="L231">                    Thread.currentThread().interrupt();</span>
+<span class="nc" id="L232">                }</span>
+                // simulate slow adds.
+<span class="nc" id="L234">                throw new IOException(&quot;Dead bookie&quot;);</span>
+            }
+        };
+<span class="nc" id="L237">        bsConfs.add(conf);</span>
+<span class="nc" id="L238">        bs.add(startBookie(conf, dBookie));</span>
+<span class="nc" id="L239">    }</span>
+
+    @Test
+    public void testAllWritesAreCompletedOnClosedLedger() throws Exception {
+<span class="nc bnc" id="L243" title="All 2 branches missed.">        for (int i = 0; i &lt; 100; i++) {</span>
+<span class="nc" id="L244">            LOG.info(&quot;Iteration {}&quot;, i);</span>
+
+<span class="nc" id="L246">            List&lt;AddCallbackFuture&gt; futures = new ArrayList&lt;AddCallbackFuture&gt;();</span>
+<span class="nc" id="L247">            LedgerHandle w = bkc.createLedger(DigestType.CRC32, new byte[0]);</span>
+<span class="nc" id="L248">            AddCallbackFuture f = new AddCallbackFuture(0L);</span>
+<span class="nc" id="L249">            w.asyncAddEntry(&quot;foobar&quot;.getBytes(UTF_8), f, null);</span>
+<span class="nc" id="L250">            f.get();</span>
+
+<span class="nc" id="L252">            LedgerHandle r = bkc.openLedger(w.getId(), DigestType.CRC32, new byte[0]);</span>
+<span class="nc bnc" id="L253" title="All 2 branches missed.">            for (int j = 0; j &lt; 100; j++) {</span>
+<span class="nc" id="L254">                AddCallbackFuture f1 = new AddCallbackFuture(1L + j);</span>
+<span class="nc" id="L255">                w.asyncAddEntry(&quot;foobar&quot;.getBytes(), f1, null);</span>
+<span class="nc" id="L256">                futures.add(f1);</span>
+            }
+
+<span class="nc bnc" id="L259" title="All 2 branches missed.">            for (AddCallbackFuture f2: futures) {</span>
+                try {
+<span class="nc" id="L261">                    f2.get(10, TimeUnit.SECONDS);</span>
+<span class="nc" id="L262">                } catch (ExecutionException ee) {</span>
+                    // we don't care about errors
+<span class="nc" id="L264">                } catch (TimeoutException te) {</span>
+<span class="nc" id="L265">                    LOG.error(&quot;Error on waiting completing entry {} : &quot;, f2.getExpectedEntryId(), te);</span>
+<span class="nc" id="L266">                    fail(&quot;Should succeed on waiting completing entry &quot; + f2.getExpectedEntryId());</span>
+<span class="nc" id="L267">                }</span>
+<span class="nc" id="L268">            }</span>
+        }
+<span class="nc" id="L270">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

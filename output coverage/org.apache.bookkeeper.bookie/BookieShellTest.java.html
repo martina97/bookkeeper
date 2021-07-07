@@ -1,0 +1,430 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>BookieShellTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$myBookieFenceLedgerTest.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.bookie</a> &gt; <span class="el_source">BookieShellTest.java</span></div><h1>BookieShellTest.java</h1><pre class="source lang-java linenums">/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+package org.apache.bookkeeper.bookie;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.powermock.api.mockito.PowerMockito.spy;
+import static org.powermock.api.mockito.PowerMockito.verifyNew;
+import static org.powermock.api.mockito.PowerMockito.whenNew;
+
+import com.google.common.collect.Maps;
+import java.util.Set;
+import java.util.SortedMap;
+import java.util.function.Function;
+import org.apache.bookkeeper.bookie.BookieShell.MyCommand;
+import org.apache.bookkeeper.bookie.BookieShell.RecoverCmd;
+import org.apache.bookkeeper.client.BookKeeperAdmin;
+import org.apache.bookkeeper.client.api.LedgerMetadata;
+import org.apache.bookkeeper.conf.ClientConfiguration;
+import org.apache.bookkeeper.conf.ServerConfiguration;
+import org.apache.bookkeeper.discover.RegistrationManager;
+import org.apache.bookkeeper.meta.MetadataBookieDriver;
+import org.apache.bookkeeper.meta.MetadataDrivers;
+import org.apache.bookkeeper.tools.cli.commands.bookie.LastMarkCommand;
+import org.apache.bookkeeper.tools.cli.commands.bookies.ListBookiesCommand;
+import org.apache.bookkeeper.tools.cli.commands.bookies.RecoverCommand;
+import org.apache.bookkeeper.tools.cli.commands.client.SimpleTestCommand;
+import org.apache.bookkeeper.tools.framework.CliFlags;
+import org.apache.bookkeeper.util.EntryFormatter;
+import org.apache.bookkeeper.util.LedgerIdFormatter;
+import org.apache.bookkeeper.versioning.LongVersion;
+import org.apache.bookkeeper.versioning.Version;
+import org.apache.bookkeeper.versioning.Versioned;
+import org.apache.commons.cli.BasicParser;
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.MissingArgumentException;
+import org.apache.commons.cli.ParseException;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.powermock.api.mockito.PowerMockito;
+import org.powermock.core.classloader.annotations.PrepareForTest;
+import org.powermock.modules.junit4.PowerMockRunner;
+
+/**
+ * Unit test for {@link BookieShell}.
+ */
+@RunWith(PowerMockRunner.class)
+@PrepareForTest({ BookieShell.class, MetadataDrivers.class, RecoverCommand.class })
+<span class="nc" id="L78">public class BookieShellTest {</span>
+
+    private ClientConfiguration clientConf;
+    private BookieShell shell;
+    private BookKeeperAdmin admin;
+    private RegistrationManager rm;
+    private MetadataBookieDriver driver;
+    private Cookie cookie;
+    private Version version;
+
+    // commands
+    private LastMarkCommand mockLastMarkCommand;
+    private SimpleTestCommand.Flags mockSimpleTestFlags;
+    private SimpleTestCommand mockSimpleTestCommand;
+    private ListBookiesCommand.Flags mockListBookiesFlags;
+    private ListBookiesCommand mockListBookiesCommand;
+
+    @Before
+    public void setup() throws Exception {
+        // setup the required mocks before constructing bookie shell.
+<span class="nc" id="L98">        this.mockLastMarkCommand = mock(LastMarkCommand.class);</span>
+<span class="nc" id="L99">        whenNew(LastMarkCommand.class)</span>
+<span class="nc" id="L100">            .withNoArguments()</span>
+<span class="nc" id="L101">            .thenReturn(mockLastMarkCommand);</span>
+
+        // setup the mocks for simple test command
+<span class="nc" id="L104">        this.mockSimpleTestFlags = spy(new SimpleTestCommand.Flags());</span>
+<span class="nc" id="L105">        whenNew(SimpleTestCommand.Flags.class)</span>
+<span class="nc" id="L106">            .withNoArguments()</span>
+<span class="nc" id="L107">            .thenReturn(mockSimpleTestFlags);</span>
+
+<span class="nc" id="L109">        this.mockSimpleTestCommand = spy(new SimpleTestCommand());</span>
+<span class="nc" id="L110">        doReturn(true).when(mockSimpleTestCommand)</span>
+<span class="nc" id="L111">            .apply(any(ServerConfiguration.class), any(SimpleTestCommand.Flags.class));</span>
+<span class="nc" id="L112">        whenNew(SimpleTestCommand.class)</span>
+<span class="nc" id="L113">            .withParameterTypes(SimpleTestCommand.Flags.class)</span>
+<span class="nc" id="L114">            .withArguments(mockSimpleTestFlags)</span>
+<span class="nc" id="L115">            .thenReturn(mockSimpleTestCommand);</span>
+
+        // setup the mocks for list bookies command
+<span class="nc" id="L118">        this.mockListBookiesFlags = spy(new ListBookiesCommand.Flags());</span>
+<span class="nc" id="L119">        whenNew(ListBookiesCommand.Flags.class)</span>
+<span class="nc" id="L120">            .withNoArguments()</span>
+<span class="nc" id="L121">            .thenReturn(mockListBookiesFlags);</span>
+
+<span class="nc" id="L123">        this.mockListBookiesCommand = spy(new ListBookiesCommand());</span>
+<span class="nc" id="L124">        doReturn(true).when(mockListBookiesCommand)</span>
+<span class="nc" id="L125">            .apply(any(ServerConfiguration.class), any(ListBookiesCommand.Flags.class));</span>
+<span class="nc" id="L126">        whenNew(ListBookiesCommand.class)</span>
+<span class="nc" id="L127">            .withParameterTypes(ListBookiesCommand.Flags.class)</span>
+<span class="nc" id="L128">            .withArguments(mockListBookiesFlags)</span>
+<span class="nc" id="L129">            .thenReturn(mockListBookiesCommand);</span>
+
+        // construct the bookie shell.
+<span class="nc" id="L132">        this.shell = new BookieShell(LedgerIdFormatter.LONG_LEDGERID_FORMATTER, EntryFormatter.STRING_FORMATTER);</span>
+<span class="nc" id="L133">        this.admin = PowerMockito.mock(BookKeeperAdmin.class);</span>
+<span class="nc" id="L134">        whenNew(BookKeeperAdmin.class)</span>
+<span class="nc" id="L135">            .withParameterTypes(ClientConfiguration.class)</span>
+<span class="nc" id="L136">            .withArguments(any(ClientConfiguration.class))</span>
+<span class="nc" id="L137">            .thenReturn(admin);</span>
+<span class="nc" id="L138">        this.clientConf = new ClientConfiguration();</span>
+<span class="nc" id="L139">        this.clientConf.setMetadataServiceUri(&quot;zk://127.0.0.1/path/to/ledgers&quot;);</span>
+<span class="nc" id="L140">        when(admin.getConf()).thenReturn(this.clientConf);</span>
+<span class="nc" id="L141">        this.rm = PowerMockito.mock(RegistrationManager.class);</span>
+<span class="nc" id="L142">        this.cookie = Cookie.newBuilder()</span>
+<span class="nc" id="L143">            .setBookieHost(&quot;127.0.0.1:3181&quot;)</span>
+<span class="nc" id="L144">            .setInstanceId(&quot;xyz&quot;)</span>
+<span class="nc" id="L145">            .setJournalDirs(&quot;/path/to/journal/dir&quot;)</span>
+<span class="nc" id="L146">            .setLedgerDirs(&quot;/path/to/journal/dir&quot;)</span>
+<span class="nc" id="L147">            .setLayoutVersion(Cookie.CURRENT_COOKIE_LAYOUT_VERSION)</span>
+<span class="nc" id="L148">            .build();</span>
+<span class="nc" id="L149">        this.version = new LongVersion(1L);</span>
+<span class="nc" id="L150">        when(rm.readCookie(anyString()))</span>
+<span class="nc" id="L151">            .thenReturn(new Versioned&lt;&gt;(cookie.toString().getBytes(UTF_8), version));</span>
+
+<span class="nc" id="L153">        this.driver = mock(MetadataBookieDriver.class);</span>
+<span class="nc" id="L154">        when(driver.getRegistrationManager())</span>
+<span class="nc" id="L155">            .thenReturn(rm);</span>
+
+<span class="nc" id="L157">        PowerMockito.mockStatic(MetadataDrivers.class);</span>
+<span class="nc" id="L158">        PowerMockito.doAnswer(invocationOnMock -&gt; {</span>
+<span class="nc" id="L159">            Function&lt;RegistrationManager, Object&gt; function = invocationOnMock.getArgument(1);</span>
+<span class="nc" id="L160">            function.apply(rm);</span>
+<span class="nc" id="L161">            return null;</span>
+<span class="nc" id="L162">        }).when(</span>
+            MetadataDrivers.class,
+            &quot;runFunctionWithRegistrationManager&quot;,
+<span class="nc" id="L165">            any(ServerConfiguration.class),</span>
+<span class="nc" id="L166">            any(Function.class)</span>
+        );
+<span class="nc" id="L168">    }</span>
+
+    private static CommandLine parseCommandLine(MyCommand cmd, String... args) throws ParseException {
+<span class="nc" id="L171">        BasicParser parser = new BasicParser();</span>
+<span class="nc" id="L172">        return parser.parse(cmd.getOptions(), args);</span>
+    }
+
+    @Test
+    public void testRecoverCmdMissingArgument() throws Exception {
+<span class="nc" id="L177">        RecoverCmd cmd = (RecoverCmd) shell.commands.get(&quot;recover&quot;);</span>
+<span class="nc" id="L178">        CommandLine cmdLine = parseCommandLine(cmd);</span>
+        try {
+<span class="nc" id="L180">            cmd.runCmd(cmdLine);</span>
+<span class="nc" id="L181">            fail(&quot;should fail running command when the arguments are missing&quot;);</span>
+<span class="nc" id="L182">        } catch (MissingArgumentException e) {</span>
+            // expected
+<span class="nc" id="L184">        }</span>
+<span class="nc" id="L185">        PowerMockito.verifyNew(BookKeeperAdmin.class, never()).withArguments(any(ClientConfiguration.class));</span>
+<span class="nc" id="L186">    }</span>
+
+    @Test
+    public void testRecoverCmdInvalidBookieAddress() throws Exception {
+<span class="nc" id="L190">        RecoverCmd cmd = (RecoverCmd) shell.commands.get(&quot;recover&quot;);</span>
+<span class="nc" id="L191">        CommandLine cmdLine = parseCommandLine(cmd, &quot;127.0.0.1&quot;);</span>
+<span class="nc" id="L192">        assertEquals(-1, cmd.runCmd(cmdLine));</span>
+<span class="nc" id="L193">        PowerMockito.verifyNew(BookKeeperAdmin.class, never()).withArguments(any(ClientConfiguration.class));</span>
+<span class="nc" id="L194">    }</span>
+
+    @SuppressWarnings(&quot;unchecked&quot;)
+    @Test
+    public void testRecoverCmdQuery() throws Exception {
+<span class="nc" id="L199">        SortedMap&lt;Long, LedgerMetadata&gt; ledgersContainBookies = Maps.newTreeMap();</span>
+<span class="nc" id="L200">        when(admin.getLedgersContainBookies(any(Set.class)))</span>
+<span class="nc" id="L201">            .thenReturn(ledgersContainBookies);</span>
+
+<span class="nc" id="L203">        RecoverCmd cmd = (RecoverCmd) shell.commands.get(&quot;recover&quot;);</span>
+<span class="nc" id="L204">        CommandLine cmdLine = parseCommandLine(cmd, &quot;-force&quot;, &quot;-q&quot;, &quot;127.0.0.1:3181&quot;);</span>
+<span class="nc" id="L205">        assertEquals(0, cmd.runCmd(cmdLine));</span>
+<span class="nc" id="L206">        PowerMockito</span>
+<span class="nc" id="L207">            .verifyNew(BookKeeperAdmin.class, times(1))</span>
+<span class="nc" id="L208">            .withArguments(any(ClientConfiguration.class));</span>
+<span class="nc" id="L209">        verify(admin, times(1)).getLedgersContainBookies(any(Set.class));</span>
+<span class="nc" id="L210">        verify(admin, times(1)).close();</span>
+<span class="nc" id="L211">    }</span>
+
+    @Test
+    public void testRecoverCmdRecoverLedgerDefault() throws Exception {
+        // default behavior
+<span class="nc" id="L216">        testRecoverCmdRecoverLedger(</span>
+            12345, false, false, false,
+            &quot;-force&quot;, &quot;-l&quot;, &quot;12345&quot;, &quot;127.0.0.1:3181&quot;);
+<span class="nc" id="L219">    }</span>
+
+    @Test
+    public void testRecoverCmdRecoverLedgerDeleteCookie() throws Exception {
+        // dryrun
+<span class="nc" id="L224">        testRecoverCmdRecoverLedger(</span>
+            12345, false, false, true,
+            &quot;-force&quot;, &quot;-l&quot;, &quot;12345&quot;, &quot;-deleteCookie&quot;, &quot;127.0.0.1:3181&quot;);
+<span class="nc" id="L227">    }</span>
+
+    @Test
+    public void testRecoverCmdRecoverLedgerSkipOpenLedgersDeleteCookie() throws Exception {
+        // dryrun
+<span class="nc" id="L232">        testRecoverCmdRecoverLedger(</span>
+            12345, false, true, true,
+            &quot;-force&quot;, &quot;-l&quot;, &quot;12345&quot;, &quot;-deleteCookie&quot;, &quot;-skipOpenLedgers&quot;, &quot;127.0.0.1:3181&quot;);
+<span class="nc" id="L235">    }</span>
+
+    @Test
+    public void testRecoverCmdRecoverLedgerDryrun() throws Exception {
+        // dryrun
+<span class="nc" id="L240">        testRecoverCmdRecoverLedger(</span>
+            12345, true, false, false,
+            &quot;-force&quot;, &quot;-l&quot;, &quot;12345&quot;, &quot;-dryrun&quot;, &quot;127.0.0.1:3181&quot;);
+<span class="nc" id="L243">    }</span>
+
+    @Test
+    public void testRecoverCmdRecoverLedgerDryrunDeleteCookie() throws Exception {
+        // dryrun &amp; removeCookie : removeCookie should be false
+<span class="nc" id="L248">        testRecoverCmdRecoverLedger(</span>
+            12345, true, false, false,
+            &quot;-force&quot;, &quot;-l&quot;, &quot;12345&quot;, &quot;-dryrun&quot;, &quot;-deleteCookie&quot;, &quot;127.0.0.1:3181&quot;);
+<span class="nc" id="L251">    }</span>
+
+    @SuppressWarnings(&quot;unchecked&quot;)
+    void testRecoverCmdRecoverLedger(long ledgerId,
+                                     boolean dryrun,
+                                     boolean skipOpenLedgers,
+                                     boolean removeCookies,
+                                     String... args) throws Exception {
+<span class="nc" id="L259">        RecoverCmd cmd = (RecoverCmd) shell.commands.get(&quot;recover&quot;);</span>
+<span class="nc" id="L260">        CommandLine cmdLine = parseCommandLine(cmd, args);</span>
+<span class="nc" id="L261">        assertEquals(0, cmd.runCmd(cmdLine));</span>
+<span class="nc" id="L262">        PowerMockito</span>
+<span class="nc" id="L263">            .verifyNew(BookKeeperAdmin.class, times(1))</span>
+<span class="nc" id="L264">            .withArguments(any(ClientConfiguration.class));</span>
+<span class="nc" id="L265">        verify(admin, times(1))</span>
+<span class="nc" id="L266">            .recoverBookieData(eq(ledgerId), any(Set.class), eq(dryrun), eq(skipOpenLedgers));</span>
+<span class="nc" id="L267">        verify(admin, times(1)).close();</span>
+<span class="nc bnc" id="L268" title="All 2 branches missed.">        if (removeCookies) {</span>
+<span class="nc" id="L269">            PowerMockito.verifyStatic(MetadataDrivers.class);</span>
+<span class="nc" id="L270">            MetadataDrivers.runFunctionWithRegistrationManager(any(ServerConfiguration.class), any(Function.class));</span>
+<span class="nc" id="L271">            verify(rm, times(1)).readCookie(anyString());</span>
+<span class="nc" id="L272">            verify(rm, times(1)).removeCookie(anyString(), eq(version));</span>
+        } else {
+<span class="nc" id="L274">            verify(rm, times(0)).readCookie(anyString());</span>
+<span class="nc" id="L275">            verify(rm, times(0)).removeCookie(anyString(), eq(version));</span>
+        }
+<span class="nc" id="L277">    }</span>
+
+    @Test
+    public void testRecoverCmdRecoverDefault() throws Exception {
+        // default behavior
+<span class="nc" id="L282">        testRecoverCmdRecover(</span>
+            false, false, false,
+            &quot;-force&quot;, &quot;127.0.0.1:3181&quot;);
+<span class="nc" id="L285">    }</span>
+
+    @Test
+    public void testRecoverCmdRecoverDeleteCookie() throws Exception {
+        // dryrun
+<span class="nc" id="L290">        testRecoverCmdRecover(</span>
+            false, false, true,
+            &quot;-force&quot;, &quot;-deleteCookie&quot;, &quot;127.0.0.1:3181&quot;);
+<span class="nc" id="L293">    }</span>
+
+    @Test
+    public void testRecoverCmdRecoverSkipOpenLedgersDeleteCookie() throws Exception {
+        // dryrun
+<span class="nc" id="L298">        testRecoverCmdRecover(</span>
+            false, true, true,
+            &quot;-force&quot;, &quot;-deleteCookie&quot;, &quot;-skipOpenLedgers&quot;, &quot;127.0.0.1:3181&quot;);
+<span class="nc" id="L301">    }</span>
+
+    @Test
+    public void testRecoverCmdRecoverDryrun() throws Exception {
+        // dryrun
+<span class="nc" id="L306">        testRecoverCmdRecover(</span>
+            true, false, false,
+            &quot;-force&quot;, &quot;-dryrun&quot;, &quot;127.0.0.1:3181&quot;);
+<span class="nc" id="L309">    }</span>
+
+    @Test
+    public void testRecoverCmdRecoverDryrunDeleteCookie() throws Exception {
+        // dryrun &amp; removeCookie : removeCookie should be false
+<span class="nc" id="L314">        testRecoverCmdRecover(</span>
+            true, false, false,
+            &quot;-force&quot;, &quot;-dryrun&quot;, &quot;-deleteCookie&quot;, &quot;127.0.0.1:3181&quot;);
+<span class="nc" id="L317">    }</span>
+
+    @SuppressWarnings(&quot;unchecked&quot;)
+    void testRecoverCmdRecover(boolean dryrun,
+                               boolean skipOpenLedgers,
+                               boolean removeCookies,
+                               String... args) throws Exception {
+<span class="nc" id="L324">        RecoverCmd cmd = (RecoverCmd) shell.commands.get(&quot;recover&quot;);</span>
+<span class="nc" id="L325">        CommandLine cmdLine = parseCommandLine(cmd, args);</span>
+<span class="nc" id="L326">        assertEquals(0, cmd.runCmd(cmdLine));</span>
+<span class="nc" id="L327">        PowerMockito</span>
+<span class="nc" id="L328">            .verifyNew(BookKeeperAdmin.class, times(1))</span>
+<span class="nc" id="L329">            .withArguments(any(ClientConfiguration.class));</span>
+<span class="nc" id="L330">        verify(admin, times(1))</span>
+<span class="nc" id="L331">            .recoverBookieData(any(Set.class), eq(dryrun), eq(skipOpenLedgers));</span>
+<span class="nc" id="L332">        verify(admin, times(1)).close();</span>
+<span class="nc bnc" id="L333" title="All 2 branches missed.">        if (removeCookies) {</span>
+<span class="nc" id="L334">            PowerMockito.verifyStatic(MetadataDrivers.class);</span>
+<span class="nc" id="L335">            MetadataDrivers.runFunctionWithRegistrationManager(any(ServerConfiguration.class), any(Function.class));</span>
+<span class="nc" id="L336">            verify(rm, times(1)).readCookie(anyString());</span>
+<span class="nc" id="L337">            verify(rm, times(1)).removeCookie(anyString(), eq(version));</span>
+        } else {
+<span class="nc" id="L339">            verify(rm, times(0)).readCookie(anyString());</span>
+<span class="nc" id="L340">            verify(rm, times(0)).removeCookie(anyString(), eq(version));</span>
+        }
+<span class="nc" id="L342">    }</span>
+
+    @Test
+    public void testLastMarkCmd() throws Exception {
+<span class="nc" id="L346">        shell.run(new String[] { &quot;lastmark&quot;});</span>
+<span class="nc" id="L347">        verifyNew(LastMarkCommand.class, times(1)).withNoArguments();</span>
+<span class="nc" id="L348">        verify(mockLastMarkCommand, times(1))</span>
+<span class="nc" id="L349">            .apply(same(shell.bkConf), any(CliFlags.class));</span>
+<span class="nc" id="L350">    }</span>
+
+    @Test
+    public void testSimpleTestCmd() throws Exception {
+<span class="nc" id="L354">        shell.run(new String[] {</span>
+            &quot;simpletest&quot;,
+            &quot;-e&quot;, &quot;10&quot;,
+            &quot;-w&quot;, &quot;5&quot;,
+            &quot;-a&quot;, &quot;3&quot;,
+            &quot;-n&quot;, &quot;200&quot;
+        });
+<span class="nc" id="L361">        verifyNew(SimpleTestCommand.class, times(1))</span>
+<span class="nc" id="L362">            .withArguments(same(mockSimpleTestFlags));</span>
+<span class="nc" id="L363">        verify(mockSimpleTestCommand, times(1))</span>
+<span class="nc" id="L364">            .apply(same(shell.bkConf), same(mockSimpleTestFlags));</span>
+<span class="nc" id="L365">        verify(mockSimpleTestFlags, times(1)).ensembleSize(eq(10));</span>
+<span class="nc" id="L366">        verify(mockSimpleTestFlags, times(1)).writeQuorumSize(eq(5));</span>
+<span class="nc" id="L367">        verify(mockSimpleTestFlags, times(1)).ackQuorumSize(eq(3));</span>
+<span class="nc" id="L368">        verify(mockSimpleTestFlags, times(1)).numEntries(eq(200));</span>
+<span class="nc" id="L369">    }</span>
+
+    @Test
+    public void testListBookiesCmdNoArgs() throws Exception {
+<span class="nc" id="L373">        assertEquals(1, shell.run(new String[] {</span>
+            &quot;listbookies&quot;
+        }));
+<span class="nc" id="L376">        verifyNew(ListBookiesCommand.class, times(0)).withNoArguments();</span>
+<span class="nc" id="L377">    }</span>
+
+    @Test
+    public void testListBookiesCmdConflictArgs() throws Exception {
+<span class="nc" id="L381">        assertEquals(1, shell.run(new String[] {</span>
+            &quot;listbookies&quot;, &quot;-rw&quot;, &quot;-ro&quot;
+        }));
+<span class="nc" id="L384">        verifyNew(ListBookiesCommand.class, times(0)).withNoArguments();</span>
+<span class="nc" id="L385">    }</span>
+
+    @Test
+    public void testListBookiesCmdReadOnly() throws Exception {
+<span class="nc" id="L389">        assertEquals(0, shell.run(new String[] {</span>
+            &quot;listbookies&quot;, &quot;-ro&quot;
+        }));
+<span class="nc" id="L392">        verifyNew(ListBookiesCommand.class, times(1))</span>
+<span class="nc" id="L393">            .withArguments(same(mockListBookiesFlags));</span>
+<span class="nc" id="L394">        verify(mockListBookiesCommand, times(1))</span>
+<span class="nc" id="L395">            .apply(same(shell.bkConf), same(mockListBookiesFlags));</span>
+<span class="nc" id="L396">        verify(mockListBookiesFlags, times(1)).readonly(true);</span>
+<span class="nc" id="L397">        verify(mockListBookiesFlags, times(1)).readwrite(false);</span>
+<span class="nc" id="L398">        verify(mockListBookiesFlags, times(1)).all(false);</span>
+<span class="nc" id="L399">    }</span>
+
+    @Test
+    public void testListBookiesCmdReadWrite() throws Exception {
+<span class="nc" id="L403">        assertEquals(0, shell.run(new String[] {</span>
+            &quot;listbookies&quot;, &quot;-rw&quot;
+        }));
+<span class="nc" id="L406">        verifyNew(ListBookiesCommand.class, times(1))</span>
+<span class="nc" id="L407">            .withArguments(same(mockListBookiesFlags));</span>
+<span class="nc" id="L408">        verify(mockListBookiesCommand, times(1))</span>
+<span class="nc" id="L409">            .apply(same(shell.bkConf), same(mockListBookiesFlags));</span>
+<span class="nc" id="L410">        verify(mockListBookiesFlags, times(1)).readonly(false);</span>
+<span class="nc" id="L411">        verify(mockListBookiesFlags, times(1)).readwrite(true);</span>
+<span class="nc" id="L412">        verify(mockListBookiesFlags, times(1)).all(false);</span>
+<span class="nc" id="L413">    }</span>
+
+    @Test
+    public void testListBookiesCmdAll() throws Exception {
+<span class="nc" id="L417">        assertEquals(0, shell.run(new String[] {</span>
+            &quot;listbookies&quot;, &quot;-a&quot;
+        }));
+<span class="nc" id="L420">        verifyNew(ListBookiesCommand.class, times(1))</span>
+<span class="nc" id="L421">            .withArguments(same(mockListBookiesFlags));</span>
+<span class="nc" id="L422">        verify(mockListBookiesCommand, times(1))</span>
+<span class="nc" id="L423">            .apply(same(shell.bkConf), same(mockListBookiesFlags));</span>
+<span class="nc" id="L424">        verify(mockListBookiesFlags, times(1)).readonly(false);</span>
+<span class="nc" id="L425">        verify(mockListBookiesFlags, times(1)).readwrite(false);</span>
+<span class="nc" id="L426">        verify(mockListBookiesFlags, times(1)).all(true);</span>
+<span class="nc" id="L427">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

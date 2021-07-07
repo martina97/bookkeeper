@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SkipListArenaTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$myBookieFenceLedgerTest.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.bookie</a> &gt; <span class="el_source">SkipListArenaTest.java</span></div><h1>SkipListArenaTest.java</h1><pre class="source lang-java linenums">/**
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.bookkeeper.bookie;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import com.google.common.primitives.Ints;
+
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Random;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CountDownLatch;
+
+import org.apache.bookkeeper.bookie.SkipListArena.MemorySlice;
+import org.apache.bookkeeper.conf.ServerConfiguration;
+import org.junit.Test;
+
+/**
+ * Test the SkipListArena class.
+ */
+<span class="nc" id="L44">public class SkipListArenaTest {</span>
+
+<span class="nc" id="L46">    class CustomConfiguration extends ServerConfiguration {</span>
+        @Override
+        public int getSkipListArenaChunkSize() {
+<span class="nc" id="L49">            return 4096;</span>
+        }
+        @Override
+        public int getSkipListArenaMaxAllocSize() {
+<span class="nc" id="L53">            return 1024;</span>
+        }
+        @Override
+        public boolean getJournalFlushWhenQueueEmpty() {
+<span class="nc" id="L57">            return true;</span>
+        }
+
+    }
+
+<span class="nc" id="L62">    final CustomConfiguration cfg = new CustomConfiguration();</span>
+
+    /**
+    * Test random allocations.
+    */
+    @Test
+    public void testRandomAllocation() {
+<span class="nc" id="L69">        Random rand = new Random();</span>
+<span class="nc" id="L70">        SkipListArena arena = new SkipListArena(cfg);</span>
+<span class="nc" id="L71">        int expectedOff = 0;</span>
+<span class="nc" id="L72">        byte[] lastBuffer = null;</span>
+
+        // 10K iterations by 0-512 alloc -&gt; 2560kB expected
+        // should be reasonable for unit test and also cover wraparound
+        // behavior
+<span class="nc bnc" id="L77" title="All 2 branches missed.">        for (int i = 0; i &lt; 10000; i++) {</span>
+<span class="nc" id="L78">            int size = rand.nextInt(512);</span>
+<span class="nc" id="L79">            MemorySlice alloc = arena.allocateBytes(size);</span>
+
+<span class="nc bnc" id="L81" title="All 2 branches missed.">            if (alloc.getData() != lastBuffer) {</span>
+<span class="nc" id="L82">                expectedOff = 0;</span>
+<span class="nc" id="L83">                lastBuffer = alloc.getData();</span>
+            }
+<span class="nc bnc" id="L85" title="All 2 branches missed.">            assertTrue(expectedOff == alloc.getOffset());</span>
+<span class="nc" id="L86">            assertTrue(&quot;Allocation &quot; + alloc + &quot; overruns buffer&quot;,</span>
+<span class="nc bnc" id="L87" title="All 2 branches missed.">              alloc.getOffset() + size &lt;= alloc.getData().length);</span>
+<span class="nc" id="L88">            expectedOff += size;</span>
+        }
+<span class="nc" id="L90">    }</span>
+
+    @Test
+    public void testLargeAllocation() {
+<span class="nc" id="L94">        SkipListArena arena = new SkipListArena(cfg);</span>
+<span class="nc" id="L95">        MemorySlice alloc = arena.allocateBytes(1024 + 1024);</span>
+<span class="nc" id="L96">        assertNull(&quot;2KB allocation shouldn't be satisfied by LAB.&quot;, alloc);</span>
+<span class="nc" id="L97">    }</span>
+
+    private class ByteArray {
+        final byte[] bytes;
+<span class="nc" id="L101">        ByteArray(final byte[] bytes) {</span>
+<span class="nc" id="L102">            this.bytes = bytes;</span>
+<span class="nc" id="L103">        }</span>
+
+        @Override
+        public int hashCode() {
+<span class="nc" id="L107">            return bytes.hashCode();</span>
+        }
+
+        @Override
+        public boolean equals(Object object) {
+<span class="nc bnc" id="L112" title="All 2 branches missed.">            if (object instanceof ByteArray) {</span>
+<span class="nc" id="L113">                ByteArray other = (ByteArray) object;</span>
+<span class="nc" id="L114">                return this.bytes.equals(other.bytes);</span>
+            }
+<span class="nc" id="L116">            return false;</span>
+        }
+    }
+
+    private static class AllocBuffer implements Comparable&lt;AllocBuffer&gt;{
+        private final MemorySlice alloc;
+        private final int size;
+        public AllocBuffer(MemorySlice alloc, int size) {
+<span class="nc" id="L124">            super();</span>
+<span class="nc" id="L125">            this.alloc = alloc;</span>
+<span class="nc" id="L126">            this.size = size;</span>
+<span class="nc" id="L127">        }</span>
+
+        @Override
+        public int compareTo(AllocBuffer e) {
+<span class="nc bnc" id="L131" title="All 2 branches missed.">            assertTrue(alloc.getData() == e.alloc.getData());</span>
+<span class="nc" id="L132">            return Ints.compare(alloc.getOffset(), e.alloc.getOffset());</span>
+        }
+
+        @Override
+        public String toString() {
+<span class="nc" id="L137">          return alloc + &quot;:&quot; + size;</span>
+        }
+    }
+
+    private Thread getAllocThread(final ConcurrentLinkedQueue&lt;AllocBuffer&gt; queue,
+                                  final CountDownLatch latch,
+                                  final SkipListArena arena) {
+<span class="nc" id="L144">        return new Thread(new Runnable() {</span>
+            @Override
+            public void run() {
+<span class="nc" id="L147">                Random rand = new Random();</span>
+<span class="nc bnc" id="L148" title="All 2 branches missed.">                for (int j = 0; j &lt; 1000; j++) {</span>
+<span class="nc" id="L149">                    int size = rand.nextInt(512);</span>
+<span class="nc" id="L150">                    MemorySlice alloc = arena.allocateBytes(size);</span>
+<span class="nc" id="L151">                    queue.add(new AllocBuffer(alloc, size));</span>
+                }
+<span class="nc" id="L153">                latch.countDown();</span>
+<span class="nc" id="L154">            }</span>
+        });
+    }
+
+    /**
+    * Test concurrent allocation, check the results don't overlap.
+    */
+    @Test
+    public void testConcurrency() throws Exception {
+<span class="nc" id="L163">        final SkipListArena arena = new SkipListArena(cfg);</span>
+<span class="nc" id="L164">        final CountDownLatch latch = new CountDownLatch(10);</span>
+<span class="nc" id="L165">        final ConcurrentLinkedQueue&lt;AllocBuffer&gt; queue = new ConcurrentLinkedQueue&lt;AllocBuffer&gt;();</span>
+
+<span class="nc" id="L167">        Set&lt;Thread&gt; testThreads = new HashSet&lt;Thread&gt;();</span>
+<span class="nc bnc" id="L168" title="All 2 branches missed.">        for (int i = 0; i &lt; 10; i++) {</span>
+<span class="nc" id="L169">            testThreads.add(getAllocThread(queue, latch, arena));</span>
+        }
+
+<span class="nc bnc" id="L172" title="All 2 branches missed.">        for (Thread thread : testThreads) {</span>
+<span class="nc" id="L173">            thread.start();</span>
+<span class="nc" id="L174">        }</span>
+<span class="nc" id="L175">        latch.await();</span>
+
+        // Partition the allocations by the actual byte[] they share,
+        // make sure offsets are unique and non-overlap for each buffer.
+<span class="nc" id="L179">        Map&lt;ByteArray, Map&lt;Integer, AllocBuffer&gt;&gt; mapsByArray = new HashMap&lt;ByteArray, Map&lt;Integer, AllocBuffer&gt;&gt;();</span>
+<span class="nc" id="L180">        boolean overlapped = false;</span>
+
+<span class="nc" id="L182">        final AllocBuffer[] buffers = queue.toArray(new AllocBuffer[0]);</span>
+<span class="nc bnc" id="L183" title="All 2 branches missed.">        for (AllocBuffer buf : buffers) {</span>
+<span class="nc bnc" id="L184" title="All 2 branches missed.">            if (buf.size != 0) {</span>
+<span class="nc" id="L185">                ByteArray ptr = new ByteArray(buf.alloc.getData());</span>
+<span class="nc" id="L186">                Map&lt;Integer, AllocBuffer&gt; treeMap = mapsByArray.get(ptr);</span>
+<span class="nc bnc" id="L187" title="All 2 branches missed.">                if (treeMap == null) {</span>
+<span class="nc" id="L188">                    treeMap = new TreeMap&lt;Integer, AllocBuffer&gt;();</span>
+<span class="nc" id="L189">                    mapsByArray.put(ptr, treeMap);</span>
+                }
+<span class="nc" id="L191">                AllocBuffer other = treeMap.put(buf.alloc.getOffset(), buf);</span>
+<span class="nc bnc" id="L192" title="All 2 branches missed.">                if (other != null) {</span>
+<span class="nc" id="L193">                    fail(&quot;Buffer &quot; + other.toString() + &quot; overlapped with &quot; + buf.toString());</span>
+                }
+            }
+        }
+
+        // Now check each byte array to make sure allocations don't overlap
+<span class="nc bnc" id="L199" title="All 2 branches missed.">        for (Map&lt;Integer, AllocBuffer&gt; treeMap : mapsByArray.values()) {</span>
+<span class="nc" id="L200">            int expectedOff = 0;</span>
+<span class="nc bnc" id="L201" title="All 2 branches missed.">            for (AllocBuffer buf : treeMap.values()) {</span>
+<span class="nc" id="L202">                assertEquals(expectedOff, buf.alloc.getOffset());</span>
+<span class="nc" id="L203">                expectedOff += buf.size;</span>
+<span class="nc" id="L204">            }</span>
+<span class="nc" id="L205">        }</span>
+<span class="nc" id="L206">    }</span>
+}
+
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

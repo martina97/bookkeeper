@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>myTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$myBookieFenceLedgerTest.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.bookie.storage.ldb</a> &gt; <span class="el_source">myTest.java</span></div><h1>myTest.java</h1><pre class="source lang-java linenums">package org.apache.bookkeeper.bookie.storage.ldb;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import io.netty.buffer.UnpooledByteBufAllocator;
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+
+import java.util.Arrays;
+import java.util.Collection;
+
+@RunWith(value = Parameterized.class)
+public class myTest {
+
+    private boolean expectedResult;
+    private long ledgerId;
+    private long entryId;
+    private ByteBuf entry;
+<span class="nc" id="L22">    private ReadCache cache = null;</span>
+
+<span class="nc" id="L24">    public myTest(boolean expectedResult, long ledgerId, long entryId, ByteBuf entry) {</span>
+<span class="nc" id="L25">        this.expectedResult = expectedResult;</span>
+<span class="nc" id="L26">        this.ledgerId = ledgerId;</span>
+<span class="nc" id="L27">        this.entryId = entryId;</span>
+<span class="nc" id="L28">        this.entry = entry;</span>
+<span class="nc" id="L29">    }</span>
+
+    @Parameterized.Parameters
+    public static Collection&lt;?&gt; getTestParameters() {
+<span class="nc" id="L33">        return Arrays.asList(new Object[][]{</span>
+
+<span class="nc" id="L35">                {false, -1, 0, Unpooled.wrappedBuffer(new byte[1024])}, //false perche' la put di -1 fallisce</span>
+<span class="nc" id="L36">                {false, 1, 0, null },</span>
+<span class="nc" id="L37">                {true, 1, 0,Unpooled.wrappedBuffer(new byte[1024]) },</span>
+<span class="nc" id="L38">                {true, Long.MAX_VALUE, 1,Unpooled.wrappedBuffer(new byte[1024]) },</span>
+<span class="nc" id="L39">                {true, 1, 10,Unpooled.wrappedBuffer(new byte[1024]) },</span>
+
+        });
+    }
+
+    @Before
+    public void setup() {
+<span class="nc" id="L46">        cache = new ReadCache(UnpooledByteBufAllocator.DEFAULT, 10 * 1024);</span>
+<span class="nc" id="L47">    }</span>
+
+    @Test
+    public void readCacheGetTest() {
+        boolean result;
+        try {
+<span class="nc" id="L53">            cache.put(ledgerId, entryId, entry);</span>
+<span class="nc" id="L54">            result = true;</span>
+<span class="nc" id="L55">        } catch(Exception e ) {</span>
+<span class="nc" id="L56">            result = false;</span>
+<span class="nc" id="L57">            e.printStackTrace();</span>
+<span class="nc" id="L58">        }</span>
+<span class="nc" id="L59">        Assert.assertEquals(result, expectedResult);</span>
+<span class="nc" id="L60">    }</span>
+
+
+    @After
+    public void tearDown() {
+<span class="nc" id="L65">        cache.close();</span>
+<span class="nc" id="L66">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

@@ -1,0 +1,895 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CreateNewLogTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$myBookieFenceLedgerTest.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.bookie</a> &gt; <span class="el_source">CreateNewLogTest.java</span></div><h1>CreateNewLogTest.java</h1><pre class="source lang-java linenums">/**
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.bookkeeper.bookie;
+
+import static org.junit.Assert.assertTrue;
+
+import com.google.common.util.concurrent.MoreExecutors;
+
+import io.netty.buffer.UnpooledByteBufAllocator;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.Lock;
+import java.util.stream.IntStream;
+
+import org.apache.bookkeeper.bookie.EntryLogManagerForEntryLogPerLedger.BufferedLogChannelWithDirInfo;
+import org.apache.bookkeeper.bookie.EntryLogger.BufferedLogChannel;
+import org.apache.bookkeeper.bookie.LedgerDirsManager.NoWritableLedgerDirException;
+import org.apache.bookkeeper.conf.ServerConfiguration;
+import org.apache.bookkeeper.conf.TestBKConfiguration;
+import org.apache.bookkeeper.stats.Counter;
+import org.apache.bookkeeper.test.TestStatsProvider;
+import org.apache.bookkeeper.test.TestStatsProvider.TestOpStatsLogger;
+import org.apache.bookkeeper.test.TestStatsProvider.TestStatsLogger;
+import org.apache.bookkeeper.util.DiskChecker;
+import org.apache.commons.lang.mutable.MutableInt;
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Test new log creation.
+ */
+<span class="nc" id="L63">public class CreateNewLogTest {</span>
+<span class="nc" id="L64">    private static final Logger LOG = LoggerFactory</span>
+<span class="nc" id="L65">            .getLogger(CreateNewLogTest.class);</span>
+
+    private String[] ledgerDirs;
+<span class="nc" id="L68">    private int numDirs = 100;</span>
+
+    @Before
+    public void setUp() throws Exception{
+<span class="nc" id="L72">        ledgerDirs = new String[numDirs];</span>
+<span class="nc bnc" id="L73" title="All 2 branches missed.">        for (int i = 0; i &lt; numDirs; i++){</span>
+<span class="nc" id="L74">            File temp = File.createTempFile(&quot;bookie&quot;, &quot;test&quot;);</span>
+<span class="nc" id="L75">            temp.delete();</span>
+<span class="nc" id="L76">            temp.mkdir();</span>
+<span class="nc" id="L77">            File currentTemp = new File(temp.getAbsoluteFile() + &quot;/current&quot;);</span>
+<span class="nc" id="L78">            currentTemp.mkdir();</span>
+<span class="nc" id="L79">            ledgerDirs[i] = temp.getPath();</span>
+        }
+<span class="nc" id="L81">    }</span>
+
+    @After
+    public void tearDown() throws Exception{
+<span class="nc bnc" id="L85" title="All 2 branches missed.">        for (int i = 0; i &lt; numDirs; i++){</span>
+<span class="nc" id="L86">            File f = new File(ledgerDirs[i]);</span>
+<span class="nc" id="L87">            deleteRecursive(f);</span>
+        }
+<span class="nc" id="L89">    }</span>
+
+    private void deleteRecursive(File f) {
+<span class="nc bnc" id="L92" title="All 2 branches missed.">        if (f.isDirectory()){</span>
+<span class="nc bnc" id="L93" title="All 2 branches missed.">            for (File c : f.listFiles()){</span>
+<span class="nc" id="L94">                deleteRecursive(c);</span>
+            }
+        }
+
+<span class="nc" id="L98">        f.delete();</span>
+<span class="nc" id="L99">    }</span>
+
+    /**
+     * Checks if new log file id is verified against all directories.
+     *
+     * {@link https://issues.apache.org/jira/browse/BOOKKEEPER-465}
+     *
+     * @throws Exception
+     */
+    @Test
+    public void testCreateNewLog() throws Exception {
+<span class="nc" id="L110">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+
+        // Creating a new configuration with a number of
+        // ledger directories.
+<span class="nc" id="L114">        conf.setLedgerDirNames(ledgerDirs);</span>
+<span class="nc" id="L115">        LedgerDirsManager ledgerDirsManager = new LedgerDirsManager(conf, conf.getLedgerDirs(),</span>
+<span class="nc" id="L116">                new DiskChecker(conf.getDiskUsageThreshold(), conf.getDiskUsageWarnThreshold()));</span>
+
+        // Extracted from createNewLog()
+<span class="nc" id="L119">        String logFileName = Long.toHexString(1) + &quot;.log&quot;;</span>
+<span class="nc" id="L120">        File dir = ledgerDirsManager.pickRandomWritableDir();</span>
+<span class="nc" id="L121">        LOG.info(&quot;Picked this directory: {}&quot;, dir);</span>
+<span class="nc" id="L122">        File newLogFile = new File(dir, logFileName);</span>
+<span class="nc" id="L123">        newLogFile.createNewFile();</span>
+
+<span class="nc" id="L125">        EntryLogger el = new EntryLogger(conf, ledgerDirsManager);</span>
+        // Calls createNewLog, and with the number of directories we
+        // are using, if it picks one at random it will fail.
+<span class="nc" id="L128">        EntryLogManagerForSingleEntryLog entryLogManager = (EntryLogManagerForSingleEntryLog) el.getEntryLogManager();</span>
+<span class="nc" id="L129">        entryLogManager.createNewLog(0L);</span>
+<span class="nc" id="L130">        LOG.info(&quot;This is the current log id: {}&quot;, entryLogManager.getCurrentLogId());</span>
+<span class="nc bnc" id="L131" title="All 2 branches missed.">        assertTrue(&quot;Wrong log id&quot;, entryLogManager.getCurrentLogId() &gt; 1);</span>
+<span class="nc" id="L132">    }</span>
+
+    @Test
+    public void testCreateNewLogWithNoWritableLedgerDirs() throws Exception {
+<span class="nc" id="L136">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+
+        // Creating a new configuration with a number of ledger directories.
+<span class="nc" id="L139">        conf.setLedgerDirNames(ledgerDirs);</span>
+<span class="nc" id="L140">        conf.setIsForceGCAllowWhenNoSpace(true);</span>
+<span class="nc" id="L141">        LedgerDirsManager ledgerDirsManager = new LedgerDirsManager(conf, conf.getLedgerDirs(),</span>
+<span class="nc" id="L142">                new DiskChecker(conf.getDiskUsageThreshold(), conf.getDiskUsageWarnThreshold()));</span>
+
+        // Extracted from createNewLog()
+<span class="nc" id="L145">        String logFileName = Long.toHexString(1) + &quot;.log&quot;;</span>
+<span class="nc" id="L146">        File dir = ledgerDirsManager.pickRandomWritableDir();</span>
+<span class="nc" id="L147">        LOG.info(&quot;Picked this directory: {}&quot;, dir);</span>
+<span class="nc" id="L148">        File newLogFile = new File(dir, logFileName);</span>
+<span class="nc" id="L149">        newLogFile.createNewFile();</span>
+
+        // Now let us move all dirs to filled dirs
+<span class="nc" id="L152">        List&lt;File&gt; wDirs = ledgerDirsManager.getWritableLedgerDirs();</span>
+<span class="nc bnc" id="L153" title="All 2 branches missed.">        for (File tdir: wDirs) {</span>
+<span class="nc" id="L154">            ledgerDirsManager.addToFilledDirs(tdir);</span>
+<span class="nc" id="L155">        }</span>
+
+<span class="nc" id="L157">        EntryLogger el = new EntryLogger(conf, ledgerDirsManager);</span>
+        // Calls createNewLog, and with the number of directories we
+        // are using, if it picks one at random it will fail.
+<span class="nc" id="L160">        EntryLogManagerForSingleEntryLog entryLogManager = (EntryLogManagerForSingleEntryLog) el.getEntryLogManager();</span>
+<span class="nc" id="L161">        entryLogManager.createNewLog(0L);</span>
+<span class="nc" id="L162">        LOG.info(&quot;This is the current log id: {}&quot;, entryLogManager.getCurrentLogId());</span>
+<span class="nc bnc" id="L163" title="All 2 branches missed.">        assertTrue(&quot;Wrong log id&quot;, entryLogManager.getCurrentLogId() &gt; 1);</span>
+<span class="nc" id="L164">    }</span>
+
+    void setSameThreadExecutorForEntryLoggerAllocator(EntryLoggerAllocator entryLoggerAllocator) {
+<span class="nc" id="L167">        ExecutorService executorService = entryLoggerAllocator.allocatorExecutor;</span>
+<span class="nc" id="L168">        executorService.shutdown();</span>
+<span class="nc" id="L169">        entryLoggerAllocator.allocatorExecutor = MoreExecutors.newDirectExecutorService();</span>
+<span class="nc" id="L170">    }</span>
+
+    /*
+     * entryLogPerLedger is enabled and various scenarios of entrylogcreation are tested
+     */
+    @Test
+    public void testEntryLogPerLedgerCreationWithPreAllocation() throws Exception {
+        /*
+         * I wish I could shorten this testcase or split it into multiple testcases,
+         * but I want to cover a scenario and it requires multiple operations in
+         * sequence and validations along the way. Please bear with the length of this
+         * testcase, I added as many comments as I can to simplify it.
+         */
+
+<span class="nc" id="L184">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+
+        // Creating a new configuration with a number of ledger directories.
+<span class="nc" id="L187">        conf.setLedgerDirNames(ledgerDirs);</span>
+<span class="nc" id="L188">        conf.setIsForceGCAllowWhenNoSpace(true);</span>
+        // preAllocation is Enabled
+<span class="nc" id="L190">        conf.setEntryLogFilePreAllocationEnabled(true);</span>
+<span class="nc" id="L191">        conf.setEntryLogPerLedgerEnabled(true);</span>
+<span class="nc" id="L192">        LedgerDirsManager ledgerDirsManager = new LedgerDirsManager(conf, conf.getLedgerDirs(),</span>
+<span class="nc" id="L193">                new DiskChecker(conf.getDiskUsageThreshold(), conf.getDiskUsageWarnThreshold()));</span>
+<span class="nc" id="L194">        EntryLogger entryLogger = new EntryLogger(conf, ledgerDirsManager);</span>
+<span class="nc" id="L195">        EntryLoggerAllocator entryLoggerAllocator = entryLogger.entryLoggerAllocator;</span>
+<span class="nc" id="L196">        EntryLogManagerForEntryLogPerLedger entryLogManager = (EntryLogManagerForEntryLogPerLedger) entryLogger</span>
+<span class="nc" id="L197">                .getEntryLogManager();</span>
+        // set same thread executor for entryLoggerAllocator's allocatorExecutor
+<span class="nc" id="L199">        setSameThreadExecutorForEntryLoggerAllocator(entryLoggerAllocator);</span>
+
+        /*
+         * no entrylog will be created during initialization
+         */
+<span class="nc" id="L204">        int expectedPreAllocatedLogID = -1;</span>
+<span class="nc" id="L205">        Assert.assertEquals(&quot;PreallocatedlogId after initialization of Entrylogger&quot;,</span>
+<span class="nc" id="L206">                expectedPreAllocatedLogID, entryLoggerAllocator.getPreallocatedLogId());</span>
+
+<span class="nc" id="L208">        int numOfLedgers = 6;</span>
+
+<span class="nc bnc" id="L210" title="All 2 branches missed.">        for (long i = 0; i &lt; numOfLedgers; i++) {</span>
+            /* since we are starting creation of new ledgers, entrylogid will be ledgerid */
+<span class="nc" id="L212">            entryLogManager.createNewLog(i);</span>
+        }
+
+        /*
+         * preallocation is enabled so though entryLogId starts with 0, preallocatedLogId would be equal to numOfLedgers
+         */
+<span class="nc" id="L218">        expectedPreAllocatedLogID = numOfLedgers;</span>
+<span class="nc" id="L219">        Assert.assertEquals(&quot;PreallocatedlogId after creation of logs for ledgers&quot;, expectedPreAllocatedLogID,</span>
+<span class="nc" id="L220">                entryLoggerAllocator.getPreallocatedLogId());</span>
+<span class="nc" id="L221">        Assert.assertEquals(&quot;Number of current &quot;, numOfLedgers,</span>
+<span class="nc" id="L222">                entryLogManager.getCopyOfCurrentLogs().size());</span>
+<span class="nc" id="L223">        Assert.assertEquals(&quot;Number of LogChannels to flush&quot;, 0,</span>
+<span class="nc" id="L224">                entryLogManager.getRotatedLogChannels().size());</span>
+
+        // create dummy entrylog file with id - (expectedPreAllocatedLogID + 1)
+<span class="nc" id="L227">        String logFileName = Long.toHexString(expectedPreAllocatedLogID + 1) + &quot;.log&quot;;</span>
+<span class="nc" id="L228">        File dir = ledgerDirsManager.pickRandomWritableDir();</span>
+<span class="nc" id="L229">        LOG.info(&quot;Picked this directory: &quot; + dir);</span>
+<span class="nc" id="L230">        File newLogFile = new File(dir, logFileName);</span>
+<span class="nc" id="L231">        newLogFile.createNewFile();</span>
+
+        /*
+         * since there is already preexisting entrylog file with id -
+         * (expectedPreAllocatedLogIDDuringInitialization + 1), when new
+         * entrylog is created it should have
+         * (expectedPreAllocatedLogIDDuringInitialization + 2) id
+         */
+<span class="nc" id="L239">        long rotatedLedger = 1L;</span>
+<span class="nc" id="L240">        entryLogManager.createNewLog(rotatedLedger);</span>
+
+<span class="nc" id="L242">        expectedPreAllocatedLogID = expectedPreAllocatedLogID + 2;</span>
+<span class="nc" id="L243">        Assert.assertEquals(&quot;PreallocatedlogId &quot;,</span>
+<span class="nc" id="L244">                expectedPreAllocatedLogID, entryLoggerAllocator.getPreallocatedLogId());</span>
+<span class="nc" id="L245">        Assert.assertEquals(&quot;Number of current &quot;, numOfLedgers,</span>
+<span class="nc" id="L246">                entryLogManager.getCopyOfCurrentLogs().size());</span>
+<span class="nc" id="L247">        List&lt;BufferedLogChannel&gt; rotatedLogChannels = entryLogManager.getRotatedLogChannels();</span>
+<span class="nc" id="L248">        Assert.assertEquals(&quot;Number of LogChannels rotated&quot;, 1, rotatedLogChannels.size());</span>
+<span class="nc" id="L249">        Assert.assertEquals(&quot;Rotated logchannel logid&quot;, rotatedLedger, rotatedLogChannels.iterator().next().getLogId());</span>
+<span class="nc" id="L250">        entryLogger.flush();</span>
+        /*
+         * when flush is called all the rotatedlogchannels are flushed and
+         * removed from rotatedlogchannels list. But here since entrylogId - 0,
+         * is not yet rotated and flushed yet, getLeastUnflushedLogId will still
+         * return 0.
+         */
+<span class="nc" id="L257">        rotatedLogChannels = entryLogManager.getRotatedLogChannels();</span>
+<span class="nc" id="L258">        Assert.assertEquals(&quot;Number of LogChannels rotated&quot;, 0, rotatedLogChannels.size());</span>
+<span class="nc" id="L259">        Assert.assertEquals(&quot;Least UnflushedLoggerId&quot;, 0, entryLogger.getLeastUnflushedLogId());</span>
+
+<span class="nc" id="L261">        entryLogManager.createNewLog(0L);</span>
+<span class="nc" id="L262">        rotatedLogChannels = entryLogManager.getRotatedLogChannels();</span>
+<span class="nc" id="L263">        Assert.assertEquals(&quot;Number of LogChannels rotated&quot;, 1, rotatedLogChannels.size());</span>
+<span class="nc" id="L264">        Assert.assertEquals(&quot;Least UnflushedLoggerId&quot;, 0, entryLogger.getLeastUnflushedLogId());</span>
+<span class="nc" id="L265">        entryLogger.flush();</span>
+        /*
+         * since both entrylogids 0, 1 are rotated and flushed,
+         * leastunFlushedLogId should be 2
+         */
+<span class="nc" id="L270">        Assert.assertEquals(&quot;Least UnflushedLoggerId&quot;, 2, entryLogger.getLeastUnflushedLogId());</span>
+<span class="nc" id="L271">        expectedPreAllocatedLogID = expectedPreAllocatedLogID + 1;</span>
+
+        /*
+         * we should be able to get entryLogMetadata from all the active
+         * entrylogs and the logs which are moved toflush list. Since no entry
+         * is added, all the meta should be empty.
+         */
+<span class="nc bnc" id="L278" title="All 2 branches missed.">        for (int i = 0; i &lt;= expectedPreAllocatedLogID; i++) {</span>
+<span class="nc" id="L279">            EntryLogMetadata meta = entryLogger.getEntryLogMetadata(i);</span>
+<span class="nc" id="L280">            Assert.assertTrue(&quot;EntryLogMetadata should be empty&quot;, meta.isEmpty());</span>
+<span class="nc bnc" id="L281" title="All 2 branches missed.">            Assert.assertTrue(&quot;EntryLog usage should be 0&quot;, meta.getTotalSize() == 0);</span>
+        }
+<span class="nc" id="L283">    }</span>
+
+    /**
+     * In this testcase entryLogPerLedger is Enabled and entrylogs are created
+     * while ledgerdirs are getting full.
+     */
+    @Test
+    public void testEntryLogCreationWithFilledDirs() throws Exception {
+<span class="nc" id="L291">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+
+        // Creating a new configuration with a number of ledger directories.
+<span class="nc" id="L294">        conf.setLedgerDirNames(ledgerDirs);</span>
+        // forceGCAllowWhenNoSpace is disabled
+<span class="nc" id="L296">        conf.setIsForceGCAllowWhenNoSpace(false);</span>
+        // pre-allocation is not enabled
+<span class="nc" id="L298">        conf.setEntryLogFilePreAllocationEnabled(false);</span>
+<span class="nc" id="L299">        conf.setEntryLogPerLedgerEnabled(true);</span>
+<span class="nc" id="L300">        LedgerDirsManager ledgerDirsManager = new LedgerDirsManager(conf, conf.getLedgerDirs(),</span>
+<span class="nc" id="L301">                new DiskChecker(conf.getDiskUsageThreshold(), conf.getDiskUsageWarnThreshold()));</span>
+<span class="nc" id="L302">        EntryLogger entryLogger = new EntryLogger(conf, ledgerDirsManager);</span>
+<span class="nc" id="L303">        EntryLoggerAllocator entryLoggerAllocator = entryLogger.entryLoggerAllocator;</span>
+<span class="nc" id="L304">        EntryLogManagerForEntryLogPerLedger entryLogManager = (EntryLogManagerForEntryLogPerLedger)</span>
+<span class="nc" id="L305">                entryLogger.getEntryLogManager();</span>
+        // set same thread executor for entryLoggerAllocator's allocatorExecutor
+<span class="nc" id="L307">        setSameThreadExecutorForEntryLoggerAllocator(entryLoggerAllocator);</span>
+
+<span class="nc" id="L309">        int expectedPreAllocatedLogIDDuringInitialization = -1;</span>
+<span class="nc" id="L310">        Assert.assertEquals(&quot;PreallocatedlogId after initialization of Entrylogger&quot;,</span>
+<span class="nc" id="L311">                expectedPreAllocatedLogIDDuringInitialization, entryLoggerAllocator.getPreallocatedLogId());</span>
+<span class="nc" id="L312">        Assert.assertEquals(&quot;Preallocation Future of this slot should be null&quot;, null,</span>
+                entryLogger.entryLoggerAllocator.preallocation);
+
+<span class="nc" id="L315">        long ledgerId = 0L;</span>
+
+<span class="nc" id="L317">        entryLogManager.createNewLog(ledgerId);</span>
+
+        /*
+         * pre-allocation is not enabled, so it would not preallocate for next entrylog
+         */
+<span class="nc" id="L322">        Assert.assertEquals(&quot;PreallocatedlogId after initialization of Entrylogger&quot;,</span>
+<span class="nc" id="L323">                expectedPreAllocatedLogIDDuringInitialization + 1, entryLoggerAllocator.getPreallocatedLogId());</span>
+
+<span class="nc bnc" id="L325" title="All 2 branches missed.">        for (int i = 0; i &lt; numDirs - 1; i++) {</span>
+<span class="nc" id="L326">            ledgerDirsManager.addToFilledDirs(Bookie.getCurrentDirectory(new File(ledgerDirs[i])));</span>
+        }
+
+        /*
+         * this is the only non-filled ledgerDir so it should be used for creating new entryLog
+         */
+<span class="nc" id="L332">        File nonFilledLedgerDir = Bookie.getCurrentDirectory(new File(ledgerDirs[numDirs - 1]));</span>
+
+<span class="nc" id="L334">        entryLogManager.createNewLog(ledgerId);</span>
+<span class="nc" id="L335">        BufferedLogChannel newLogChannel = entryLogManager.getCurrentLogForLedger(ledgerId);</span>
+<span class="nc" id="L336">        Assert.assertEquals(&quot;Directory of newly created BufferedLogChannel file&quot;, nonFilledLedgerDir.getAbsolutePath(),</span>
+<span class="nc" id="L337">                newLogChannel.getLogFile().getParentFile().getAbsolutePath());</span>
+
+<span class="nc" id="L339">        ledgerDirsManager.addToFilledDirs(Bookie.getCurrentDirectory(new File(ledgerDirs[numDirs - 1])));</span>
+
+        // new entrylog creation should succeed, though there is no writable ledgerDir
+<span class="nc" id="L342">        entryLogManager.createNewLog(ledgerId);</span>
+<span class="nc" id="L343">    }</span>
+
+    /*
+     * In this testcase it is validated if the entryLog is created in the
+     * ledgerDir with least number of current active entrylogs
+     */
+    @Test
+    public void testLedgerDirsUniformityDuringCreation() throws Exception {
+<span class="nc" id="L351">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+
+        // Creating a new configuration with a number of ledger directories.
+<span class="nc" id="L354">        conf.setLedgerDirNames(ledgerDirs);</span>
+        // pre-allocation is not enabled
+<span class="nc" id="L356">        conf.setEntryLogFilePreAllocationEnabled(false);</span>
+<span class="nc" id="L357">        conf.setEntryLogPerLedgerEnabled(true);</span>
+<span class="nc" id="L358">        LedgerDirsManager ledgerDirsManager = new LedgerDirsManager(conf, conf.getLedgerDirs(),</span>
+<span class="nc" id="L359">                new DiskChecker(conf.getDiskUsageThreshold(), conf.getDiskUsageWarnThreshold()));</span>
+<span class="nc" id="L360">        EntryLogger entryLogger = new EntryLogger(conf, ledgerDirsManager);</span>
+<span class="nc" id="L361">        EntryLogManagerForEntryLogPerLedger entrylogManager = (EntryLogManagerForEntryLogPerLedger)</span>
+<span class="nc" id="L362">                entryLogger.getEntryLogManager();</span>
+
+<span class="nc bnc" id="L364" title="All 2 branches missed.">        for (long i = 0; i &lt; ledgerDirs.length; i++) {</span>
+<span class="nc" id="L365">            entrylogManager.createNewLog(i);</span>
+        }
+
+<span class="nc" id="L368">        int numberOfLedgersCreated = ledgerDirs.length;</span>
+
+<span class="nc" id="L370">        Assert.assertEquals(&quot;Highest frequency of entrylogs per ledgerdir&quot;, 1,</span>
+<span class="nc" id="L371">                highestFrequencyOfEntryLogsPerLedgerDir(entrylogManager.getCopyOfCurrentLogs()));</span>
+
+<span class="nc" id="L373">        long newLedgerId = numberOfLedgersCreated;</span>
+<span class="nc" id="L374">        entrylogManager.createNewLog(newLedgerId);</span>
+<span class="nc" id="L375">        numberOfLedgersCreated++;</span>
+
+<span class="nc" id="L377">        Assert.assertEquals(&quot;Highest frequency of entrylogs per ledgerdir&quot;, 2,</span>
+<span class="nc" id="L378">                highestFrequencyOfEntryLogsPerLedgerDir(entrylogManager.getCopyOfCurrentLogs()));</span>
+
+<span class="nc bnc" id="L380" title="All 2 branches missed.">        for (long i = numberOfLedgersCreated; i &lt; 2 * ledgerDirs.length; i++) {</span>
+<span class="nc" id="L381">            entrylogManager.createNewLog(i);</span>
+        }
+
+<span class="nc" id="L384">        Assert.assertEquals(&quot;Highest frequency of entrylogs per ledgerdir&quot;, 2,</span>
+<span class="nc" id="L385">                highestFrequencyOfEntryLogsPerLedgerDir(entrylogManager.getCopyOfCurrentLogs()));</span>
+<span class="nc" id="L386">    }</span>
+
+
+    int highestFrequencyOfEntryLogsPerLedgerDir(Set&lt;BufferedLogChannelWithDirInfo&gt; copyOfCurrentLogsWithDirInfo) {
+<span class="nc" id="L390">        Map&lt;File, MutableInt&gt; frequencyOfEntryLogsInLedgerDirs = new HashMap&lt;File, MutableInt&gt;();</span>
+<span class="nc bnc" id="L391" title="All 2 branches missed.">        for (BufferedLogChannelWithDirInfo logChannelWithDirInfo : copyOfCurrentLogsWithDirInfo) {</span>
+<span class="nc" id="L392">            File parentDir = logChannelWithDirInfo.getLogChannel().getLogFile().getParentFile();</span>
+<span class="nc bnc" id="L393" title="All 2 branches missed.">            if (frequencyOfEntryLogsInLedgerDirs.containsKey(parentDir)) {</span>
+<span class="nc" id="L394">                frequencyOfEntryLogsInLedgerDirs.get(parentDir).increment();</span>
+            } else {
+<span class="nc" id="L396">                frequencyOfEntryLogsInLedgerDirs.put(parentDir, new MutableInt(1));</span>
+            }
+<span class="nc" id="L398">        }</span>
+        @SuppressWarnings(&quot;unchecked&quot;)
+<span class="nc" id="L400">        int highestFreq = ((Entry&lt;File, MutableInt&gt;) (frequencyOfEntryLogsInLedgerDirs.entrySet().stream()</span>
+<span class="nc" id="L401">                .max(Map.Entry.comparingByValue()).get())).getValue().intValue();</span>
+<span class="nc" id="L402">        return highestFreq;</span>
+    }
+
+    @Test
+    public void testConcurrentCreateNewLogWithEntryLogFilePreAllocationEnabled() throws Exception {
+<span class="nc" id="L407">        testConcurrentCreateNewLog(true);</span>
+<span class="nc" id="L408">    }</span>
+
+    @Test
+    public void testConcurrentCreateNewLogWithEntryLogFilePreAllocationDisabled() throws Exception {
+<span class="nc" id="L412">        testConcurrentCreateNewLog(false);</span>
+<span class="nc" id="L413">    }</span>
+
+    public void testConcurrentCreateNewLog(boolean entryLogFilePreAllocationEnabled) throws Exception {
+<span class="nc" id="L416">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+
+        // Creating a new configuration with a number of
+        // ledger directories.
+<span class="nc" id="L420">        conf.setLedgerDirNames(ledgerDirs);</span>
+<span class="nc" id="L421">        conf.setEntryLogFilePreAllocationEnabled(entryLogFilePreAllocationEnabled);</span>
+<span class="nc" id="L422">        LedgerDirsManager ledgerDirsManager = new LedgerDirsManager(conf, conf.getLedgerDirs(),</span>
+<span class="nc" id="L423">                new DiskChecker(conf.getDiskUsageThreshold(), conf.getDiskUsageWarnThreshold()));</span>
+
+<span class="nc" id="L425">        EntryLogger el = new EntryLogger(conf, ledgerDirsManager);</span>
+<span class="nc" id="L426">        EntryLogManagerBase entryLogManager = (EntryLogManagerBase) el.getEntryLogManager();</span>
+        // set same thread executor for entryLoggerAllocator's allocatorExecutor
+<span class="nc" id="L428">        setSameThreadExecutorForEntryLoggerAllocator(el.getEntryLoggerAllocator());</span>
+
+<span class="nc" id="L430">        Assert.assertEquals(&quot;previousAllocatedEntryLogId after initialization&quot;, -1,</span>
+<span class="nc" id="L431">                el.getPreviousAllocatedEntryLogId());</span>
+<span class="nc" id="L432">        Assert.assertEquals(&quot;leastUnflushedLogId after initialization&quot;, 0, el.getLeastUnflushedLogId());</span>
+<span class="nc" id="L433">        int createNewLogNumOfTimes = 10;</span>
+<span class="nc" id="L434">        AtomicBoolean receivedException = new AtomicBoolean(false);</span>
+
+<span class="nc" id="L436">        IntStream.range(0, createNewLogNumOfTimes).parallel().forEach((i) -&gt; {</span>
+            try {
+<span class="nc" id="L438">                (entryLogManager).createNewLog((long) i);</span>
+<span class="nc" id="L439">            } catch (IOException e) {</span>
+<span class="nc" id="L440">                LOG.error(&quot;Received exception while creating newLog&quot;, e);</span>
+<span class="nc" id="L441">                receivedException.set(true);</span>
+<span class="nc" id="L442">            }</span>
+<span class="nc" id="L443">        });</span>
+
+<span class="nc" id="L445">        Assert.assertFalse(&quot;There shouldn't be any exceptions while creating newlog&quot;, receivedException.get());</span>
+<span class="nc" id="L446">        int expectedPreviousAllocatedEntryLogId = createNewLogNumOfTimes - 1;</span>
+<span class="nc bnc" id="L447" title="All 2 branches missed.">        if (entryLogFilePreAllocationEnabled) {</span>
+<span class="nc" id="L448">            expectedPreviousAllocatedEntryLogId = createNewLogNumOfTimes;</span>
+        }
+
+<span class="nc" id="L451">        Assert.assertEquals(</span>
+                &quot;previousAllocatedEntryLogId after &quot; + createNewLogNumOfTimes
+                + &quot; number of times createNewLog is called&quot;,
+<span class="nc" id="L454">                expectedPreviousAllocatedEntryLogId, el.getPreviousAllocatedEntryLogId());</span>
+<span class="nc" id="L455">        Assert.assertEquals(&quot;Number of RotatedLogChannels&quot;, createNewLogNumOfTimes - 1,</span>
+<span class="nc" id="L456">                entryLogManager.getRotatedLogChannels().size());</span>
+<span class="nc" id="L457">    }</span>
+
+    @Test
+    public void testCreateNewLogWithGaps() throws Exception {
+<span class="nc" id="L461">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+
+        // Creating a new configuration with a number of
+        // ledger directories.
+<span class="nc" id="L465">        conf.setLedgerDirNames(ledgerDirs);</span>
+<span class="nc" id="L466">        conf.setEntryLogFilePreAllocationEnabled(false);</span>
+<span class="nc" id="L467">        LedgerDirsManager ledgerDirsManager = new LedgerDirsManager(conf, conf.getLedgerDirs(),</span>
+<span class="nc" id="L468">                new DiskChecker(conf.getDiskUsageThreshold(), conf.getDiskUsageWarnThreshold()));</span>
+
+<span class="nc" id="L470">        EntryLogger el = new EntryLogger(conf, ledgerDirsManager);</span>
+<span class="nc" id="L471">        EntryLogManagerBase entryLogManagerBase = (EntryLogManagerBase) el.getEntryLogManager();</span>
+<span class="nc" id="L472">        entryLogManagerBase.createNewLog(0L);</span>
+
+<span class="nc" id="L474">        Assert.assertEquals(&quot;previousAllocatedEntryLogId after initialization&quot;, 0, el.getPreviousAllocatedEntryLogId());</span>
+
+        // Extracted from createNewLog()
+<span class="nc" id="L477">        String logFileName = Long.toHexString(1) + &quot;.log&quot;;</span>
+<span class="nc" id="L478">        File dir = ledgerDirsManager.pickRandomWritableDir();</span>
+<span class="nc" id="L479">        LOG.info(&quot;Picked this directory: {}&quot;, dir);</span>
+<span class="nc" id="L480">        File newLogFile = new File(dir, logFileName);</span>
+<span class="nc" id="L481">        newLogFile.createNewFile();</span>
+
+<span class="nc" id="L483">        entryLogManagerBase.createNewLog(0L);</span>
+<span class="nc" id="L484">        Assert.assertEquals(&quot;previousAllocatedEntryLogId since entrylogid 1 is already taken&quot;, 2,</span>
+<span class="nc" id="L485">                el.getPreviousAllocatedEntryLogId());</span>
+
+        // Extracted from createNewLog()
+<span class="nc" id="L488">        logFileName = Long.toHexString(3) + &quot;.log&quot;;</span>
+<span class="nc" id="L489">        dir = ledgerDirsManager.pickRandomWritableDir();</span>
+<span class="nc" id="L490">        LOG.info(&quot;Picked this directory: {}&quot;, dir);</span>
+<span class="nc" id="L491">        newLogFile = new File(dir, logFileName);</span>
+<span class="nc" id="L492">        newLogFile.createNewFile();</span>
+
+<span class="nc" id="L494">        entryLogManagerBase.createNewLog(0L);</span>
+<span class="nc" id="L495">        Assert.assertEquals(&quot;previousAllocatedEntryLogId since entrylogid 3 is already taken&quot;, 4,</span>
+<span class="nc" id="L496">                el.getPreviousAllocatedEntryLogId());</span>
+<span class="nc" id="L497">    }</span>
+
+    @Test
+    public void testCreateNewLogAndCompactionLog() throws Exception {
+<span class="nc" id="L501">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+
+        // Creating a new configuration with a number of
+        // ledger directories.
+<span class="nc" id="L505">        conf.setLedgerDirNames(ledgerDirs);</span>
+<span class="nc" id="L506">        conf.setEntryLogFilePreAllocationEnabled(true);</span>
+<span class="nc" id="L507">        LedgerDirsManager ledgerDirsManager = new LedgerDirsManager(conf, conf.getLedgerDirs(),</span>
+<span class="nc" id="L508">                new DiskChecker(conf.getDiskUsageThreshold(), conf.getDiskUsageWarnThreshold()));</span>
+<span class="nc" id="L509">        EntryLogger el = new EntryLogger(conf, ledgerDirsManager);</span>
+        // set same thread executor for entryLoggerAllocator's allocatorExecutor
+<span class="nc" id="L511">        setSameThreadExecutorForEntryLoggerAllocator(el.getEntryLoggerAllocator());</span>
+<span class="nc" id="L512">        AtomicBoolean receivedException = new AtomicBoolean(false);</span>
+
+<span class="nc" id="L514">        IntStream.range(0, 2).parallel().forEach((i) -&gt; {</span>
+            try {
+<span class="nc bnc" id="L516" title="All 2 branches missed.">                if (i % 2 == 0) {</span>
+<span class="nc" id="L517">                    ((EntryLogManagerBase) el.getEntryLogManager()).createNewLog((long) i);</span>
+                } else {
+<span class="nc" id="L519">                    el.createNewCompactionLog();</span>
+                }
+<span class="nc" id="L521">            } catch (IOException e) {</span>
+<span class="nc" id="L522">                LOG.error(&quot;Received exception while creating newLog&quot;, e);</span>
+<span class="nc" id="L523">                receivedException.set(true);</span>
+<span class="nc" id="L524">            }</span>
+<span class="nc" id="L525">        });</span>
+
+<span class="nc" id="L527">        Assert.assertFalse(&quot;There shouldn't be any exceptions while creating newlog&quot;, receivedException.get());</span>
+<span class="nc" id="L528">        Assert.assertEquals(</span>
+                &quot;previousAllocatedEntryLogId after 2 times createNewLog is called&quot;, 2,
+<span class="nc" id="L530">                el.getPreviousAllocatedEntryLogId());</span>
+<span class="nc" id="L531">    }</span>
+
+    /*
+     * In this testcase entrylogs for ledgers are tried to create concurrently.
+     */
+    @Test
+    public void testConcurrentEntryLogCreations() throws Exception {
+<span class="nc" id="L538">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+
+        // Creating a new configuration with a number of ledger directories.
+<span class="nc" id="L541">        conf.setLedgerDirNames(ledgerDirs);</span>
+        // pre-allocation is enabled
+<span class="nc" id="L543">        conf.setEntryLogFilePreAllocationEnabled(true);</span>
+<span class="nc" id="L544">        conf.setEntryLogPerLedgerEnabled(true);</span>
+<span class="nc" id="L545">        LedgerDirsManager ledgerDirsManager = new LedgerDirsManager(conf, conf.getLedgerDirs(),</span>
+<span class="nc" id="L546">                new DiskChecker(conf.getDiskUsageThreshold(), conf.getDiskUsageWarnThreshold()));</span>
+<span class="nc" id="L547">        EntryLogger entryLogger = new EntryLogger(conf, ledgerDirsManager);</span>
+<span class="nc" id="L548">        EntryLogManagerForEntryLogPerLedger entrylogManager = (EntryLogManagerForEntryLogPerLedger)</span>
+<span class="nc" id="L549">                entryLogger.getEntryLogManager();</span>
+
+<span class="nc" id="L551">        int numOfLedgers = 10;</span>
+<span class="nc" id="L552">        int numOfThreadsForSameLedger = 10;</span>
+<span class="nc" id="L553">        AtomicInteger createdEntryLogs = new AtomicInteger(0);</span>
+<span class="nc" id="L554">        CountDownLatch startLatch = new CountDownLatch(1);</span>
+<span class="nc" id="L555">        CountDownLatch createdLatch = new CountDownLatch(numOfLedgers * numOfThreadsForSameLedger);</span>
+
+<span class="nc bnc" id="L557" title="All 2 branches missed.">        for (long i = 0; i &lt; numOfLedgers; i++) {</span>
+<span class="nc bnc" id="L558" title="All 2 branches missed.">            for (int j = 0; j &lt; numOfThreadsForSameLedger; j++) {</span>
+<span class="nc" id="L559">                long ledgerId = i;</span>
+<span class="nc" id="L560">                new Thread(() -&gt; {</span>
+                    try {
+<span class="nc" id="L562">                        startLatch.await();</span>
+<span class="nc" id="L563">                        entrylogManager.createNewLog(ledgerId);</span>
+<span class="nc" id="L564">                        createdEntryLogs.incrementAndGet();</span>
+<span class="nc" id="L565">                        Thread.sleep(2000);</span>
+<span class="nc" id="L566">                    } catch (InterruptedException | IOException e) {</span>
+<span class="nc" id="L567">                        LOG.error(&quot;Got exception while trying to createNewLog for Ledger: &quot; + ledgerId, e);</span>
+                    } finally {
+<span class="nc" id="L569">                        createdLatch.countDown();</span>
+                    }
+<span class="nc" id="L571">                }).start();</span>
+            }
+        }
+
+<span class="nc" id="L575">        startLatch.countDown();</span>
+<span class="nc" id="L576">        createdLatch.await(20, TimeUnit.SECONDS);</span>
+<span class="nc" id="L577">        Assert.assertEquals(&quot;Created EntryLogs&quot;, numOfLedgers * numOfThreadsForSameLedger, createdEntryLogs.get());</span>
+<span class="nc" id="L578">        Assert.assertEquals(&quot;Active currentlogs size&quot;, numOfLedgers, entrylogManager.getCopyOfCurrentLogs().size());</span>
+<span class="nc" id="L579">        Assert.assertEquals(&quot;Rotated entrylogs size&quot;, (numOfThreadsForSameLedger - 1) * numOfLedgers,</span>
+<span class="nc" id="L580">                entrylogManager.getRotatedLogChannels().size());</span>
+        /*
+         * EntryLogFilePreAllocation is Enabled so
+         * getPreviousAllocatedEntryLogId would be (numOfLedgers *
+         * numOfThreadsForSameLedger) instead of (numOfLedgers *
+         * numOfThreadsForSameLedger - 1)
+         */
+<span class="nc" id="L587">        Assert.assertEquals(&quot;PreviousAllocatedEntryLogId&quot;, numOfLedgers * numOfThreadsForSameLedger,</span>
+<span class="nc" id="L588">                entryLogger.getPreviousAllocatedEntryLogId());</span>
+<span class="nc" id="L589">    }</span>
+
+    /*
+     * In this testcase metrics of EntryLogManagerForEntryLogPerLedger are
+     * validated.
+     */
+    @Test
+    public void testEntryLogManagerMetrics() throws Exception {
+<span class="nc" id="L597">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L598">        TestStatsProvider statsProvider = new TestStatsProvider();</span>
+<span class="nc" id="L599">        TestStatsLogger statsLogger = statsProvider.getStatsLogger(BookKeeperServerStats.ENTRYLOGGER_SCOPE);</span>
+<span class="nc" id="L600">        int maximumNumberOfActiveEntryLogs = 3;</span>
+<span class="nc" id="L601">        int entryLogPerLedgerCounterLimitsMultFactor = 2;</span>
+
+        // Creating a new configuration with a number of ledger directories.
+<span class="nc" id="L604">        conf.setLedgerDirNames(ledgerDirs);</span>
+        // pre-allocation is enabled
+<span class="nc" id="L606">        conf.setEntryLogFilePreAllocationEnabled(true);</span>
+<span class="nc" id="L607">        conf.setEntryLogPerLedgerEnabled(true);</span>
+<span class="nc" id="L608">        conf.setMaximumNumberOfActiveEntryLogs(maximumNumberOfActiveEntryLogs);</span>
+<span class="nc" id="L609">        conf.setEntryLogPerLedgerCounterLimitsMultFactor(entryLogPerLedgerCounterLimitsMultFactor);</span>
+<span class="nc" id="L610">        LedgerDirsManager ledgerDirsManager = new LedgerDirsManager(conf, conf.getLedgerDirs(),</span>
+<span class="nc" id="L611">                new DiskChecker(conf.getDiskUsageThreshold(), conf.getDiskUsageWarnThreshold()));</span>
+<span class="nc" id="L612">        EntryLogger entryLogger = new EntryLogger(conf, ledgerDirsManager, null, statsLogger,</span>
+                UnpooledByteBufAllocator.DEFAULT);
+<span class="nc" id="L614">        EntryLogManagerForEntryLogPerLedger entrylogManager = (EntryLogManagerForEntryLogPerLedger) entryLogger</span>
+<span class="nc" id="L615">                .getEntryLogManager();</span>
+        // set same thread executor for entryLoggerAllocator's allocatorExecutor
+<span class="nc" id="L617">        setSameThreadExecutorForEntryLoggerAllocator(entryLogger.getEntryLoggerAllocator());</span>
+
+<span class="nc" id="L619">        Counter numOfWriteActiveLedgers = statsLogger.getCounter(BookKeeperServerStats.NUM_OF_WRITE_ACTIVE_LEDGERS);</span>
+<span class="nc" id="L620">        Counter numOfWriteLedgersRemovedCacheExpiry = statsLogger</span>
+<span class="nc" id="L621">                .getCounter(BookKeeperServerStats.NUM_OF_WRITE_LEDGERS_REMOVED_CACHE_EXPIRY);</span>
+<span class="nc" id="L622">        Counter numOfWriteLedgersRemovedCacheMaxSize = statsLogger</span>
+<span class="nc" id="L623">                .getCounter(BookKeeperServerStats.NUM_OF_WRITE_LEDGERS_REMOVED_CACHE_MAXSIZE);</span>
+<span class="nc" id="L624">        Counter numLedgersHavingMultipleEntrylogs = statsLogger</span>
+<span class="nc" id="L625">                .getCounter(BookKeeperServerStats.NUM_LEDGERS_HAVING_MULTIPLE_ENTRYLOGS);</span>
+<span class="nc" id="L626">        TestOpStatsLogger entryLogsPerLedger = (TestOpStatsLogger) statsLogger</span>
+<span class="nc" id="L627">                .getOpStatsLogger(BookKeeperServerStats.ENTRYLOGS_PER_LEDGER);</span>
+        // initially all the counters should be 0
+<span class="nc" id="L629">        Assert.assertEquals(&quot;NUM_OF_WRITE_ACTIVE_LEDGERS&quot;, 0, numOfWriteActiveLedgers.get().intValue());</span>
+<span class="nc" id="L630">        Assert.assertEquals(&quot;NUM_OF_WRITE_LEDGERS_REMOVED_CACHE_EXPIRY&quot;, 0,</span>
+<span class="nc" id="L631">                numOfWriteLedgersRemovedCacheExpiry.get().intValue());</span>
+<span class="nc" id="L632">        Assert.assertEquals(&quot;NUM_OF_WRITE_LEDGERS_REMOVED_CACHE_MAXSIZE&quot;, 0,</span>
+<span class="nc" id="L633">                numOfWriteLedgersRemovedCacheMaxSize.get().intValue());</span>
+<span class="nc" id="L634">        Assert.assertEquals(&quot;NUM_LEDGERS_HAVING_MULTIPLE_ENTRYLOGS&quot;, 0,</span>
+<span class="nc" id="L635">                numLedgersHavingMultipleEntrylogs.get().intValue());</span>
+<span class="nc" id="L636">        Assert.assertEquals(&quot;ENTRYLOGS_PER_LEDGER SuccessCount&quot;, 0, entryLogsPerLedger.getSuccessCount());</span>
+
+        // lid-1 : 3 entrylogs, lid-2 : 2 entrylogs, lid-3 : 1 entrylog
+<span class="nc" id="L639">        int numOfEntrylogsForLedger1 = 3;</span>
+<span class="nc" id="L640">        createNewLogs(entrylogManager, 1L, numOfEntrylogsForLedger1);</span>
+<span class="nc" id="L641">        int numOfEntrylogsForLedger2 = 2;</span>
+<span class="nc" id="L642">        createNewLogs(entrylogManager, 2L, numOfEntrylogsForLedger2);</span>
+<span class="nc" id="L643">        createNewLogs(entrylogManager, 3L, 1);</span>
+
+<span class="nc" id="L645">        Assert.assertEquals(&quot;NUM_OF_WRITE_ACTIVE_LEDGERS&quot;, 3, numOfWriteActiveLedgers.get().intValue());</span>
+<span class="nc" id="L646">        Assert.assertEquals(&quot;NUM_OF_WRITE_LEDGERS_REMOVED_CACHE_EXPIRY&quot;, 0,</span>
+<span class="nc" id="L647">                numOfWriteLedgersRemovedCacheExpiry.get().intValue());</span>
+<span class="nc" id="L648">        Assert.assertEquals(&quot;NUM_OF_WRITE_LEDGERS_REMOVED_CACHE_MAXSIZE&quot;, 0,</span>
+<span class="nc" id="L649">                numOfWriteLedgersRemovedCacheMaxSize.get().intValue());</span>
+<span class="nc" id="L650">        Assert.assertEquals(&quot;NUM_LEDGERS_HAVING_MULTIPLE_ENTRYLOGS&quot;, 2,</span>
+<span class="nc" id="L651">                numLedgersHavingMultipleEntrylogs.get().intValue());</span>
+<span class="nc" id="L652">        Assert.assertEquals(&quot;ENTRYLOGS_PER_LEDGER SuccessCount&quot;, 0, entryLogsPerLedger.getSuccessCount());</span>
+
+        /*
+         * since entrylog for lid-4 is created and entrylogmap cachesize is 3,
+         * lid-1 will be removed from entrylogmap cache
+         */
+<span class="nc" id="L658">        createNewLogs(entrylogManager, 4L, 1);</span>
+<span class="nc" id="L659">        Assert.assertEquals(&quot;NUM_OF_WRITE_ACTIVE_LEDGERS&quot;, maximumNumberOfActiveEntryLogs,</span>
+<span class="nc" id="L660">                numOfWriteActiveLedgers.get().intValue());</span>
+<span class="nc" id="L661">        Assert.assertEquals(&quot;NUM_OF_WRITE_LEDGERS_REMOVED_CACHE_MAXSIZE&quot;, 1,</span>
+<span class="nc" id="L662">                numOfWriteLedgersRemovedCacheMaxSize.get().intValue());</span>
+<span class="nc" id="L663">        Assert.assertEquals(&quot;ENTRYLOGS_PER_LEDGER SuccessCount&quot;, 0, entryLogsPerLedger.getSuccessCount());</span>
+
+        /*
+         * entrylog for lid-5, lid-6, lid-7 are created. Since
+         * maximumNumberOfActiveEntryLogs = 3 and
+         * entryLogPerLedgerCounterLimitsMultFactor = 2, when the entrylog for
+         * lid-7 is created, count of lid-1 should be removed from countermap.
+         */
+<span class="nc" id="L671">        createNewLogs(entrylogManager, 5L, 1);</span>
+<span class="nc" id="L672">        createNewLogs(entrylogManager, 6L, 1);</span>
+<span class="nc" id="L673">        createNewLogs(entrylogManager, 7L, 1);</span>
+<span class="nc" id="L674">        Assert.assertEquals(&quot;NUM_OF_WRITE_ACTIVE_LEDGERS&quot;, maximumNumberOfActiveEntryLogs,</span>
+<span class="nc" id="L675">                numOfWriteActiveLedgers.get().intValue());</span>
+<span class="nc" id="L676">        Assert.assertEquals(&quot;NUM_OF_WRITE_LEDGERS_REMOVED_CACHE_MAXSIZE&quot;, 4,</span>
+<span class="nc" id="L677">                numOfWriteLedgersRemovedCacheMaxSize.get().intValue());</span>
+<span class="nc" id="L678">        Assert.assertEquals(&quot;ENTRYLOGS_PER_LEDGER SuccessCount&quot;, 1, entryLogsPerLedger.getSuccessCount());</span>
+<span class="nc" id="L679">        Assert.assertTrue(&quot;ENTRYLOGS_PER_LEDGER average value&quot;,</span>
+<span class="nc bnc" id="L680" title="All 2 branches missed.">                Double.compare(numOfEntrylogsForLedger1, entryLogsPerLedger.getSuccessAverage()) == 0);</span>
+
+        /*
+         * entrylog for new lid-8 is created so one more entry from countermap
+         * should be removed.
+         */
+<span class="nc" id="L686">        createNewLogs(entrylogManager, 8L, 4);</span>
+<span class="nc" id="L687">        Assert.assertEquals(&quot;NUM_OF_WRITE_ACTIVE_LEDGERS&quot;, maximumNumberOfActiveEntryLogs,</span>
+<span class="nc" id="L688">                numOfWriteActiveLedgers.get().intValue());</span>
+<span class="nc" id="L689">        Assert.assertEquals(&quot;NUM_OF_WRITE_LEDGERS_REMOVED_CACHE_MAXSIZE&quot;, 5,</span>
+<span class="nc" id="L690">                numOfWriteLedgersRemovedCacheMaxSize.get().intValue());</span>
+<span class="nc" id="L691">        Assert.assertEquals(&quot;NUM_LEDGERS_HAVING_MULTIPLE_ENTRYLOGS&quot;, 3,</span>
+<span class="nc" id="L692">                numLedgersHavingMultipleEntrylogs.get().intValue());</span>
+<span class="nc" id="L693">        Assert.assertEquals(&quot;ENTRYLOGS_PER_LEDGER SuccessCount&quot;, 2, entryLogsPerLedger.getSuccessCount());</span>
+<span class="nc" id="L694">        Assert.assertTrue(&quot;ENTRYLOGS_PER_LEDGER average value&quot;,</span>
+<span class="nc bnc" id="L695" title="All 2 branches missed.">                Double.compare((numOfEntrylogsForLedger1 + numOfEntrylogsForLedger2) / 2.0,</span>
+<span class="nc" id="L696">                        entryLogsPerLedger.getSuccessAverage()) == 0);</span>
+
+        /*
+         * lid-3 is still in countermap. So when new entrylogs are created for
+         * lid-3, no new entry from counter should be removed. so
+         * entryLogsPerLedger.getSuccessCount() should be still old value. Also,
+         * since lid-3 is still in countermap, these new 4 entrylogs should be
+         * added to previous value 1 and hence the EntryLogsPerLedger for ledger
+         * - 3l should be updated to 5.
+         */
+<span class="nc" id="L706">        createNewLogs(entrylogManager, 3L, 4);</span>
+<span class="nc" id="L707">        Assert.assertEquals(&quot;NUM_OF_WRITE_LEDGERS_REMOVED_CACHE_MAXSIZE&quot;, 6,</span>
+<span class="nc" id="L708">                numOfWriteLedgersRemovedCacheMaxSize.get().intValue());</span>
+<span class="nc" id="L709">        Assert.assertEquals(&quot;NUM_LEDGERS_HAVING_MULTIPLE_ENTRYLOGS&quot;, 4,</span>
+<span class="nc" id="L710">                numLedgersHavingMultipleEntrylogs.get().intValue());</span>
+<span class="nc" id="L711">        Assert.assertEquals(&quot;Numofentrylogs for ledger: 3l&quot;, 5,</span>
+<span class="nc" id="L712">                entrylogManager.entryLogsPerLedgerCounter.getCounterMap().get(3L).intValue());</span>
+<span class="nc" id="L713">        Assert.assertEquals(&quot;ENTRYLOGS_PER_LEDGER SuccessCount&quot;, 2, entryLogsPerLedger.getSuccessCount());</span>
+<span class="nc" id="L714">    }</span>
+
+    /*
+     * In this testcase metrics of EntryLogManagerForEntryLogPerLedger are
+     * validated.
+     */
+    @Test
+    public void testEntryLogManagerMetricsFromExpiryAspect() throws Exception {
+<span class="nc" id="L722">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L723">        TestStatsProvider statsProvider = new TestStatsProvider();</span>
+<span class="nc" id="L724">        TestStatsLogger statsLogger = statsProvider.getStatsLogger(BookKeeperServerStats.ENTRYLOGGER_SCOPE);</span>
+
+<span class="nc" id="L726">        int entrylogMapAccessExpiryTimeInSeconds = 1;</span>
+<span class="nc" id="L727">        int entryLogPerLedgerCounterLimitsMultFactor = 2;</span>
+
+        // Creating a new configuration with a number of ledger directories.
+<span class="nc" id="L730">        conf.setLedgerDirNames(ledgerDirs);</span>
+        // pre-allocation is enabled
+<span class="nc" id="L732">        conf.setEntryLogFilePreAllocationEnabled(true);</span>
+<span class="nc" id="L733">        conf.setEntryLogPerLedgerEnabled(true);</span>
+<span class="nc" id="L734">        conf.setEntrylogMapAccessExpiryTimeInSeconds(entrylogMapAccessExpiryTimeInSeconds);</span>
+<span class="nc" id="L735">        conf.setEntryLogPerLedgerCounterLimitsMultFactor(entryLogPerLedgerCounterLimitsMultFactor);</span>
+<span class="nc" id="L736">        LedgerDirsManager ledgerDirsManager = new LedgerDirsManager(conf, conf.getLedgerDirs(),</span>
+<span class="nc" id="L737">                new DiskChecker(conf.getDiskUsageThreshold(), conf.getDiskUsageWarnThreshold()));</span>
+<span class="nc" id="L738">        EntryLogger entryLogger = new EntryLogger(conf, ledgerDirsManager, null, statsLogger,</span>
+                UnpooledByteBufAllocator.DEFAULT);
+<span class="nc" id="L740">        EntryLogManagerForEntryLogPerLedger entrylogManager = (EntryLogManagerForEntryLogPerLedger) entryLogger</span>
+<span class="nc" id="L741">                .getEntryLogManager();</span>
+        // set same thread executor for entryLoggerAllocator's allocatorExecutor
+<span class="nc" id="L743">        setSameThreadExecutorForEntryLoggerAllocator(entryLogger.getEntryLoggerAllocator());</span>
+
+<span class="nc" id="L745">        Counter numOfWriteLedgersRemovedCacheExpiry = statsLogger</span>
+<span class="nc" id="L746">                .getCounter(BookKeeperServerStats.NUM_OF_WRITE_LEDGERS_REMOVED_CACHE_EXPIRY);</span>
+<span class="nc" id="L747">        TestOpStatsLogger entryLogsPerLedger = (TestOpStatsLogger) statsLogger</span>
+<span class="nc" id="L748">                .getOpStatsLogger(BookKeeperServerStats.ENTRYLOGS_PER_LEDGER);</span>
+
+<span class="nc" id="L750">        int numOfEntrylogsForLedger1 = 3;</span>
+<span class="nc" id="L751">        createNewLogs(entrylogManager, 1L, numOfEntrylogsForLedger1);</span>
+<span class="nc" id="L752">        Assert.assertEquals(&quot;ENTRYLOGS_PER_LEDGER SuccessCount&quot;, 0, entryLogsPerLedger.getSuccessCount());</span>
+<span class="nc" id="L753">        Assert.assertEquals(&quot;NUM_OF_WRITE_LEDGERS_REMOVED_CACHE_EXPIRY&quot;, 0,</span>
+<span class="nc" id="L754">                numOfWriteLedgersRemovedCacheExpiry.get().intValue());</span>
+
+<span class="nc" id="L756">        Thread.sleep(entrylogMapAccessExpiryTimeInSeconds * 1000 + 100);</span>
+<span class="nc" id="L757">        entrylogManager.doEntryLogMapCleanup();</span>
+<span class="nc" id="L758">        entrylogManager.entryLogsPerLedgerCounter.doCounterMapCleanup();</span>
+<span class="nc" id="L759">        Assert.assertEquals(&quot;NUM_OF_WRITE_LEDGERS_REMOVED_CACHE_EXPIRY&quot;, 1,</span>
+<span class="nc" id="L760">                numOfWriteLedgersRemovedCacheExpiry.get().intValue());</span>
+<span class="nc" id="L761">        Assert.assertEquals(&quot;ENTRYLOGS_PER_LEDGER SuccessCount&quot;, 0, entryLogsPerLedger.getSuccessCount());</span>
+
+<span class="nc" id="L763">        Thread.sleep(entrylogMapAccessExpiryTimeInSeconds * 1000 + 100);</span>
+<span class="nc" id="L764">        entrylogManager.doEntryLogMapCleanup();</span>
+<span class="nc" id="L765">        entrylogManager.entryLogsPerLedgerCounter.doCounterMapCleanup();</span>
+<span class="nc" id="L766">        Assert.assertEquals(&quot;NUM_OF_WRITE_LEDGERS_REMOVED_CACHE_EXPIRY&quot;, 1,</span>
+<span class="nc" id="L767">                numOfWriteLedgersRemovedCacheExpiry.get().intValue());</span>
+<span class="nc" id="L768">        Assert.assertEquals(&quot;ENTRYLOGS_PER_LEDGER SuccessCount&quot;, 1, entryLogsPerLedger.getSuccessCount());</span>
+<span class="nc" id="L769">        Assert.assertTrue(&quot;ENTRYLOGS_PER_LEDGER average value&quot;,</span>
+<span class="nc bnc" id="L770" title="All 2 branches missed.">                Double.compare(numOfEntrylogsForLedger1, entryLogsPerLedger.getSuccessAverage()) == 0);</span>
+<span class="nc" id="L771">    }</span>
+
+    private static void createNewLogs(EntryLogManagerForEntryLogPerLedger entrylogManager, long ledgerId,
+            int numOfTimes) throws IOException {
+<span class="nc bnc" id="L775" title="All 2 branches missed.">        for (int i = 0; i &lt; numOfTimes; i++) {</span>
+<span class="nc" id="L776">            entrylogManager.createNewLog(ledgerId);</span>
+        }
+<span class="nc" id="L778">    }</span>
+
+    @Test
+    public void testLockConsistency() throws Exception {
+<span class="nc" id="L782">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+
+<span class="nc" id="L784">        conf.setLedgerDirNames(ledgerDirs);</span>
+<span class="nc" id="L785">        conf.setEntryLogFilePreAllocationEnabled(false);</span>
+<span class="nc" id="L786">        conf.setEntryLogPerLedgerEnabled(true);</span>
+<span class="nc" id="L787">        conf.setMaximumNumberOfActiveEntryLogs(5);</span>
+
+<span class="nc" id="L789">        CountDownLatch latch = new CountDownLatch(1);</span>
+<span class="nc" id="L790">        AtomicInteger count = new AtomicInteger(0);</span>
+
+        /*
+         * Inject wait operation in 'getWritableLedgerDirsForNewLog' method of
+         * ledgerDirsManager. getWritableLedgerDirsForNewLog will be called when
+         * entryLogManager.createNewLog is called.
+         */
+<span class="nc" id="L797">        LedgerDirsManager ledgerDirsManager = new LedgerDirsManager(conf, conf.getLedgerDirs(),</span>
+<span class="nc" id="L798">                new DiskChecker(conf.getDiskUsageThreshold(), conf.getDiskUsageWarnThreshold())) {</span>
+            /*
+             * getWritableLedgerDirsForNewLog is called for the first time, it
+             * will await on 'latch' latch before calling super
+             * getWritableLedgerDirsForNewLog.
+             */
+            @Override
+            public List&lt;File&gt; getWritableLedgerDirsForNewLog() throws NoWritableLedgerDirException {
+<span class="nc bnc" id="L806" title="All 2 branches missed.">                if (count.incrementAndGet() == 1) {</span>
+                    try {
+<span class="nc" id="L808">                        latch.await();</span>
+<span class="nc" id="L809">                    } catch (InterruptedException e) {</span>
+<span class="nc" id="L810">                        LOG.error(&quot;Got InterruptedException while awaiting for latch countdown&quot;, e);</span>
+<span class="nc" id="L811">                    }</span>
+                }
+<span class="nc" id="L813">                return super.getWritableLedgerDirsForNewLog();</span>
+            }
+        };
+
+<span class="nc" id="L817">        EntryLogger el = new EntryLogger(conf, ledgerDirsManager);</span>
+<span class="nc" id="L818">        EntryLogManagerForEntryLogPerLedger entryLogManager = (EntryLogManagerForEntryLogPerLedger) el</span>
+<span class="nc" id="L819">                .getEntryLogManager();</span>
+
+<span class="nc" id="L821">        long firstLedgerId = 100L;</span>
+<span class="nc" id="L822">        AtomicBoolean newLogCreated = new AtomicBoolean(false);</span>
+
+<span class="nc" id="L824">        Assert.assertFalse(&quot;EntryLogManager cacheMap should not contain entry for firstLedgerId&quot;,</span>
+<span class="nc" id="L825">                entryLogManager.getCacheAsMap().containsKey(firstLedgerId));</span>
+<span class="nc" id="L826">        Assert.assertEquals(&quot;Value of the count should be 0&quot;, 0, count.get());</span>
+        /*
+         * In a new thread, create newlog for 'firstLedgerId' and then set
+         * 'newLogCreated' to true. Since this is the first createNewLog call,
+         * it is going to be blocked untill latch is countdowned to 0.
+         */
+<span class="nc" id="L832">        new Thread() {</span>
+            @Override
+            public void run() {
+                try {
+<span class="nc" id="L836">                    entryLogManager.createNewLog(firstLedgerId);</span>
+<span class="nc" id="L837">                    newLogCreated.set(true);</span>
+<span class="nc" id="L838">                } catch (IOException e) {</span>
+<span class="nc" id="L839">                    LOG.error(&quot;Got IOException while creating new log&quot;, e);</span>
+<span class="nc" id="L840">                }</span>
+<span class="nc" id="L841">            }</span>
+<span class="nc" id="L842">        }.start();</span>
+
+        /*
+         * Wait until entry for 'firstLedgerId' is created in cacheMap. It will
+         * be created because in the other thread createNewLog is called.
+         */
+<span class="nc bnc" id="L848" title="All 2 branches missed.">        while (!entryLogManager.getCacheAsMap().containsKey(firstLedgerId)) {</span>
+<span class="nc" id="L849">            Thread.sleep(200);</span>
+        }
+<span class="nc" id="L851">        Lock firstLedgersLock = entryLogManager.getLock(firstLedgerId);</span>
+
+        /*
+         * since 'latch' is not counteddown, newlog should not be created even
+         * after waitign for 2 secs.
+         */
+<span class="nc" id="L857">        Thread.sleep(2000);</span>
+<span class="nc" id="L858">        Assert.assertFalse(&quot;New log shouldn't have created&quot;, newLogCreated.get());</span>
+
+        /*
+         * create MaximumNumberOfActiveEntryLogs of entrylogs and do cache
+         * cleanup, so that the earliest entry from cache will be removed.
+         */
+<span class="nc bnc" id="L864" title="All 2 branches missed.">        for (int i = 1; i &lt;= conf.getMaximumNumberOfActiveEntryLogs(); i++) {</span>
+<span class="nc" id="L865">            entryLogManager.createNewLog(firstLedgerId + i);</span>
+        }
+<span class="nc" id="L867">        entryLogManager.doEntryLogMapCleanup();</span>
+<span class="nc" id="L868">        Assert.assertFalse(&quot;Entry for that ledger shouldn't be there&quot;,</span>
+<span class="nc" id="L869">                entryLogManager.getCacheAsMap().containsKey(firstLedgerId));</span>
+
+        /*
+         * now countdown the latch, so that the other thread can make progress
+         * with createNewLog and since this entry is evicted from cache,
+         * entrylog of the newly created entrylog will be added to
+         * rotatedentrylogs.
+         */
+<span class="nc" id="L877">        latch.countDown();</span>
+<span class="nc bnc" id="L878" title="All 2 branches missed.">        while (!newLogCreated.get()) {</span>
+<span class="nc" id="L879">            Thread.sleep(200);</span>
+        }
+<span class="nc bnc" id="L881" title="All 2 branches missed.">        while (entryLogManager.getRotatedLogChannels().size() &lt; 1) {</span>
+<span class="nc" id="L882">            Thread.sleep(200);</span>
+        }
+
+        /*
+         * Entry for 'firstLedgerId' is removed from cache, but even in this
+         * case when we get lock for the 'firstLedgerId' it should be the same
+         * as we got earlier.
+         */
+<span class="nc" id="L890">        Lock lockForThatLedgerAfterRemoval = entryLogManager.getLock(firstLedgerId);</span>
+<span class="nc" id="L891">        Assert.assertEquals(&quot;For a given ledger lock should be the same before and after removal&quot;, firstLedgersLock,</span>
+                lockForThatLedgerAfterRemoval);
+<span class="nc" id="L893">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>EnableZkSecurityBasicTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$myBookieFenceLedgerTest.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.bookie</a> &gt; <span class="el_source">EnableZkSecurityBasicTest.java</span></div><h1>EnableZkSecurityBasicTest.java</h1><pre class="source lang-java linenums">/*
+ * Copyright 2016 The Apache Software Foundation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.bookkeeper.bookie;
+
+import static org.apache.bookkeeper.util.BookKeeperConstants.READONLY;
+import static org.junit.Assert.assertEquals;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.List;
+import javax.security.auth.login.Configuration;
+
+import org.apache.bookkeeper.client.BookKeeper;
+import org.apache.bookkeeper.client.LedgerHandle;
+import org.apache.bookkeeper.conf.ClientConfiguration;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.apache.bookkeeper.util.BookKeeperConstants;
+import org.apache.bookkeeper.zookeeper.ZooKeeperClient;
+import org.apache.zookeeper.KeeperException;
+import org.apache.zookeeper.ZooKeeper;
+import org.apache.zookeeper.data.ACL;
+import org.apache.zookeeper.data.Stat;
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
+import org.junit.Test;
+
+/**
+ * Test basic functions using secured ZooKeeper.
+ */
+public class EnableZkSecurityBasicTest extends BookKeeperClusterTestCase {
+
+    public EnableZkSecurityBasicTest() {
+<span class="nc" id="L48">        super(0);</span>
+<span class="nc" id="L49">        this.baseClientConf.setZkEnableSecurity(true);</span>
+<span class="nc" id="L50">        this.baseConf.setZkEnableSecurity(true);</span>
+<span class="nc" id="L51">    }</span>
+
+    @BeforeClass
+    public static void setupJAAS() throws IOException {
+<span class="nc" id="L55">        System.setProperty(&quot;zookeeper.authProvider.1&quot;, &quot;org.apache.zookeeper.server.auth.SASLAuthenticationProvider&quot;);</span>
+<span class="nc" id="L56">        File tmpJaasDir = new File(&quot;target&quot;).getAbsoluteFile();</span>
+<span class="nc" id="L57">        File tmpJaasFile = new File(tmpJaasDir, &quot;jaas.conf&quot;);</span>
+<span class="nc" id="L58">        String jassFileContent = &quot;Server {\n&quot;</span>
+            + &quot;       org.apache.zookeeper.server.auth.DigestLoginModule required\n&quot;
+            + &quot;       user_foo=\&quot;bar\&quot;;\n&quot;
+            + &quot;};\n&quot;
+            + &quot;\n&quot;
+            + &quot;Client {\n&quot;
+            + &quot;       org.apache.zookeeper.server.auth.DigestLoginModule required\n&quot;
+            + &quot;       username=\&quot;foo\&quot;\n&quot;
+            + &quot;       password=\&quot;bar\&quot;;\n&quot;
+            + &quot;};&quot;;
+<span class="nc" id="L68">        Files.write(tmpJaasFile.toPath(), jassFileContent.getBytes(StandardCharsets.UTF_8));</span>
+<span class="nc" id="L69">        System.setProperty(&quot;java.security.auth.login.config&quot;, tmpJaasFile.getAbsolutePath());</span>
+<span class="nc" id="L70">        Configuration.getConfiguration().refresh();</span>
+<span class="nc" id="L71">    }</span>
+
+    @AfterClass
+    public static void cleanUpJAAS() {
+<span class="nc" id="L75">        System.clearProperty(&quot;java.security.auth.login.config&quot;);</span>
+<span class="nc" id="L76">        Configuration.getConfiguration().refresh();</span>
+<span class="nc" id="L77">        System.clearProperty(&quot;zookeeper.authProvider.1&quot;);</span>
+<span class="nc" id="L78">    }</span>
+
+    @Test
+    public void testCreateLedgerAddEntryOnSecureZooKeepeer() throws Exception {
+<span class="nc" id="L82">        startNewBookie();</span>
+
+<span class="nc" id="L84">        ClientConfiguration conf = new ClientConfiguration();</span>
+<span class="nc" id="L85">        conf.setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+<span class="nc" id="L86">        conf.setZkTimeout(20000);</span>
+
+<span class="nc" id="L88">        conf.setZkEnableSecurity(true);</span>
+
+<span class="nc" id="L90">        try (BookKeeper bkc = new BookKeeper(conf)) {</span>
+<span class="nc" id="L91">            try (LedgerHandle lh = bkc.createLedger(1, 1, 1, BookKeeper.DigestType.CRC32, &quot;testPasswd&quot;.getBytes())) {</span>
+<span class="nc" id="L92">                lh.addEntry(&quot;foo&quot;.getBytes(StandardCharsets.UTF_8));</span>
+            }
+        }
+
+<span class="nc" id="L96">        checkAllAcls();</span>
+<span class="nc" id="L97">    }</span>
+
+    private void checkAllAcls() throws IOException, InterruptedException, KeeperException {
+<span class="nc" id="L100">        ZooKeeper zk = ZooKeeperClient.newBuilder()</span>
+<span class="nc" id="L101">            .connectString(zkUtil.getZooKeeperConnectString())</span>
+<span class="nc" id="L102">            .sessionTimeoutMs(20000)</span>
+<span class="nc" id="L103">            .build();</span>
+<span class="nc" id="L104">        checkACls(zk, &quot;/&quot;);</span>
+<span class="nc" id="L105">        zk.close();</span>
+<span class="nc" id="L106">    }</span>
+
+    private void checkACls(ZooKeeper zk, String path) throws KeeperException, InterruptedException {
+<span class="nc" id="L109">        List&lt;String&gt; children = zk.getChildren(path, null);</span>
+<span class="nc bnc" id="L110" title="All 2 branches missed.">        for (String child : children) {</span>
+<span class="nc bnc" id="L111" title="All 2 branches missed.">            if (child.equals(READONLY)) {</span>
+<span class="nc" id="L112">                continue;</span>
+            }
+
+<span class="nc bnc" id="L115" title="All 2 branches missed.">            String fullPath = path.equals(&quot;/&quot;) ? path + child : path + &quot;/&quot; + child;</span>
+<span class="nc" id="L116">            List&lt;ACL&gt; acls = zk.getACL(fullPath, new Stat());</span>
+<span class="nc" id="L117">            checkACls(zk, fullPath);</span>
+
+<span class="nc bnc" id="L119" title="All 2 branches missed.">            if (!fullPath.startsWith(&quot;/zookeeper&quot;) // skip zookeeper internal nodes</span>
+<span class="nc bnc" id="L120" title="All 2 branches missed.">                &amp;&amp; !fullPath.equals(&quot;/ledgers&quot;) // node created by test setup</span>
+<span class="nc bnc" id="L121" title="All 2 branches missed.">                &amp;&amp; !fullPath.equals(&quot;/ledgers/&quot; + BookKeeperConstants.AVAILABLE_NODE) // node created by test setup</span>
+                ) {
+<span class="nc" id="L123">                assertEquals(1, acls.size());</span>
+<span class="nc" id="L124">                assertEquals(31, acls.get(0).getPerms());</span>
+<span class="nc" id="L125">                assertEquals(31, acls.get(0).getPerms());</span>
+<span class="nc" id="L126">                assertEquals(&quot;unexpected ACLS on &quot; + fullPath + &quot;: &quot; + acls.get(0), &quot;foo&quot;, acls.get(0).getId().getId());</span>
+<span class="nc" id="L127">                assertEquals(&quot;unexpected ACLS on &quot; + fullPath + &quot;: &quot; + acls.get(0), &quot;sasl&quot;,</span>
+<span class="nc" id="L128">                        acls.get(0).getId().getScheme());</span>
+            }
+<span class="nc" id="L130">        }</span>
+<span class="nc" id="L131">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

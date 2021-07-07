@@ -1,0 +1,1340 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TestZoneawareEnsemblePlacementPolicy.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">TestZoneawareEnsemblePlacementPolicy.java</span></div><h1>TestZoneawareEnsemblePlacementPolicy.java</h1><pre class="source lang-java linenums">/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.bookkeeper.client;
+
+import static org.apache.bookkeeper.client.RackawareEnsemblePlacementPolicyImpl.REPP_DNS_RESOLVER_CLASS;
+import static org.apache.bookkeeper.client.RoundRobinDistributionSchedule.writeSetFromValues;
+import static org.apache.bookkeeper.feature.SettableFeatureProvider.DISABLE_ALL;
+import static org.junit.Assert.assertNotEquals;
+
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import io.netty.util.HashedWheelTimer;
+
+import java.net.InetAddress;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+
+import junit.framework.TestCase;
+
+import org.apache.bookkeeper.client.BookieInfoReader.BookieInfo;
+import org.apache.bookkeeper.client.EnsemblePlacementPolicy.PlacementPolicyAdherence;
+import org.apache.bookkeeper.client.EnsemblePlacementPolicy.PlacementResult;
+import org.apache.bookkeeper.client.ZoneawareEnsemblePlacementPolicyImpl.ZoneAwareNodeLocation;
+import org.apache.bookkeeper.conf.ClientConfiguration;
+import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.net.DNSToSwitchMapping;
+import org.apache.bookkeeper.net.NetworkTopology;
+import org.apache.bookkeeper.stats.NullStatsLogger;
+import org.apache.bookkeeper.util.StaticDNSResolver;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Test the zoneaware ensemble placement policy.
+ */
+<span class="nc" id="L58">public class TestZoneawareEnsemblePlacementPolicy extends TestCase {</span>
+
+<span class="nc" id="L60">    static final Logger LOG = LoggerFactory.getLogger(TestZoneawareEnsemblePlacementPolicy.class);</span>
+
+    ZoneawareEnsemblePlacementPolicy zepp;
+<span class="nc" id="L63">    final List&lt;BookieSocketAddress&gt; ensemble = new ArrayList&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L64">    DistributionSchedule.WriteSet writeSet = DistributionSchedule.NULL_WRITE_SET;</span>
+<span class="nc" id="L65">    ClientConfiguration conf = new ClientConfiguration();</span>
+    BookieSocketAddress addr1, addr2, addr3, addr4;
+    io.netty.util.HashedWheelTimer timer;
+
+    @Override
+    protected void setUp() throws Exception {
+<span class="nc" id="L71">        super.setUp();</span>
+<span class="nc" id="L72">        StaticDNSResolver.reset();</span>
+<span class="nc" id="L73">        StaticDNSResolver.addNodeToRack(InetAddress.getLocalHost().getHostAddress(),</span>
+                NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);
+<span class="nc" id="L75">        StaticDNSResolver.addNodeToRack(&quot;127.0.0.1&quot;, NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+<span class="nc" id="L76">        StaticDNSResolver.addNodeToRack(&quot;localhost&quot;, NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+<span class="nc" id="L77">        LOG.info(&quot;Set up static DNS Resolver.&quot;);</span>
+<span class="nc" id="L78">        conf.setProperty(REPP_DNS_RESOLVER_CLASS, StaticDNSResolver.class.getName());</span>
+<span class="nc" id="L79">        addr1 = new BookieSocketAddress(&quot;127.0.0.2&quot;, 3181);</span>
+<span class="nc" id="L80">        addr2 = new BookieSocketAddress(&quot;127.0.0.3&quot;, 3181);</span>
+<span class="nc" id="L81">        addr3 = new BookieSocketAddress(&quot;127.0.0.4&quot;, 3181);</span>
+<span class="nc" id="L82">        addr4 = new BookieSocketAddress(&quot;127.0.0.5&quot;, 3181);</span>
+        // update dns mapping
+<span class="nc" id="L84">        StaticDNSResolver.addNodeToRack(addr1.getHostName(), NetworkTopology.DEFAULT_ZONE + &quot;/ud1&quot;);</span>
+<span class="nc" id="L85">        StaticDNSResolver.addNodeToRack(addr2.getHostName(), NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+<span class="nc" id="L86">        StaticDNSResolver.addNodeToRack(addr3.getHostName(), NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+<span class="nc" id="L87">        StaticDNSResolver.addNodeToRack(addr4.getHostName(), NetworkTopology.DEFAULT_ZONE + &quot;/ud2&quot;);</span>
+<span class="nc" id="L88">        ensemble.add(addr1);</span>
+<span class="nc" id="L89">        ensemble.add(addr2);</span>
+<span class="nc" id="L90">        ensemble.add(addr3);</span>
+<span class="nc" id="L91">        ensemble.add(addr4);</span>
+<span class="nc" id="L92">        writeSet = writeSetFromValues(0, 1, 2, 3);</span>
+
+<span class="nc" id="L94">        timer = new HashedWheelTimer(new ThreadFactoryBuilder().setNameFormat(&quot;TestTimer-%d&quot;).build(),</span>
+<span class="nc" id="L95">                conf.getTimeoutTimerTickDurationMs(), TimeUnit.MILLISECONDS, conf.getTimeoutTimerNumTicks());</span>
+
+<span class="nc" id="L97">        zepp = new ZoneawareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L98">        zepp.initialize(conf, Optional.&lt;DNSToSwitchMapping&gt; empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+<span class="nc" id="L99">        zepp.withDefaultFaultDomain(NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+<span class="nc" id="L100">    }</span>
+
+    @Override
+    protected void tearDown() throws Exception {
+<span class="nc" id="L104">        zepp.uninitalize();</span>
+<span class="nc" id="L105">        super.tearDown();</span>
+<span class="nc" id="L106">    }</span>
+
+    static BookiesHealthInfo getBookiesHealthInfo() {
+<span class="nc" id="L109">        return getBookiesHealthInfo(new HashMap&lt;&gt;(), new HashMap&lt;&gt;());</span>
+    }
+
+    static BookiesHealthInfo getBookiesHealthInfo(Map&lt;BookieSocketAddress, Long&gt; bookieFailureHistory,
+            Map&lt;BookieSocketAddress, Long&gt; bookiePendingRequests) {
+<span class="nc" id="L114">        return new BookiesHealthInfo() {</span>
+            @Override
+            public long getBookieFailureHistory(BookieSocketAddress bookieSocketAddress) {
+<span class="nc" id="L117">                return bookieFailureHistory.getOrDefault(bookieSocketAddress, -1L);</span>
+            }
+
+            @Override
+            public long getBookiePendingRequests(BookieSocketAddress bookieSocketAddress) {
+<span class="nc" id="L122">                return bookiePendingRequests.getOrDefault(bookieSocketAddress, 0L);</span>
+            }
+        };
+    }
+
+    static void updateMyUpgradeDomain(String zoneAndUD) throws Exception {
+<span class="nc" id="L128">        StaticDNSResolver.addNodeToRack(InetAddress.getLocalHost().getHostAddress(), zoneAndUD);</span>
+<span class="nc" id="L129">        StaticDNSResolver.addNodeToRack(InetAddress.getLocalHost().getHostName(), zoneAndUD);</span>
+<span class="nc" id="L130">        StaticDNSResolver.addNodeToRack(&quot;127.0.0.1&quot;, zoneAndUD);</span>
+<span class="nc" id="L131">        StaticDNSResolver.addNodeToRack(&quot;localhost&quot;, zoneAndUD);</span>
+<span class="nc" id="L132">    }</span>
+
+    @Test
+    public void testNotEnoughRWBookies() throws Exception {
+<span class="nc" id="L136">        zepp.uninitalize();</span>
+<span class="nc" id="L137">        updateMyUpgradeDomain(NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+        // Update cluster
+<span class="nc" id="L140">        BookieSocketAddress addr5 = new BookieSocketAddress(&quot;127.0.0.6&quot;, 3181);</span>
+<span class="nc" id="L141">        BookieSocketAddress addr6 = new BookieSocketAddress(&quot;127.0.0.7&quot;, 3181);</span>
+
+        // update dns mapping
+<span class="nc" id="L144">        StaticDNSResolver.addNodeToRack(addr1.getHostName(), &quot;/zone1/ud1&quot;);</span>
+<span class="nc" id="L145">        StaticDNSResolver.addNodeToRack(addr2.getHostName(), &quot;/zone2/ud1&quot;);</span>
+<span class="nc" id="L146">        StaticDNSResolver.addNodeToRack(addr3.getHostName(), &quot;/zone3/ud1&quot;);</span>
+<span class="nc" id="L147">        StaticDNSResolver.addNodeToRack(addr4.getHostName(), &quot;/zone4/ud1&quot;);</span>
+<span class="nc" id="L148">        StaticDNSResolver.addNodeToRack(addr5.getHostName(), &quot;/zone5/ud1&quot;);</span>
+<span class="nc" id="L149">        StaticDNSResolver.addNodeToRack(addr6.getHostName(), &quot;/zone6/ud1&quot;);</span>
+
+<span class="nc" id="L151">        ClientConfiguration newConf = (ClientConfiguration) this.conf.clone();</span>
+<span class="nc" id="L152">        newConf.setDesiredNumZonesPerWriteQuorum(1);</span>
+<span class="nc" id="L153">        newConf.setMinNumZonesPerWriteQuorum(1);</span>
+<span class="nc" id="L154">        zepp = new ZoneawareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L155">        zepp.initialize(newConf, Optional.&lt;DNSToSwitchMapping&gt; empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+<span class="nc" id="L156">        zepp.withDefaultFaultDomain(NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+<span class="nc" id="L158">        Set&lt;BookieSocketAddress&gt; rwAddrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L159">        Set&lt;BookieSocketAddress&gt; roAddrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L160">        rwAddrs.add(addr1);</span>
+<span class="nc" id="L161">        rwAddrs.add(addr2);</span>
+<span class="nc" id="L162">        rwAddrs.add(addr3);</span>
+
+<span class="nc" id="L164">        zepp.onClusterChanged(rwAddrs, roAddrs);</span>
+        try {
+            // only 3 rw bookies are available
+<span class="nc" id="L167">            zepp.newEnsemble(6, 3, 2, null, new HashSet&lt;&gt;());</span>
+<span class="nc" id="L168">            fail(&quot;newEnsemble is expected to fail because enough writable nodes are not available&quot;);</span>
+<span class="nc" id="L169">        } catch (BKException.BKNotEnoughBookiesException bke) {</span>
+            // expected to get BKNotEnoughBookiesException
+<span class="nc" id="L171">        }</span>
+
+<span class="nc" id="L173">        roAddrs.add(addr4);</span>
+<span class="nc" id="L174">        roAddrs.add(addr5);</span>
+<span class="nc" id="L175">        roAddrs.add(addr6);</span>
+<span class="nc" id="L176">        zepp.onClusterChanged(rwAddrs, roAddrs);</span>
+        try {
+            // only 3 rw bookies are available
+<span class="nc" id="L179">            zepp.newEnsemble(6, 3, 2, null, new HashSet&lt;&gt;());</span>
+<span class="nc" id="L180">            fail(&quot;newEnsemble is expected to fail because enough writable nodes are not available&quot;);</span>
+<span class="nc" id="L181">        } catch (BKException.BKNotEnoughBookiesException bke) {</span>
+            // expected to get BKNotEnoughBookiesException
+<span class="nc" id="L183">        }</span>
+
+<span class="nc" id="L185">        rwAddrs.clear();</span>
+<span class="nc" id="L186">        roAddrs.add(addr1);</span>
+<span class="nc" id="L187">        roAddrs.add(addr2);</span>
+<span class="nc" id="L188">        roAddrs.add(addr3);</span>
+<span class="nc" id="L189">        zepp.onClusterChanged(rwAddrs, roAddrs);</span>
+        try {
+            // no rw bookie is available
+<span class="nc" id="L192">            zepp.newEnsemble(6, 3, 2, null, new HashSet&lt;&gt;());</span>
+<span class="nc" id="L193">            fail(&quot;newEnsemble is expected to fail because enough writable nodes are not available&quot;);</span>
+<span class="nc" id="L194">        } catch (BKException.BKNotEnoughBookiesException bke) {</span>
+            // expected to get BKNotEnoughBookiesException
+<span class="nc" id="L196">        }</span>
+<span class="nc" id="L197">    }</span>
+
+    @Test
+    public void testEnoughRWBookies() throws Exception {
+<span class="nc" id="L201">        zepp.uninitalize();</span>
+<span class="nc" id="L202">        updateMyUpgradeDomain(NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+        // Update cluster
+<span class="nc" id="L205">        BookieSocketAddress addr5 = new BookieSocketAddress(&quot;127.0.0.6&quot;, 3181);</span>
+<span class="nc" id="L206">        BookieSocketAddress addr6 = new BookieSocketAddress(&quot;127.0.0.7&quot;, 3181);</span>
+
+        // update dns mapping
+<span class="nc" id="L209">        StaticDNSResolver.addNodeToRack(addr1.getHostName(), &quot;/zone1/ud1&quot;);</span>
+<span class="nc" id="L210">        StaticDNSResolver.addNodeToRack(addr2.getHostName(), &quot;/zone2/ud1&quot;);</span>
+<span class="nc" id="L211">        StaticDNSResolver.addNodeToRack(addr3.getHostName(), &quot;/zone3/ud1&quot;);</span>
+<span class="nc" id="L212">        StaticDNSResolver.addNodeToRack(addr4.getHostName(), &quot;/zone4/ud1&quot;);</span>
+<span class="nc" id="L213">        StaticDNSResolver.addNodeToRack(addr5.getHostName(), &quot;/zone5/ud1&quot;);</span>
+<span class="nc" id="L214">        StaticDNSResolver.addNodeToRack(addr6.getHostName(), &quot;/zone6/ud1&quot;);</span>
+
+<span class="nc" id="L216">        ClientConfiguration newConf = (ClientConfiguration) this.conf.clone();</span>
+<span class="nc" id="L217">        newConf.setDesiredNumZonesPerWriteQuorum(4);</span>
+<span class="nc" id="L218">        newConf.setMinNumZonesPerWriteQuorum(2);</span>
+<span class="nc" id="L219">        zepp = new ZoneawareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L220">        zepp.initialize(newConf, Optional.&lt;DNSToSwitchMapping&gt; empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+<span class="nc" id="L221">        zepp.withDefaultFaultDomain(NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+<span class="nc" id="L223">        Set&lt;BookieSocketAddress&gt; rwAddrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L224">        Set&lt;BookieSocketAddress&gt; roAddrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L225">        rwAddrs.add(addr1);</span>
+<span class="nc" id="L226">        rwAddrs.add(addr2);</span>
+<span class="nc" id="L227">        rwAddrs.add(addr3);</span>
+<span class="nc" id="L228">        rwAddrs.add(addr4);</span>
+<span class="nc" id="L229">        rwAddrs.add(addr5);</span>
+<span class="nc" id="L230">        rwAddrs.add(addr6);</span>
+
+<span class="nc" id="L232">        zepp.onClusterChanged(rwAddrs, roAddrs);</span>
+        /*
+         * there are enough bookies so newEnsemble should succeed.
+         */
+<span class="nc" id="L236">        PlacementResult&lt;List&lt;BookieSocketAddress&gt;&gt; newEnsemblePlacementResult = zepp.newEnsemble(6, 3, 2, null,</span>
+                new HashSet&lt;&gt;());
+<span class="nc" id="L238">        Set&lt;BookieSocketAddress&gt; newEnsembleSet = new HashSet&lt;BookieSocketAddress&gt;(</span>
+<span class="nc" id="L239">                newEnsemblePlacementResult.getResult());</span>
+<span class="nc" id="L240">        assertTrue(&quot;New ensemble should contain all 6 rw bookies&quot;, newEnsembleSet.containsAll(rwAddrs));</span>
+<span class="nc" id="L241">        assertEquals(&quot;PlacementPolicyAdherence&quot;, PlacementPolicyAdherence.MEETS_STRICT,</span>
+<span class="nc" id="L242">                newEnsemblePlacementResult.isAdheringToPolicy());</span>
+
+        /*
+         * there are enough bookies so newEnsemble should succeed.
+         */
+<span class="nc" id="L247">        newEnsemblePlacementResult = zepp.newEnsemble(3, 3, 2, null, new HashSet&lt;&gt;());</span>
+<span class="nc" id="L248">        newEnsembleSet = new HashSet&lt;BookieSocketAddress&gt;(newEnsemblePlacementResult.getResult());</span>
+<span class="nc" id="L249">        assertTrue(&quot;New ensemble should contain 3 rw bookies&quot;,</span>
+<span class="nc bnc" id="L250" title="All 4 branches missed.">                (newEnsembleSet.size() == 3) &amp;&amp; (rwAddrs.containsAll(newEnsembleSet)));</span>
+<span class="nc" id="L251">        assertEquals(&quot;PlacementPolicyAdherence&quot;, PlacementPolicyAdherence.MEETS_STRICT,</span>
+<span class="nc" id="L252">                newEnsemblePlacementResult.isAdheringToPolicy());</span>
+<span class="nc" id="L253">    }</span>
+
+    @Test
+    public void testWithDefaultBookies() throws Exception {
+<span class="nc" id="L257">        zepp.uninitalize();</span>
+<span class="nc" id="L258">        updateMyUpgradeDomain(NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+        // update dns mapping
+<span class="nc" id="L261">        StaticDNSResolver.addNodeToRack(addr1.getHostName(), &quot;/zone1/ud1&quot;);</span>
+<span class="nc" id="L262">        StaticDNSResolver.addNodeToRack(addr2.getHostName(), &quot;/zone2/ud1&quot;);</span>
+<span class="nc" id="L263">        StaticDNSResolver.addNodeToRack(addr3.getHostName(), &quot;/zone3/ud1&quot;);</span>
+<span class="nc" id="L264">        StaticDNSResolver.addNodeToRack(addr4.getHostName(), &quot;/zone4/ud1&quot;);</span>
+
+        // Update cluster
+<span class="nc" id="L267">        BookieSocketAddress addr5 = new BookieSocketAddress(&quot;127.0.0.6&quot;, 3181);</span>
+<span class="nc" id="L268">        BookieSocketAddress addr6 = new BookieSocketAddress(&quot;127.0.0.7&quot;, 3181);</span>
+<span class="nc" id="L269">        BookieSocketAddress addr7 = new BookieSocketAddress(&quot;127.0.0.8&quot;, 3181);</span>
+<span class="nc" id="L270">        Set&lt;BookieSocketAddress&gt; bookiesInDefaultFaultDomain = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L271">        bookiesInDefaultFaultDomain.add(addr5);</span>
+<span class="nc" id="L272">        bookiesInDefaultFaultDomain.add(addr6);</span>
+<span class="nc" id="L273">        bookiesInDefaultFaultDomain.add(addr7);</span>
+
+<span class="nc" id="L275">        ClientConfiguration newConf = (ClientConfiguration) this.conf.clone();</span>
+<span class="nc" id="L276">        newConf.setDesiredNumZonesPerWriteQuorum(4);</span>
+<span class="nc" id="L277">        zepp = new ZoneawareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L278">        zepp.initialize(newConf, Optional.&lt;DNSToSwitchMapping&gt; empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+<span class="nc" id="L279">        zepp.withDefaultFaultDomain(NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+<span class="nc" id="L281">        Set&lt;BookieSocketAddress&gt; rwAddrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L282">        Set&lt;BookieSocketAddress&gt; roAddrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L283">        rwAddrs.add(addr1);</span>
+<span class="nc" id="L284">        rwAddrs.add(addr2);</span>
+<span class="nc" id="L285">        rwAddrs.add(addr3);</span>
+<span class="nc" id="L286">        rwAddrs.add(addr4);</span>
+<span class="nc" id="L287">        rwAddrs.add(addr5);</span>
+<span class="nc" id="L288">        rwAddrs.add(addr6);</span>
+<span class="nc" id="L289">        rwAddrs.add(addr7);</span>
+
+<span class="nc" id="L291">        zepp.onClusterChanged(rwAddrs, roAddrs);</span>
+<span class="nc bnc" id="L292" title="All 2 branches missed.">        for (int i = 0; i &lt; 3; i++) {</span>
+            /*
+             * make sure bookies from DEFAULT_ZONE_AND_UPGRADEDOMAIN are not
+             * part of the new ensemble created.
+             */
+<span class="nc" id="L297">            PlacementResult&lt;List&lt;BookieSocketAddress&gt;&gt; newEnsemblePlacementResult = zepp.newEnsemble(4, 4, 2, null,</span>
+                    new HashSet&lt;&gt;());
+<span class="nc" id="L299">            Set&lt;BookieSocketAddress&gt; newEnsembleSet = new HashSet&lt;BookieSocketAddress&gt;(</span>
+<span class="nc" id="L300">                    newEnsemblePlacementResult.getResult());</span>
+<span class="nc" id="L301">            assertTrue(&quot;Bookie from default faultDomain shouldn't be part of ensemble&quot;,</span>
+<span class="nc" id="L302">                    Collections.disjoint(newEnsembleSet, bookiesInDefaultFaultDomain));</span>
+
+<span class="nc" id="L304">            newEnsemblePlacementResult = zepp.newEnsemble(3, 3, 2, null, new HashSet&lt;&gt;());</span>
+<span class="nc" id="L305">            newEnsembleSet = new HashSet&lt;BookieSocketAddress&gt;(newEnsemblePlacementResult.getResult());</span>
+<span class="nc" id="L306">            assertTrue(&quot;Bookie from default faultDomain shouldn't be part of ensemble&quot;,</span>
+<span class="nc" id="L307">                    Collections.disjoint(newEnsembleSet, bookiesInDefaultFaultDomain));</span>
+<span class="nc" id="L308">            assertEquals(&quot;PlacementPolicyAdherence&quot;, PlacementPolicyAdherence.MEETS_STRICT,</span>
+<span class="nc" id="L309">                    newEnsemblePlacementResult.isAdheringToPolicy());</span>
+        }
+<span class="nc" id="L311">    }</span>
+
+    @Test
+    public void testMinZonesPerWriteQuorum() throws Exception {
+<span class="nc" id="L315">        zepp.uninitalize();</span>
+<span class="nc" id="L316">        updateMyUpgradeDomain(NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+        // Update cluster
+<span class="nc" id="L319">        BookieSocketAddress addr5 = new BookieSocketAddress(&quot;127.0.0.6&quot;, 3181);</span>
+<span class="nc" id="L320">        BookieSocketAddress addr6 = new BookieSocketAddress(&quot;127.0.0.7&quot;, 3181);</span>
+<span class="nc" id="L321">        BookieSocketAddress addr7 = new BookieSocketAddress(&quot;127.0.0.8&quot;, 3181);</span>
+<span class="nc" id="L322">        BookieSocketAddress addr8 = new BookieSocketAddress(&quot;127.0.0.9&quot;, 3181);</span>
+<span class="nc" id="L323">        BookieSocketAddress addr9 = new BookieSocketAddress(&quot;127.0.0.10&quot;, 3181);</span>
+<span class="nc" id="L324">        BookieSocketAddress addr10 = new BookieSocketAddress(&quot;127.0.0.11&quot;, 3181);</span>
+
+        // update dns mapping
+<span class="nc" id="L327">        StaticDNSResolver.addNodeToRack(addr1.getHostName(), &quot;/zone1/ud1&quot;);</span>
+<span class="nc" id="L328">        StaticDNSResolver.addNodeToRack(addr2.getHostName(), &quot;/zone2/ud1&quot;);</span>
+<span class="nc" id="L329">        StaticDNSResolver.addNodeToRack(addr3.getHostName(), &quot;/zone3/ud1&quot;);</span>
+<span class="nc" id="L330">        StaticDNSResolver.addNodeToRack(addr4.getHostName(), &quot;/zone1/ud2&quot;);</span>
+<span class="nc" id="L331">        StaticDNSResolver.addNodeToRack(addr5.getHostName(), &quot;/zone2/ud2&quot;);</span>
+<span class="nc" id="L332">        StaticDNSResolver.addNodeToRack(addr6.getHostName(), &quot;/zone3/ud2&quot;);</span>
+<span class="nc" id="L333">        StaticDNSResolver.addNodeToRack(addr7.getHostName(), &quot;/zone1/ud3&quot;);</span>
+<span class="nc" id="L334">        StaticDNSResolver.addNodeToRack(addr8.getHostName(), &quot;/zone2/ud3&quot;);</span>
+<span class="nc" id="L335">        StaticDNSResolver.addNodeToRack(addr9.getHostName(), NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+<span class="nc" id="L336">        StaticDNSResolver.addNodeToRack(addr10.getHostName(), NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+<span class="nc" id="L338">        ClientConfiguration newConf = (ClientConfiguration) this.conf.clone();</span>
+<span class="nc" id="L339">        newConf.setDesiredNumZonesPerWriteQuorum(4);</span>
+<span class="nc" id="L340">        newConf.setMinNumZonesPerWriteQuorum(3);</span>
+<span class="nc" id="L341">        zepp = new ZoneawareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L342">        zepp.initialize(newConf, Optional.&lt;DNSToSwitchMapping&gt; empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+<span class="nc" id="L343">        zepp.withDefaultFaultDomain(NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+<span class="nc" id="L345">        Set&lt;BookieSocketAddress&gt; rwAddrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L346">        Set&lt;BookieSocketAddress&gt; roAddrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L347">        Set&lt;BookieSocketAddress&gt; bookiesInDefaultFaultDomain = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L348">        rwAddrs.add(addr1);</span>
+<span class="nc" id="L349">        rwAddrs.add(addr2);</span>
+<span class="nc" id="L350">        rwAddrs.add(addr3);</span>
+<span class="nc" id="L351">        rwAddrs.add(addr4);</span>
+<span class="nc" id="L352">        rwAddrs.add(addr5);</span>
+<span class="nc" id="L353">        rwAddrs.add(addr6);</span>
+<span class="nc" id="L354">        rwAddrs.add(addr9);</span>
+<span class="nc" id="L355">        rwAddrs.add(addr10);</span>
+<span class="nc" id="L356">        roAddrs.add(addr7);</span>
+<span class="nc" id="L357">        roAddrs.add(addr8);</span>
+<span class="nc" id="L358">        bookiesInDefaultFaultDomain.add(addr9);</span>
+<span class="nc" id="L359">        bookiesInDefaultFaultDomain.add(addr10);</span>
+
+<span class="nc" id="L361">        zepp.onClusterChanged(rwAddrs, roAddrs);</span>
+        PlacementResult&lt;List&lt;BookieSocketAddress&gt;&gt; newEnsemblePlacementResult;
+
+<span class="nc" id="L364">        newEnsemblePlacementResult = zepp.newEnsemble(4, 4, 2, null, new HashSet&lt;&gt;());</span>
+<span class="nc" id="L365">        Set&lt;BookieSocketAddress&gt; newEnsembleSet = new HashSet&lt;BookieSocketAddress&gt;(</span>
+<span class="nc" id="L366">                newEnsemblePlacementResult.getResult());</span>
+<span class="nc" id="L367">        assertTrue(&quot;New ensemble should contain all 6 rw bookies in non-default fault domains&quot;,</span>
+<span class="nc bnc" id="L368" title="All 4 branches missed.">                rwAddrs.containsAll(newEnsembleSet) &amp;&amp; (newEnsembleSet.size() == 4));</span>
+<span class="nc" id="L369">        assertTrue(&quot;Bookie from default faultDomain shouldn't be part of ensemble&quot;,</span>
+<span class="nc" id="L370">                Collections.disjoint(newEnsembleSet, bookiesInDefaultFaultDomain));</span>
+<span class="nc" id="L371">        assertEquals(&quot;PlacementPolicyAdherence&quot;, PlacementPolicyAdherence.MEETS_SOFT,</span>
+<span class="nc" id="L372">                newEnsemblePlacementResult.isAdheringToPolicy());</span>
+
+        try {
+            /*
+             * If ensembleSize is not multiple of writeQuorumSize, then it is
+             * expected to fail with IllegalArgumentException.
+             */
+<span class="nc" id="L379">            zepp.newEnsemble(4, 3, 2, null, new HashSet&lt;&gt;());</span>
+<span class="nc" id="L380">            fail(&quot;newEnsemble is expected to fail with IllegalArgumentException&quot;);</span>
+<span class="nc" id="L381">        } catch (IllegalArgumentException illExc) {</span>
+            // expected IllegalArgumentException
+<span class="nc" id="L383">        }</span>
+<span class="nc" id="L384">        zepp.uninitalize();</span>
+<span class="nc" id="L385">        newConf = (ClientConfiguration) this.conf.clone();</span>
+<span class="nc" id="L386">        newConf.setDesiredNumZonesPerWriteQuorum(4);</span>
+<span class="nc" id="L387">        newConf.setMinNumZonesPerWriteQuorum(3);</span>
+<span class="nc" id="L388">        newConf.setEnforceStrictZoneawarePlacement(false);</span>
+<span class="nc" id="L389">        zepp = new ZoneawareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L390">        zepp.initialize(newConf, Optional.&lt;DNSToSwitchMapping&gt; empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+<span class="nc" id="L391">        zepp.withDefaultFaultDomain(NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+<span class="nc" id="L392">        zepp.onClusterChanged(rwAddrs, roAddrs);</span>
+
+        /*
+         * If enforceStrictZoneawarePlacement is not enabled, then there are no
+         * limitations on eligible values of ensembleSize and writeQuorumSize.
+         */
+<span class="nc" id="L398">        newEnsemblePlacementResult = zepp.newEnsemble(4, 3, 2, null, new HashSet&lt;&gt;());</span>
+<span class="nc" id="L399">        newEnsembleSet = new HashSet&lt;BookieSocketAddress&gt;(newEnsemblePlacementResult.getResult());</span>
+<span class="nc bnc" id="L400" title="All 2 branches missed.">        assertTrue(&quot;New ensemble should contain 4 different bookies&quot;, newEnsembleSet.size() == 4);</span>
+<span class="nc" id="L401">        assertEquals(&quot;PlacementPolicyAdherence&quot;, PlacementPolicyAdherence.FAIL,</span>
+<span class="nc" id="L402">                newEnsemblePlacementResult.isAdheringToPolicy());</span>
+<span class="nc" id="L403">    }</span>
+
+    @Test
+    public void testMinUDsNotAvailable() throws Exception {
+<span class="nc" id="L407">        zepp.uninitalize();</span>
+<span class="nc" id="L408">        updateMyUpgradeDomain(NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+        // Update cluster
+<span class="nc" id="L411">        BookieSocketAddress addr5 = new BookieSocketAddress(&quot;127.0.0.6&quot;, 3181);</span>
+<span class="nc" id="L412">        BookieSocketAddress addr6 = new BookieSocketAddress(&quot;127.0.0.7&quot;, 3181);</span>
+<span class="nc" id="L413">        BookieSocketAddress addr7 = new BookieSocketAddress(&quot;127.0.0.8&quot;, 3181);</span>
+<span class="nc" id="L414">        BookieSocketAddress addr8 = new BookieSocketAddress(&quot;127.0.0.9&quot;, 3181);</span>
+<span class="nc" id="L415">        BookieSocketAddress addr9 = new BookieSocketAddress(&quot;127.0.0.10&quot;, 3181);</span>
+<span class="nc" id="L416">        BookieSocketAddress addr10 = new BookieSocketAddress(&quot;127.0.0.11&quot;, 3181);</span>
+
+        // update dns mapping
+<span class="nc" id="L419">        StaticDNSResolver.addNodeToRack(addr1.getHostName(), &quot;/zone1/ud1&quot;);</span>
+<span class="nc" id="L420">        StaticDNSResolver.addNodeToRack(addr2.getHostName(), &quot;/zone2/ud1&quot;);</span>
+<span class="nc" id="L421">        StaticDNSResolver.addNodeToRack(addr3.getHostName(), &quot;/zone3/ud1&quot;);</span>
+<span class="nc" id="L422">        StaticDNSResolver.addNodeToRack(addr4.getHostName(), &quot;/zone1/ud1&quot;);</span>
+<span class="nc" id="L423">        StaticDNSResolver.addNodeToRack(addr5.getHostName(), &quot;/zone2/ud1&quot;);</span>
+<span class="nc" id="L424">        StaticDNSResolver.addNodeToRack(addr6.getHostName(), &quot;/zone3/ud1&quot;);</span>
+<span class="nc" id="L425">        StaticDNSResolver.addNodeToRack(addr7.getHostName(), &quot;/zone1/ud3&quot;);</span>
+<span class="nc" id="L426">        StaticDNSResolver.addNodeToRack(addr8.getHostName(), &quot;/zone2/ud3&quot;);</span>
+<span class="nc" id="L427">        StaticDNSResolver.addNodeToRack(addr9.getHostName(), NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+<span class="nc" id="L428">        StaticDNSResolver.addNodeToRack(addr10.getHostName(), NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+<span class="nc" id="L430">        ClientConfiguration newConf = (ClientConfiguration) this.conf.clone();</span>
+<span class="nc" id="L431">        newConf.setDesiredNumZonesPerWriteQuorum(4);</span>
+<span class="nc" id="L432">        newConf.setMinNumZonesPerWriteQuorum(2);</span>
+<span class="nc" id="L433">        zepp = new ZoneawareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L434">        zepp.initialize(newConf, Optional.&lt;DNSToSwitchMapping&gt; empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+<span class="nc" id="L435">        zepp.withDefaultFaultDomain(NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+<span class="nc" id="L437">        Set&lt;BookieSocketAddress&gt; rwAddrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L438">        Set&lt;BookieSocketAddress&gt; roAddrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L439">        Set&lt;BookieSocketAddress&gt; bookiesInDefaultFaultDomain = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L440">        rwAddrs.add(addr1);</span>
+<span class="nc" id="L441">        rwAddrs.add(addr2);</span>
+<span class="nc" id="L442">        rwAddrs.add(addr3);</span>
+<span class="nc" id="L443">        rwAddrs.add(addr4);</span>
+<span class="nc" id="L444">        rwAddrs.add(addr5);</span>
+<span class="nc" id="L445">        rwAddrs.add(addr6);</span>
+<span class="nc" id="L446">        rwAddrs.add(addr9);</span>
+<span class="nc" id="L447">        rwAddrs.add(addr10);</span>
+
+<span class="nc" id="L449">        roAddrs.add(addr7);</span>
+<span class="nc" id="L450">        roAddrs.add(addr8);</span>
+
+<span class="nc" id="L452">        bookiesInDefaultFaultDomain.add(addr9);</span>
+<span class="nc" id="L453">        bookiesInDefaultFaultDomain.add(addr10);</span>
+
+<span class="nc" id="L455">        zepp.onClusterChanged(rwAddrs, roAddrs);</span>
+        PlacementResult&lt;List&lt;BookieSocketAddress&gt;&gt; newEnsemblePlacementResult;
+        try {
+            /*
+             * since rw bookies are not spread across UDs in zones, newEnsemble
+             * of writeQuorum 6 is expected to fail.
+             */
+<span class="nc" id="L462">            zepp.newEnsemble(6, 6, 2, null, new HashSet&lt;&gt;());</span>
+<span class="nc" id="L463">            fail(&quot;newEnsemble is expected to fail because writeQuorum cannt be created with insufficient UDs&quot;);</span>
+<span class="nc" id="L464">        } catch (BKException.BKNotEnoughBookiesException bkne) {</span>
+            // expected NotEnoughBookiesException
+<span class="nc" id="L466">        }</span>
+
+<span class="nc" id="L468">        int ensSize = 6;</span>
+<span class="nc" id="L469">        int writeQuorum = 3;</span>
+        /*
+         * though bookies are not spread across UDs in zones, newEnsemble would
+         * succeed because writeQuorum is just 3.
+         */
+<span class="nc" id="L474">        newEnsemblePlacementResult = zepp.newEnsemble(ensSize, writeQuorum, 2, null, new HashSet&lt;&gt;());</span>
+<span class="nc" id="L475">        assertEquals(&quot;PlacementPolicyAdherence&quot;, PlacementPolicyAdherence.MEETS_STRICT,</span>
+<span class="nc" id="L476">                newEnsemblePlacementResult.isAdheringToPolicy());</span>
+<span class="nc" id="L477">        List&lt;BookieSocketAddress&gt; newEnsemble = newEnsemblePlacementResult.getResult();</span>
+<span class="nc" id="L478">        Set&lt;BookieSocketAddress&gt; newEnsembleSet = new HashSet&lt;BookieSocketAddress&gt;(newEnsemble);</span>
+<span class="nc" id="L479">        assertTrue(&quot;New ensemble should contain all 6 rw bookies in non-default fault domains&quot;,</span>
+<span class="nc bnc" id="L480" title="All 4 branches missed.">                rwAddrs.containsAll(newEnsembleSet) &amp;&amp; (newEnsembleSet.size() == 6));</span>
+<span class="nc" id="L481">        assertTrue(&quot;Bookie from default faultDomain shouldn't be part of ensemble&quot;,</span>
+<span class="nc" id="L482">                Collections.disjoint(newEnsembleSet, bookiesInDefaultFaultDomain));</span>
+
+<span class="nc" id="L484">        Set&lt;String&gt; zonesOfBookiesInAWriteQuorum = new HashSet&lt;String&gt;();</span>
+<span class="nc bnc" id="L485" title="All 2 branches missed.">        for (int i = 0; i &lt; 6; i++) {</span>
+<span class="nc" id="L486">            zonesOfBookiesInAWriteQuorum.clear();</span>
+<span class="nc bnc" id="L487" title="All 2 branches missed.">            for (int j = 0; j &lt; writeQuorum; j++) {</span>
+<span class="nc" id="L488">                zonesOfBookiesInAWriteQuorum</span>
+<span class="nc" id="L489">                        .add(zepp.getZoneAwareNodeLocation(newEnsemble.get((i + j) % ensSize)).getZone());</span>
+            }
+<span class="nc" id="L491">            assertEquals(&quot;Since bookies are not spread across multiple UDs in a zone, write quorum should&quot;</span>
+<span class="nc" id="L492">                    + &quot; contain bookies from all 3 zones&quot;, 3, zonesOfBookiesInAWriteQuorum.size());</span>
+        }
+<span class="nc" id="L494">    }</span>
+
+    @Test
+    public void testUniqueUds() throws Exception {
+<span class="nc" id="L498">        zepp.uninitalize();</span>
+<span class="nc" id="L499">        updateMyUpgradeDomain(NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+        // Update cluster
+<span class="nc" id="L502">        BookieSocketAddress addr5 = new BookieSocketAddress(&quot;127.0.0.6&quot;, 3181);</span>
+<span class="nc" id="L503">        BookieSocketAddress addr6 = new BookieSocketAddress(&quot;127.0.0.7&quot;, 3181);</span>
+<span class="nc" id="L504">        BookieSocketAddress addr7 = new BookieSocketAddress(&quot;127.0.0.8&quot;, 3181);</span>
+<span class="nc" id="L505">        BookieSocketAddress addr8 = new BookieSocketAddress(&quot;127.0.0.9&quot;, 3181);</span>
+<span class="nc" id="L506">        BookieSocketAddress addr9 = new BookieSocketAddress(&quot;127.0.0.10&quot;, 3181);</span>
+<span class="nc" id="L507">        BookieSocketAddress addr10 = new BookieSocketAddress(&quot;127.0.0.11&quot;, 3181);</span>
+<span class="nc" id="L508">        BookieSocketAddress addr11 = new BookieSocketAddress(&quot;127.0.0.12&quot;, 3181);</span>
+<span class="nc" id="L509">        BookieSocketAddress addr12 = new BookieSocketAddress(&quot;127.0.0.13&quot;, 3181);</span>
+
+        // update dns mapping
+<span class="nc" id="L512">        StaticDNSResolver.addNodeToRack(addr1.getHostName(), &quot;/zone1/ud1&quot;);</span>
+<span class="nc" id="L513">        StaticDNSResolver.addNodeToRack(addr2.getHostName(), &quot;/zone1/ud1&quot;);</span>
+<span class="nc" id="L514">        StaticDNSResolver.addNodeToRack(addr3.getHostName(), &quot;/zone1/ud2&quot;);</span>
+<span class="nc" id="L515">        StaticDNSResolver.addNodeToRack(addr4.getHostName(), &quot;/zone1/ud2&quot;);</span>
+<span class="nc" id="L516">        StaticDNSResolver.addNodeToRack(addr5.getHostName(), &quot;/zone1/ud3&quot;);</span>
+<span class="nc" id="L517">        StaticDNSResolver.addNodeToRack(addr6.getHostName(), &quot;/zone1/ud3&quot;);</span>
+<span class="nc" id="L518">        StaticDNSResolver.addNodeToRack(addr7.getHostName(), &quot;/zone2/ud1&quot;);</span>
+<span class="nc" id="L519">        StaticDNSResolver.addNodeToRack(addr8.getHostName(), &quot;/zone2/ud1&quot;);</span>
+<span class="nc" id="L520">        StaticDNSResolver.addNodeToRack(addr9.getHostName(), &quot;/zone2/ud2&quot;);</span>
+<span class="nc" id="L521">        StaticDNSResolver.addNodeToRack(addr10.getHostName(), &quot;/zone2/ud2&quot;);</span>
+<span class="nc" id="L522">        StaticDNSResolver.addNodeToRack(addr11.getHostName(), &quot;/zone2/ud3&quot;);</span>
+<span class="nc" id="L523">        StaticDNSResolver.addNodeToRack(addr12.getHostName(), &quot;/zone2/ud3&quot;);</span>
+
+<span class="nc" id="L525">        ClientConfiguration newConf = (ClientConfiguration) this.conf.clone();</span>
+<span class="nc" id="L526">        newConf.setDesiredNumZonesPerWriteQuorum(4);</span>
+<span class="nc" id="L527">        newConf.setMinNumZonesPerWriteQuorum(2);</span>
+<span class="nc" id="L528">        zepp = new ZoneawareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L529">        zepp.initialize(newConf, Optional.&lt;DNSToSwitchMapping&gt; empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+<span class="nc" id="L530">        zepp.withDefaultFaultDomain(NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+<span class="nc" id="L532">        Set&lt;BookieSocketAddress&gt; rwAddrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L533">        Set&lt;BookieSocketAddress&gt; roAddrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L534">        rwAddrs.add(addr1);</span>
+<span class="nc" id="L535">        rwAddrs.add(addr2);</span>
+<span class="nc" id="L536">        rwAddrs.add(addr3);</span>
+<span class="nc" id="L537">        rwAddrs.add(addr4);</span>
+<span class="nc" id="L538">        rwAddrs.add(addr5);</span>
+<span class="nc" id="L539">        rwAddrs.add(addr6);</span>
+<span class="nc" id="L540">        rwAddrs.add(addr7);</span>
+<span class="nc" id="L541">        rwAddrs.add(addr8);</span>
+<span class="nc" id="L542">        rwAddrs.add(addr9);</span>
+<span class="nc" id="L543">        rwAddrs.add(addr10);</span>
+<span class="nc" id="L544">        rwAddrs.add(addr11);</span>
+<span class="nc" id="L545">        rwAddrs.add(addr12);</span>
+
+<span class="nc" id="L547">        zepp.onClusterChanged(rwAddrs, roAddrs);</span>
+        /*
+         * Since there are enough bookies in different UDs in 2 zones
+         * (MinNumZonesPerWriteQuorum), new ensemble should succeed.
+         */
+<span class="nc" id="L552">        PlacementResult&lt;List&lt;BookieSocketAddress&gt;&gt; newEnsemblePlacementResult = zepp.newEnsemble(6, 6, 2, null,</span>
+                new HashSet&lt;&gt;());
+<span class="nc" id="L554">        List&lt;BookieSocketAddress&gt; newEnsembleList = newEnsemblePlacementResult.getResult();</span>
+<span class="nc" id="L555">        Set&lt;BookieSocketAddress&gt; newEnsembleSet = new HashSet&lt;BookieSocketAddress&gt;(newEnsembleList);</span>
+<span class="nc" id="L556">        assertTrue(&quot;New ensemble should contain 6 rw bookies in non-default fault domains&quot;,</span>
+<span class="nc bnc" id="L557" title="All 4 branches missed.">                rwAddrs.containsAll(newEnsembleSet) &amp;&amp; (newEnsembleSet.size() == 6));</span>
+<span class="nc" id="L558">        assertEquals(&quot;PlacementPolicyAdherence&quot;, PlacementPolicyAdherence.MEETS_SOFT,</span>
+<span class="nc" id="L559">                newEnsemblePlacementResult.isAdheringToPolicy());</span>
+<span class="nc" id="L560">        Set&lt;String&gt; bookiesNetworkLocations = new HashSet&lt;String&gt;();</span>
+
+<span class="nc bnc" id="L562" title="All 2 branches missed.">        for (BookieSocketAddress bookieAddr : newEnsembleSet) {</span>
+<span class="nc" id="L563">            bookiesNetworkLocations.add(zepp.resolveNetworkLocation(bookieAddr));</span>
+<span class="nc" id="L564">        }</span>
+        /*
+         * Since there are enough bookies in different UDs, bookies from same
+         * zone should be from different UDs.
+         */
+<span class="nc" id="L569">        assertTrue(&quot;Bookies should be from different UpgradeDomains if they belong to same zone&quot;,</span>
+<span class="nc bnc" id="L570" title="All 2 branches missed.">                (bookiesNetworkLocations.size() == 6));</span>
+<span class="nc" id="L571">        List&lt;ZoneAwareNodeLocation&gt; bookiesNodeLocationList = new ArrayList&lt;ZoneAwareNodeLocation&gt;();</span>
+<span class="nc bnc" id="L572" title="All 2 branches missed.">        for (BookieSocketAddress bookieAddr : newEnsembleList) {</span>
+<span class="nc" id="L573">            bookiesNodeLocationList.add(zepp.getZoneAwareNodeLocation(bookieAddr));</span>
+<span class="nc" id="L574">        }</span>
+<span class="nc bnc" id="L575" title="All 2 branches missed.">        for (int i = 0; i &lt; 5; i++) {</span>
+            /*
+             * in newEnsemble order, bookies should be from alternating zones.
+             */
+<span class="nc" id="L579">            assertNotEquals(&quot;Alternate bookies should be from different zones&quot;,</span>
+<span class="nc" id="L580">                    bookiesNodeLocationList.get(i).getZone(), bookiesNodeLocationList.get(i + 1).getZone());</span>
+        }
+<span class="nc" id="L582">    }</span>
+
+    @Test
+    public void testNewBookieUniformDistributionWithMinZoneAndMinUDs() throws Exception {
+<span class="nc" id="L586">        zepp.uninitalize();</span>
+<span class="nc" id="L587">        updateMyUpgradeDomain(NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+        // Update cluster
+<span class="nc" id="L590">        BookieSocketAddress addr5 = new BookieSocketAddress(&quot;127.0.0.6&quot;, 3181);</span>
+<span class="nc" id="L591">        BookieSocketAddress addr6 = new BookieSocketAddress(&quot;127.0.0.7&quot;, 3181);</span>
+<span class="nc" id="L592">        BookieSocketAddress addr7 = new BookieSocketAddress(&quot;127.0.0.8&quot;, 3181);</span>
+<span class="nc" id="L593">        BookieSocketAddress addr8 = new BookieSocketAddress(&quot;127.0.0.9&quot;, 3181);</span>
+<span class="nc" id="L594">        BookieSocketAddress addr9 = new BookieSocketAddress(&quot;127.0.0.10&quot;, 3181);</span>
+<span class="nc" id="L595">        BookieSocketAddress addr10 = new BookieSocketAddress(&quot;127.0.0.11&quot;, 3181);</span>
+<span class="nc" id="L596">        BookieSocketAddress addr11 = new BookieSocketAddress(&quot;127.0.0.12&quot;, 3181);</span>
+<span class="nc" id="L597">        BookieSocketAddress addr12 = new BookieSocketAddress(&quot;127.0.0.13&quot;, 3181);</span>
+<span class="nc" id="L598">        BookieSocketAddress addr13 = new BookieSocketAddress(&quot;127.0.0.14&quot;, 3181);</span>
+<span class="nc" id="L599">        BookieSocketAddress addr14 = new BookieSocketAddress(&quot;127.0.0.15&quot;, 3181);</span>
+
+        // update dns mapping
+<span class="nc" id="L602">        StaticDNSResolver.addNodeToRack(addr1.getHostName(), &quot;/zone1/ud1&quot;);</span>
+<span class="nc" id="L603">        StaticDNSResolver.addNodeToRack(addr2.getHostName(), &quot;/zone1/ud1&quot;);</span>
+<span class="nc" id="L604">        StaticDNSResolver.addNodeToRack(addr3.getHostName(), &quot;/zone1/ud2&quot;);</span>
+<span class="nc" id="L605">        StaticDNSResolver.addNodeToRack(addr4.getHostName(), &quot;/zone1/ud2&quot;);</span>
+<span class="nc" id="L606">        StaticDNSResolver.addNodeToRack(addr5.getHostName(), &quot;/zone2/ud1&quot;);</span>
+<span class="nc" id="L607">        StaticDNSResolver.addNodeToRack(addr6.getHostName(), &quot;/zone2/ud1&quot;);</span>
+<span class="nc" id="L608">        StaticDNSResolver.addNodeToRack(addr7.getHostName(), &quot;/zone2/ud2&quot;);</span>
+<span class="nc" id="L609">        StaticDNSResolver.addNodeToRack(addr8.getHostName(), &quot;/zone2/ud2&quot;);</span>
+<span class="nc" id="L610">        StaticDNSResolver.addNodeToRack(addr9.getHostName(), &quot;/zone3/ud1&quot;);</span>
+<span class="nc" id="L611">        StaticDNSResolver.addNodeToRack(addr10.getHostName(), &quot;/zone3/ud1&quot;);</span>
+<span class="nc" id="L612">        StaticDNSResolver.addNodeToRack(addr11.getHostName(), &quot;/zone3/ud2&quot;);</span>
+<span class="nc" id="L613">        StaticDNSResolver.addNodeToRack(addr12.getHostName(), &quot;/zone3/ud2&quot;);</span>
+<span class="nc" id="L614">        StaticDNSResolver.addNodeToRack(addr13.getHostName(), NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+<span class="nc" id="L615">        StaticDNSResolver.addNodeToRack(addr14.getHostName(), NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+<span class="nc" id="L617">        Set&lt;BookieSocketAddress&gt; rwAddrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L618">        Set&lt;BookieSocketAddress&gt; roAddrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L619">        rwAddrs.add(addr1);</span>
+<span class="nc" id="L620">        rwAddrs.add(addr2);</span>
+<span class="nc" id="L621">        rwAddrs.add(addr3);</span>
+<span class="nc" id="L622">        rwAddrs.add(addr4);</span>
+<span class="nc" id="L623">        rwAddrs.add(addr5);</span>
+<span class="nc" id="L624">        rwAddrs.add(addr6);</span>
+<span class="nc" id="L625">        rwAddrs.add(addr7);</span>
+<span class="nc" id="L626">        rwAddrs.add(addr8);</span>
+<span class="nc" id="L627">        rwAddrs.add(addr9);</span>
+<span class="nc" id="L628">        rwAddrs.add(addr10);</span>
+<span class="nc" id="L629">        rwAddrs.add(addr11);</span>
+<span class="nc" id="L630">        rwAddrs.add(addr12);</span>
+<span class="nc" id="L631">        rwAddrs.add(addr13);</span>
+<span class="nc" id="L632">        rwAddrs.add(addr14);</span>
+
+<span class="nc" id="L634">        int minNumZonesPerWriteQuorum = 3;</span>
+<span class="nc" id="L635">        ClientConfiguration newConf = (ClientConfiguration) this.conf.clone();</span>
+<span class="nc" id="L636">        newConf.setDesiredNumZonesPerWriteQuorum(5);</span>
+<span class="nc" id="L637">        newConf.setMinNumZonesPerWriteQuorum(minNumZonesPerWriteQuorum);</span>
+<span class="nc" id="L638">        zepp = new ZoneawareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L639">        zepp.initialize(newConf, Optional.&lt;DNSToSwitchMapping&gt; empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+<span class="nc" id="L640">        zepp.withDefaultFaultDomain(NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+<span class="nc" id="L642">        zepp.onClusterChanged(rwAddrs, roAddrs);</span>
+<span class="nc" id="L643">        Set&lt;BookieSocketAddress&gt; excludedBookies = new HashSet&lt;BookieSocketAddress&gt;();</span>
+
+<span class="nc" id="L645">        PlacementResult&lt;List&lt;BookieSocketAddress&gt;&gt; newEnsemblePlacementResult = zepp.newEnsemble(6, 6, 4, null,</span>
+                excludedBookies);
+<span class="nc" id="L647">        List&lt;BookieSocketAddress&gt; newEnsembleList = newEnsemblePlacementResult.getResult();</span>
+<span class="nc" id="L648">        assertEquals(&quot;PlacementPolicyAdherence&quot;, PlacementPolicyAdherence.MEETS_SOFT,</span>
+<span class="nc" id="L649">                newEnsemblePlacementResult.isAdheringToPolicy());</span>
+<span class="nc" id="L650">        Set&lt;BookieSocketAddress&gt; newEnsembleSet = new HashSet&lt;BookieSocketAddress&gt;(newEnsembleList);</span>
+<span class="nc" id="L651">        Set&lt;String&gt; bookiesNetworkLocationsSet = new HashSet&lt;String&gt;();</span>
+<span class="nc" id="L652">        List&lt;ZoneAwareNodeLocation&gt; bookiesNodeLocationList = new ArrayList&lt;ZoneAwareNodeLocation&gt;();</span>
+<span class="nc bnc" id="L653" title="All 2 branches missed.">        for (BookieSocketAddress bookieAddr : newEnsembleSet) {</span>
+<span class="nc" id="L654">            bookiesNetworkLocationsSet.add(zepp.resolveNetworkLocation(bookieAddr));</span>
+<span class="nc" id="L655">        }</span>
+<span class="nc bnc" id="L656" title="All 2 branches missed.">        for (BookieSocketAddress bookieAddr : newEnsembleList) {</span>
+<span class="nc" id="L657">            bookiesNodeLocationList.add(zepp.getZoneAwareNodeLocation(bookieAddr));</span>
+<span class="nc" id="L658">        }</span>
+        /*
+         * since there are enough bookies from minNumZonesPerWriteQuorum (3),
+         * bookies should be from 3 different zones and 2 different UDs.
+         */
+<span class="nc" id="L663">        assertTrue(&quot;Bookies should be from different UpgradeDomains if they belong to same zone&quot;,</span>
+<span class="nc bnc" id="L664" title="All 2 branches missed.">                (bookiesNetworkLocationsSet.size() == 6));</span>
+<span class="nc" id="L665">        Set&lt;String&gt; zonesOfFirstNodes = new HashSet&lt;String&gt;();</span>
+<span class="nc bnc" id="L666" title="All 2 branches missed.">        for (int i = 0; i &lt; minNumZonesPerWriteQuorum; i++) {</span>
+<span class="nc" id="L667">            zonesOfFirstNodes.add(bookiesNodeLocationList.get(i).getZone());</span>
+        }
+<span class="nc" id="L669">        assertEquals(&quot;Num of zones&quot;, minNumZonesPerWriteQuorum, zonesOfFirstNodes.size());</span>
+<span class="nc bnc" id="L670" title="All 2 branches missed.">        for (int i = 0; i &lt; minNumZonesPerWriteQuorum; i++) {</span>
+<span class="nc" id="L671">            assertEquals(&quot;Zone&quot;, bookiesNodeLocationList.get(i).getZone(),</span>
+<span class="nc" id="L672">                    bookiesNodeLocationList.get(i + minNumZonesPerWriteQuorum).getZone());</span>
+<span class="nc" id="L673">            assertNotEquals(&quot;UpgradeDomain&quot;, bookiesNodeLocationList.get(i).getUpgradeDomain(),</span>
+<span class="nc" id="L674">                    bookiesNodeLocationList.get(i + minNumZonesPerWriteQuorum).getUpgradeDomain());</span>
+        }
+<span class="nc" id="L676">    }</span>
+
+    @Test
+    public void testReplaceBookie() throws Exception {
+<span class="nc" id="L680">        zepp.uninitalize();</span>
+<span class="nc" id="L681">        updateMyUpgradeDomain(NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+        // Update cluster
+<span class="nc" id="L684">        BookieSocketAddress addr5 = new BookieSocketAddress(&quot;127.0.0.6&quot;, 3181);</span>
+<span class="nc" id="L685">        BookieSocketAddress addr6 = new BookieSocketAddress(&quot;127.0.0.7&quot;, 3181);</span>
+<span class="nc" id="L686">        BookieSocketAddress addr7 = new BookieSocketAddress(&quot;127.0.0.8&quot;, 3181);</span>
+<span class="nc" id="L687">        BookieSocketAddress addr8 = new BookieSocketAddress(&quot;127.0.0.9&quot;, 3181);</span>
+<span class="nc" id="L688">        BookieSocketAddress addr9 = new BookieSocketAddress(&quot;127.0.0.10&quot;, 3181);</span>
+<span class="nc" id="L689">        BookieSocketAddress addr10 = new BookieSocketAddress(&quot;127.0.0.11&quot;, 3181);</span>
+<span class="nc" id="L690">        BookieSocketAddress addr11 = new BookieSocketAddress(&quot;127.0.0.12&quot;, 3181);</span>
+<span class="nc" id="L691">        BookieSocketAddress addr12 = new BookieSocketAddress(&quot;127.0.0.13&quot;, 3181);</span>
+<span class="nc" id="L692">        BookieSocketAddress addr13 = new BookieSocketAddress(&quot;127.0.0.14&quot;, 3181);</span>
+<span class="nc" id="L693">        BookieSocketAddress addr14 = new BookieSocketAddress(&quot;127.0.0.15&quot;, 3181);</span>
+
+        // update dns mapping
+<span class="nc" id="L696">        StaticDNSResolver.addNodeToRack(addr1.getHostName(), &quot;/zone1/ud1&quot;);</span>
+<span class="nc" id="L697">        StaticDNSResolver.addNodeToRack(addr2.getHostName(), &quot;/zone1/ud1&quot;);</span>
+<span class="nc" id="L698">        StaticDNSResolver.addNodeToRack(addr3.getHostName(), &quot;/zone1/ud2&quot;);</span>
+<span class="nc" id="L699">        StaticDNSResolver.addNodeToRack(addr4.getHostName(), &quot;/zone1/ud2&quot;);</span>
+<span class="nc" id="L700">        StaticDNSResolver.addNodeToRack(addr5.getHostName(), &quot;/zone2/ud1&quot;);</span>
+<span class="nc" id="L701">        StaticDNSResolver.addNodeToRack(addr6.getHostName(), &quot;/zone2/ud1&quot;);</span>
+<span class="nc" id="L702">        StaticDNSResolver.addNodeToRack(addr7.getHostName(), &quot;/zone2/ud2&quot;);</span>
+<span class="nc" id="L703">        StaticDNSResolver.addNodeToRack(addr8.getHostName(), &quot;/zone2/ud2&quot;);</span>
+<span class="nc" id="L704">        StaticDNSResolver.addNodeToRack(addr9.getHostName(), &quot;/zone3/ud1&quot;);</span>
+<span class="nc" id="L705">        StaticDNSResolver.addNodeToRack(addr10.getHostName(), &quot;/zone3/ud1&quot;);</span>
+<span class="nc" id="L706">        StaticDNSResolver.addNodeToRack(addr11.getHostName(), &quot;/zone3/ud2&quot;);</span>
+<span class="nc" id="L707">        StaticDNSResolver.addNodeToRack(addr12.getHostName(), &quot;/zone3/ud2&quot;);</span>
+<span class="nc" id="L708">        StaticDNSResolver.addNodeToRack(addr13.getHostName(), NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+<span class="nc" id="L709">        StaticDNSResolver.addNodeToRack(addr14.getHostName(), NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+<span class="nc" id="L711">        ClientConfiguration newConf = (ClientConfiguration) this.conf.clone();</span>
+<span class="nc" id="L712">        newConf.setDesiredNumZonesPerWriteQuorum(3);</span>
+<span class="nc" id="L713">        newConf.setMinNumZonesPerWriteQuorum(3);</span>
+<span class="nc" id="L714">        zepp = new ZoneawareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L715">        zepp.initialize(newConf, Optional.&lt;DNSToSwitchMapping&gt; empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+<span class="nc" id="L716">        zepp.withDefaultFaultDomain(NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+<span class="nc" id="L718">        Set&lt;BookieSocketAddress&gt; rwAddrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L719">        Set&lt;BookieSocketAddress&gt; roAddrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L720">        rwAddrs.add(addr1);</span>
+<span class="nc" id="L721">        rwAddrs.add(addr2);</span>
+<span class="nc" id="L722">        rwAddrs.add(addr3);</span>
+<span class="nc" id="L723">        rwAddrs.add(addr4);</span>
+<span class="nc" id="L724">        rwAddrs.add(addr5);</span>
+<span class="nc" id="L725">        rwAddrs.add(addr6);</span>
+<span class="nc" id="L726">        rwAddrs.add(addr7);</span>
+<span class="nc" id="L727">        rwAddrs.add(addr8);</span>
+<span class="nc" id="L728">        rwAddrs.add(addr9);</span>
+<span class="nc" id="L729">        rwAddrs.add(addr10);</span>
+<span class="nc" id="L730">        rwAddrs.add(addr11);</span>
+<span class="nc" id="L731">        rwAddrs.add(addr12);</span>
+<span class="nc" id="L732">        rwAddrs.add(addr13);</span>
+<span class="nc" id="L733">        rwAddrs.add(addr14);</span>
+
+<span class="nc" id="L735">        zepp.onClusterChanged(rwAddrs, roAddrs);</span>
+<span class="nc" id="L736">        List&lt;BookieSocketAddress&gt; ensemble = new ArrayList&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L737">        Set&lt;BookieSocketAddress&gt; excludedBookies = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L738">        ensemble.add(addr1);</span>
+<span class="nc" id="L739">        ensemble.add(addr5);</span>
+<span class="nc" id="L740">        ensemble.add(addr9);</span>
+<span class="nc" id="L741">        ensemble.add(addr3);</span>
+<span class="nc" id="L742">        ensemble.add(addr7);</span>
+<span class="nc" id="L743">        ensemble.add(addr11);</span>
+        /*
+         * since addr5 (/zone2/ud1) is already part of ensemble of size 6, write
+         * quorum of size 6, to replace bookie addr7 (/zone2/ud2), new bookie
+         * should be from /zone2/ud2.
+         */
+<span class="nc" id="L749">        PlacementResult&lt;BookieSocketAddress&gt; replacePlacementResult = zepp.replaceBookie(6, 6, 2, null, ensemble, addr7,</span>
+                excludedBookies);
+<span class="nc" id="L751">        BookieSocketAddress replacedBookie = replacePlacementResult.getResult();</span>
+<span class="nc" id="L752">        assertEquals(&quot;replaced bookie&quot;, addr8, replacedBookie);</span>
+<span class="nc" id="L753">        assertEquals(&quot;PlacementPolicyAdherence&quot;, PlacementPolicyAdherence.MEETS_STRICT,</span>
+<span class="nc" id="L754">                replacePlacementResult.isAdheringToPolicy());</span>
+
+<span class="nc" id="L756">        excludedBookies.add(addr8);</span>
+        /*
+         * here addr8 is excluded, and writeQuorumSize is 3. So to replace
+         * bookie addr7, addr6 (belonging to same zone) is the candidate.
+         */
+<span class="nc" id="L761">        replacePlacementResult = zepp.replaceBookie(6, 3, 2, null, ensemble, addr7, excludedBookies);</span>
+<span class="nc" id="L762">        replacedBookie = replacePlacementResult.getResult();</span>
+<span class="nc" id="L763">        assertEquals(&quot;replaced bookie&quot;, addr6, replacedBookie);</span>
+
+<span class="nc" id="L765">        excludedBookies.add(addr6);</span>
+        try {
+            /*
+             * here addr6 is also excluded, so replaceBookie should fail.
+             */
+<span class="nc" id="L770">            replacedBookie = zepp.replaceBookie(6, 3, 2, null, ensemble, addr7, excludedBookies).getResult();</span>
+<span class="nc" id="L771">            fail(&quot;Expected BKNotEnoughBookiesException for replaceBookie with added excludedBookies&quot;);</span>
+<span class="nc" id="L772">        } catch (BKException.BKNotEnoughBookiesException bkne) {</span>
+            // expected NotEnoughBookiesException
+<span class="nc" id="L774">        }</span>
+<span class="nc" id="L775">    }</span>
+
+    @Test
+    public void testReplaceBookieMinUDs() throws Exception {
+<span class="nc" id="L779">        zepp.uninitalize();</span>
+<span class="nc" id="L780">        updateMyUpgradeDomain(NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+        // Update cluster
+<span class="nc" id="L783">        BookieSocketAddress addr5 = new BookieSocketAddress(&quot;127.0.0.6&quot;, 3181);</span>
+<span class="nc" id="L784">        BookieSocketAddress addr6 = new BookieSocketAddress(&quot;127.0.0.7&quot;, 3181);</span>
+<span class="nc" id="L785">        BookieSocketAddress addr7 = new BookieSocketAddress(&quot;127.0.0.8&quot;, 3181);</span>
+<span class="nc" id="L786">        BookieSocketAddress addr8 = new BookieSocketAddress(&quot;127.0.0.9&quot;, 3181);</span>
+<span class="nc" id="L787">        BookieSocketAddress addr9 = new BookieSocketAddress(&quot;127.0.0.10&quot;, 3181);</span>
+<span class="nc" id="L788">        BookieSocketAddress addr10 = new BookieSocketAddress(&quot;127.0.0.11&quot;, 3181);</span>
+<span class="nc" id="L789">        BookieSocketAddress addr11 = new BookieSocketAddress(&quot;127.0.0.12&quot;, 3181);</span>
+
+        // update dns mapping
+<span class="nc" id="L792">        StaticDNSResolver.addNodeToRack(addr1.getHostName(), &quot;/zone1/ud1&quot;);</span>
+<span class="nc" id="L793">        StaticDNSResolver.addNodeToRack(addr2.getHostName(), &quot;/zone2/ud1&quot;);</span>
+<span class="nc" id="L794">        StaticDNSResolver.addNodeToRack(addr3.getHostName(), &quot;/zone3/ud1&quot;);</span>
+<span class="nc" id="L795">        StaticDNSResolver.addNodeToRack(addr4.getHostName(), &quot;/zone3/ud2&quot;);</span>
+<span class="nc" id="L796">        StaticDNSResolver.addNodeToRack(addr5.getHostName(), &quot;/zone3/ud2&quot;);</span>
+<span class="nc" id="L797">        StaticDNSResolver.addNodeToRack(addr6.getHostName(), &quot;/zone3/ud2&quot;);</span>
+<span class="nc" id="L798">        StaticDNSResolver.addNodeToRack(addr7.getHostName(), &quot;/zone3/ud2&quot;);</span>
+<span class="nc" id="L799">        StaticDNSResolver.addNodeToRack(addr8.getHostName(), &quot;/zone3/ud2&quot;);</span>
+<span class="nc" id="L800">        StaticDNSResolver.addNodeToRack(addr9.getHostName(), &quot;/zone3/ud2&quot;);</span>
+<span class="nc" id="L801">        StaticDNSResolver.addNodeToRack(addr10.getHostName(), NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+<span class="nc" id="L802">        StaticDNSResolver.addNodeToRack(addr11.getHostName(), NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+<span class="nc" id="L804">        ClientConfiguration newConf = (ClientConfiguration) this.conf.clone();</span>
+<span class="nc" id="L805">        newConf.setDesiredNumZonesPerWriteQuorum(4);</span>
+<span class="nc" id="L806">        newConf.setMinNumZonesPerWriteQuorum(3);</span>
+<span class="nc" id="L807">        zepp = new ZoneawareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L808">        zepp.initialize(newConf, Optional.&lt;DNSToSwitchMapping&gt; empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+<span class="nc" id="L809">        zepp.withDefaultFaultDomain(NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+<span class="nc" id="L811">        Set&lt;BookieSocketAddress&gt; rwAddrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L812">        Set&lt;BookieSocketAddress&gt; roAddrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L813">        rwAddrs.add(addr1);</span>
+<span class="nc" id="L814">        rwAddrs.add(addr2);</span>
+<span class="nc" id="L815">        rwAddrs.add(addr3);</span>
+<span class="nc" id="L816">        rwAddrs.add(addr4);</span>
+<span class="nc" id="L817">        rwAddrs.add(addr5);</span>
+<span class="nc" id="L818">        rwAddrs.add(addr6);</span>
+<span class="nc" id="L819">        rwAddrs.add(addr7);</span>
+<span class="nc" id="L820">        rwAddrs.add(addr8);</span>
+<span class="nc" id="L821">        rwAddrs.add(addr9);</span>
+<span class="nc" id="L822">        rwAddrs.add(addr10);</span>
+<span class="nc" id="L823">        rwAddrs.add(addr11);</span>
+
+<span class="nc" id="L825">        zepp.onClusterChanged(rwAddrs, roAddrs);</span>
+<span class="nc" id="L826">        List&lt;BookieSocketAddress&gt; ensemble = new ArrayList&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L827">        Set&lt;BookieSocketAddress&gt; excludedBookies = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L828">        ensemble.add(addr1);</span>
+<span class="nc" id="L829">        ensemble.add(addr2);</span>
+<span class="nc" id="L830">        ensemble.add(addr3);</span>
+<span class="nc" id="L831">        ensemble.add(addr4);</span>
+<span class="nc" id="L832">        ensemble.add(addr5);</span>
+<span class="nc" id="L833">        ensemble.add(addr6);</span>
+        /*
+         * though all the remaining non-default bookies are in /zone3/ud2, for
+         * replacing addr4 replaceBookie should be able to find some other
+         * bookie in /zone3/ud2.
+         */
+<span class="nc" id="L839">        PlacementResult&lt;BookieSocketAddress&gt; replaceResponse = zepp.replaceBookie(6, 6, 2, null, ensemble, addr4,</span>
+                excludedBookies);
+<span class="nc" id="L841">        BookieSocketAddress replacedBookie = replaceResponse.getResult();</span>
+<span class="nc" id="L842">        assertEquals(&quot;replaced bookie&quot;, &quot;/zone3/ud2&quot;, zepp.resolveNetworkLocation(replacedBookie));</span>
+<span class="nc" id="L843">        assertEquals(&quot;PlacementPolicyAdherence&quot;, PlacementPolicyAdherence.MEETS_SOFT,</span>
+<span class="nc" id="L844">                replaceResponse.isAdheringToPolicy());</span>
+<span class="nc" id="L845">    }</span>
+
+    @Test
+    public void testAreAckedBookiesAdheringToPlacementPolicy() throws Exception {
+<span class="nc" id="L849">        zepp.uninitalize();</span>
+<span class="nc" id="L850">        updateMyUpgradeDomain(NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+        // Update cluster
+<span class="nc" id="L853">        BookieSocketAddress addr5 = new BookieSocketAddress(&quot;127.0.0.6&quot;, 3181);</span>
+<span class="nc" id="L854">        BookieSocketAddress addr6 = new BookieSocketAddress(&quot;127.0.0.7&quot;, 3181);</span>
+<span class="nc" id="L855">        BookieSocketAddress addr7 = new BookieSocketAddress(&quot;127.0.0.8&quot;, 3181);</span>
+<span class="nc" id="L856">        BookieSocketAddress addr8 = new BookieSocketAddress(&quot;127.0.0.9&quot;, 3181);</span>
+<span class="nc" id="L857">        BookieSocketAddress addr9 = new BookieSocketAddress(&quot;127.0.0.10&quot;, 3181);</span>
+
+        // update dns mapping
+<span class="nc" id="L860">        StaticDNSResolver.addNodeToRack(addr1.getHostName(), &quot;/zone1/ud1&quot;);</span>
+<span class="nc" id="L861">        StaticDNSResolver.addNodeToRack(addr2.getHostName(), &quot;/zone2/ud1&quot;);</span>
+<span class="nc" id="L862">        StaticDNSResolver.addNodeToRack(addr3.getHostName(), &quot;/zone3/ud1&quot;);</span>
+<span class="nc" id="L863">        StaticDNSResolver.addNodeToRack(addr4.getHostName(), &quot;/zone1/ud2&quot;);</span>
+<span class="nc" id="L864">        StaticDNSResolver.addNodeToRack(addr5.getHostName(), &quot;/zone2/ud2&quot;);</span>
+<span class="nc" id="L865">        StaticDNSResolver.addNodeToRack(addr6.getHostName(), &quot;/zone3/ud2&quot;);</span>
+<span class="nc" id="L866">        StaticDNSResolver.addNodeToRack(addr7.getHostName(), &quot;/zone1/ud3&quot;);</span>
+<span class="nc" id="L867">        StaticDNSResolver.addNodeToRack(addr8.getHostName(), &quot;/zone2/ud3&quot;);</span>
+<span class="nc" id="L868">        StaticDNSResolver.addNodeToRack(addr9.getHostName(), &quot;/zone3/ud3&quot;);</span>
+
+<span class="nc" id="L870">        ClientConfiguration newConf = (ClientConfiguration) this.conf.clone();</span>
+<span class="nc" id="L871">        newConf.setDesiredNumZonesPerWriteQuorum(4);</span>
+<span class="nc" id="L872">        newConf.setMinNumZonesPerWriteQuorum(2);</span>
+<span class="nc" id="L873">        zepp = new ZoneawareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L874">        zepp.initialize(newConf, Optional.&lt;DNSToSwitchMapping&gt; empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+<span class="nc" id="L875">        zepp.withDefaultFaultDomain(NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+<span class="nc" id="L877">        Set&lt;BookieSocketAddress&gt; rwAddrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L878">        Set&lt;BookieSocketAddress&gt; roAddrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L879">        rwAddrs.add(addr1);</span>
+<span class="nc" id="L880">        rwAddrs.add(addr2);</span>
+<span class="nc" id="L881">        rwAddrs.add(addr3);</span>
+<span class="nc" id="L882">        rwAddrs.add(addr4);</span>
+<span class="nc" id="L883">        rwAddrs.add(addr5);</span>
+<span class="nc" id="L884">        rwAddrs.add(addr6);</span>
+<span class="nc" id="L885">        rwAddrs.add(addr7);</span>
+<span class="nc" id="L886">        rwAddrs.add(addr8);</span>
+<span class="nc" id="L887">        rwAddrs.add(addr9);</span>
+
+<span class="nc" id="L889">        zepp.onClusterChanged(rwAddrs, roAddrs);</span>
+<span class="nc" id="L890">        Set&lt;BookieSocketAddress&gt; ackedBookies = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L891">        ackedBookies.add(addr1);</span>
+<span class="nc" id="L892">        ackedBookies.add(addr4);</span>
+<span class="nc" id="L893">        assertFalse(&quot;since both the bookies are in the same zone, it should return false&quot;,</span>
+<span class="nc" id="L894">                zepp.areAckedBookiesAdheringToPlacementPolicy(ackedBookies, 10, 2));</span>
+<span class="nc" id="L895">        ackedBookies.clear();</span>
+<span class="nc" id="L896">        ackedBookies.add(addr1);</span>
+<span class="nc" id="L897">        ackedBookies.add(addr2);</span>
+<span class="nc" id="L898">        assertFalse(&quot;since ackQuorumSize is 3, it should return false&quot;,</span>
+<span class="nc" id="L899">                zepp.areAckedBookiesAdheringToPlacementPolicy(ackedBookies, 10, 3));</span>
+<span class="nc" id="L900">        assertTrue(&quot;since ackQuorumSize is 2 and bookies are from minNumZonesPerWriteQuorum it should return true&quot;,</span>
+<span class="nc" id="L901">                zepp.areAckedBookiesAdheringToPlacementPolicy(ackedBookies, 10, 2));</span>
+
+<span class="nc" id="L903">        zepp.uninitalize();</span>
+<span class="nc" id="L904">        newConf = (ClientConfiguration) this.conf.clone();</span>
+<span class="nc" id="L905">        newConf.setDesiredNumZonesPerWriteQuorum(4);</span>
+<span class="nc" id="L906">        newConf.setMinNumZonesPerWriteQuorum(4);</span>
+<span class="nc" id="L907">        zepp = new ZoneawareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L908">        zepp.initialize(newConf, Optional.&lt;DNSToSwitchMapping&gt; empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+<span class="nc" id="L909">        zepp.withDefaultFaultDomain(NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+<span class="nc" id="L911">        zepp.onClusterChanged(rwAddrs, roAddrs);</span>
+<span class="nc" id="L912">        ackedBookies.clear();</span>
+<span class="nc" id="L913">        ackedBookies.add(addr1);</span>
+<span class="nc" id="L914">        ackedBookies.add(addr2);</span>
+<span class="nc" id="L915">        ackedBookies.add(addr3);</span>
+<span class="nc" id="L916">        assertFalse(&quot;since minNumZonesPerWriteQuorum is set to 4, it should return false&quot;,</span>
+<span class="nc" id="L917">                zepp.areAckedBookiesAdheringToPlacementPolicy(ackedBookies, 4, 3));</span>
+<span class="nc" id="L918">        assertTrue(&quot;since writeQuorumSize is set to 3, it should return true&quot;,</span>
+<span class="nc" id="L919">                zepp.areAckedBookiesAdheringToPlacementPolicy(ackedBookies, 3, 3));</span>
+<span class="nc" id="L920">        ackedBookies.clear();</span>
+<span class="nc" id="L921">        ackedBookies.add(addr1);</span>
+<span class="nc" id="L922">        ackedBookies.add(addr2);</span>
+<span class="nc" id="L923">        ackedBookies.add(addr4);</span>
+<span class="nc" id="L924">        assertFalse(&quot;since bookies are in just 2 zones but not in 3 zones, it should return false&quot;,</span>
+<span class="nc" id="L925">                zepp.areAckedBookiesAdheringToPlacementPolicy(ackedBookies, 3, 3));</span>
+<span class="nc" id="L926">    }</span>
+
+    @Test
+    public void testWeightedPlacement() throws Exception {
+<span class="nc" id="L930">        zepp.uninitalize();</span>
+<span class="nc" id="L931">        updateMyUpgradeDomain(NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+        // Update cluster
+<span class="nc" id="L934">        BookieSocketAddress addr5 = new BookieSocketAddress(&quot;127.0.0.6&quot;, 3181);</span>
+
+        // update dns mapping
+<span class="nc" id="L937">        StaticDNSResolver.addNodeToRack(addr1.getHostName(), &quot;/zone1/ud1&quot;);</span>
+<span class="nc" id="L938">        StaticDNSResolver.addNodeToRack(addr2.getHostName(), &quot;/zone1/ud2&quot;);</span>
+<span class="nc" id="L939">        StaticDNSResolver.addNodeToRack(addr3.getHostName(), &quot;/zone2/ud1&quot;);</span>
+<span class="nc" id="L940">        StaticDNSResolver.addNodeToRack(addr4.getHostName(), &quot;/zone2/ud2&quot;);</span>
+<span class="nc" id="L941">        StaticDNSResolver.addNodeToRack(addr5.getHostName(), NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+        // Update cluster
+<span class="nc" id="L943">        Set&lt;BookieSocketAddress&gt; addrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L944">        addrs.add(addr1);</span>
+<span class="nc" id="L945">        addrs.add(addr2);</span>
+<span class="nc" id="L946">        addrs.add(addr3);</span>
+<span class="nc" id="L947">        addrs.add(addr4);</span>
+<span class="nc" id="L948">        addrs.add(addr5);</span>
+
+<span class="nc" id="L950">        int multiple = 10;</span>
+
+<span class="nc" id="L952">        ClientConfiguration newConf = new ClientConfiguration(conf);</span>
+<span class="nc" id="L953">        newConf.addConfiguration(conf);</span>
+<span class="nc" id="L954">        newConf.setDiskWeightBasedPlacementEnabled(true);</span>
+        /*
+         * since BookieMaxWeightMultipleForWeightBasedPlacement is set to -1,
+         * there is no max cap on weight.
+         */
+<span class="nc" id="L959">        newConf.setBookieMaxWeightMultipleForWeightBasedPlacement(-1);</span>
+<span class="nc" id="L960">        newConf.setMinNumZonesPerWriteQuorum(0);</span>
+<span class="nc" id="L961">        zepp.initialize(newConf, Optional.&lt;DNSToSwitchMapping&gt; empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+<span class="nc" id="L962">        zepp.withDefaultFaultDomain(NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+<span class="nc" id="L964">        zepp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+<span class="nc" id="L965">        Map&lt;BookieSocketAddress, BookieInfo&gt; bookieInfoMap = new HashMap&lt;BookieSocketAddress, BookieInfo&gt;();</span>
+<span class="nc" id="L966">        bookieInfoMap.put(addr1, new BookieInfo(100L, 100L));</span>
+<span class="nc" id="L967">        bookieInfoMap.put(addr2, new BookieInfo(100L, 100L));</span>
+<span class="nc" id="L968">        bookieInfoMap.put(addr3, new BookieInfo(100L, 100L));</span>
+<span class="nc" id="L969">        bookieInfoMap.put(addr4, new BookieInfo(multiple * 100L, multiple * 100L));</span>
+<span class="nc" id="L970">        bookieInfoMap.put(addr5, new BookieInfo(100L, 100L));</span>
+<span class="nc" id="L971">        zepp.updateBookieInfo(bookieInfoMap);</span>
+
+<span class="nc" id="L973">        Map&lt;BookieSocketAddress, Long&gt; selectionCounts = new HashMap&lt;BookieSocketAddress, Long&gt;();</span>
+<span class="nc" id="L974">        int numTries = 50000;</span>
+        EnsemblePlacementPolicy.PlacementResult&lt;List&lt;BookieSocketAddress&gt;&gt; newEnsembleResponse;
+        List&lt;BookieSocketAddress&gt; newEnsemble;
+<span class="nc bnc" id="L977" title="All 2 branches missed.">        for (BookieSocketAddress addr : addrs) {</span>
+<span class="nc" id="L978">            selectionCounts.put(addr, (long) 0);</span>
+<span class="nc" id="L979">        }</span>
+<span class="nc bnc" id="L980" title="All 2 branches missed.">        for (int i = 0; i &lt; numTries; i++) {</span>
+            // new ensemble response
+<span class="nc" id="L982">            newEnsembleResponse = zepp.newEnsemble(1, 1, 1, null, new HashSet&lt;BookieSocketAddress&gt;());</span>
+<span class="nc" id="L983">            newEnsemble = newEnsembleResponse.getResult();</span>
+<span class="nc" id="L984">            selectionCounts.put(newEnsemble.get(0), selectionCounts.get(newEnsemble.get(0)) + 1);</span>
+        }
+<span class="nc" id="L986">        double observedMultiple = ((double) selectionCounts.get(addr4) / (double) selectionCounts.get(addr3));</span>
+        /*
+         * since there is no cap on maxWeight, observedMultiple should be
+         * roughly equal to multiple
+         */
+<span class="nc bnc" id="L991" title="All 2 branches missed.">        assertTrue(&quot;Weights not being honored &quot; + observedMultiple, Math.abs(observedMultiple - multiple) &lt; 1);</span>
+
+<span class="nc" id="L993">        selectionCounts.clear();</span>
+<span class="nc" id="L994">        selectionCounts.put(addr3, (long) 0);</span>
+<span class="nc" id="L995">        selectionCounts.put(addr4, (long) 0);</span>
+<span class="nc" id="L996">        newEnsemble = new ArrayList&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L997">        newEnsemble.add(addr2);</span>
+<span class="nc" id="L998">        Set&lt;BookieSocketAddress&gt; excludedBookies = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L999">        excludedBookies.add(addr1);</span>
+        EnsemblePlacementPolicy.PlacementResult&lt;BookieSocketAddress&gt; replacedBookieResponse;
+        BookieSocketAddress replacedBookie;
+<span class="nc bnc" id="L1002" title="All 2 branches missed.">        for (int i = 0; i &lt; numTries; i++) {</span>
+            // replace bookie response
+<span class="nc" id="L1004">            replacedBookieResponse = zepp.replaceBookie(1, 1, 1, null, newEnsemble, addr2, excludedBookies);</span>
+<span class="nc" id="L1005">            replacedBookie = replacedBookieResponse.getResult();</span>
+            /*
+             * only addr3 and addr4 are eligible for replacedBookie.
+             */
+<span class="nc bnc" id="L1009" title="All 4 branches missed.">            assertTrue(&quot;replaced : &quot; + replacedBookie, addr3.equals(replacedBookie) || addr4.equals(replacedBookie));</span>
+<span class="nc" id="L1010">            selectionCounts.put(replacedBookie, selectionCounts.get(replacedBookie) + 1);</span>
+        }
+<span class="nc" id="L1012">        observedMultiple = ((double) selectionCounts.get(addr4) / (double) selectionCounts.get(addr3));</span>
+        /*
+         * since there is no cap on maxWeight, observedMultiple should be
+         * roughly equal to multiple
+         */
+<span class="nc bnc" id="L1017" title="All 2 branches missed.">        assertTrue(&quot;Weights not being honored &quot; + observedMultiple, Math.abs(observedMultiple - multiple) &lt; 1);</span>
+<span class="nc" id="L1018">    }</span>
+
+    @Test
+    public void testPlacementOnStabilizeNetworkTopology() throws Exception {
+<span class="nc" id="L1022">        zepp.uninitalize();</span>
+<span class="nc" id="L1023">        updateMyUpgradeDomain(NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+        // update dns mapping
+<span class="nc" id="L1026">        StaticDNSResolver.addNodeToRack(addr1.getHostName(), &quot;/zone1/ud1&quot;);</span>
+<span class="nc" id="L1027">        StaticDNSResolver.addNodeToRack(addr2.getHostName(), &quot;/zone2/ud1&quot;);</span>
+<span class="nc" id="L1028">        StaticDNSResolver.addNodeToRack(addr3.getHostName(), &quot;/zone3/ud1&quot;);</span>
+<span class="nc" id="L1029">        StaticDNSResolver.addNodeToRack(addr4.getHostName(), &quot;/zone4/ud1&quot;);</span>
+
+<span class="nc" id="L1031">        zepp = new ZoneawareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L1032">        ClientConfiguration confLocal = new ClientConfiguration();</span>
+<span class="nc" id="L1033">        confLocal.addConfiguration(conf);</span>
+<span class="nc" id="L1034">        confLocal.setNetworkTopologyStabilizePeriodSeconds(99999);</span>
+<span class="nc" id="L1035">        zepp.initialize(confLocal, Optional.&lt;DNSToSwitchMapping&gt; empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+<span class="nc" id="L1036">        zepp.withDefaultFaultDomain(NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+<span class="nc" id="L1038">        Set&lt;BookieSocketAddress&gt; addrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L1039">        addrs.add(addr1);</span>
+<span class="nc" id="L1040">        addrs.add(addr2);</span>
+<span class="nc" id="L1041">        addrs.add(addr3);</span>
+<span class="nc" id="L1042">        addrs.add(addr4);</span>
+<span class="nc" id="L1043">        zepp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+        // addr4 left
+<span class="nc" id="L1045">        addrs.remove(addr4);</span>
+<span class="nc" id="L1046">        Set&lt;BookieSocketAddress&gt; deadBookies = zepp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+<span class="nc" id="L1047">        assertTrue(deadBookies.isEmpty());</span>
+
+        // we will never use addr4 even it is in the stabilized network topology
+<span class="nc bnc" id="L1050" title="All 2 branches missed.">        for (int i = 0; i &lt; 5; i++) {</span>
+<span class="nc" id="L1051">            EnsemblePlacementPolicy.PlacementResult&lt;List&lt;BookieSocketAddress&gt;&gt; ensembleResponse = zepp.newEnsemble(3, 3,</span>
+                    2, null, new HashSet&lt;BookieSocketAddress&gt;());
+<span class="nc" id="L1053">            List&lt;BookieSocketAddress&gt; ensemble = ensembleResponse.getResult();</span>
+<span class="nc" id="L1054">            assertFalse(ensemble.contains(addr4));</span>
+<span class="nc" id="L1055">            assertEquals(&quot;PlacementPolicyAdherence&quot;, PlacementPolicyAdherence.MEETS_STRICT,</span>
+<span class="nc" id="L1056">                    ensembleResponse.isAdheringToPolicy());</span>
+        }
+
+        // we could still use addr4 for urgent allocation if it is just bookie
+        // flapping
+<span class="nc" id="L1061">        EnsemblePlacementPolicy.PlacementResult&lt;List&lt;BookieSocketAddress&gt;&gt; ensembleResponse = zepp.newEnsemble(4, 4, 2,</span>
+                null, new HashSet&lt;BookieSocketAddress&gt;());
+<span class="nc" id="L1063">        List&lt;BookieSocketAddress&gt; ensemble = ensembleResponse.getResult();</span>
+<span class="nc" id="L1064">        assertTrue(ensemble.contains(addr4));</span>
+<span class="nc" id="L1065">        assertEquals(&quot;PlacementPolicyAdherence&quot;, PlacementPolicyAdherence.MEETS_STRICT,</span>
+<span class="nc" id="L1066">                ensembleResponse.isAdheringToPolicy());</span>
+<span class="nc" id="L1067">    }</span>
+
+    @Test
+    public void testCreateNewEnsembleRandomly() throws Exception {
+<span class="nc" id="L1071">        zepp.uninitalize();</span>
+<span class="nc" id="L1072">        updateMyUpgradeDomain(NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+        // Update cluster
+<span class="nc" id="L1075">        BookieSocketAddress addr5 = new BookieSocketAddress(&quot;127.0.0.6&quot;, 3181);</span>
+
+        // update dns mapping
+<span class="nc" id="L1078">        StaticDNSResolver.addNodeToRack(addr1.getHostName(), &quot;/zone1/ud1&quot;);</span>
+<span class="nc" id="L1079">        StaticDNSResolver.addNodeToRack(addr2.getHostName(), &quot;/zone1/ud1&quot;);</span>
+<span class="nc" id="L1080">        StaticDNSResolver.addNodeToRack(addr3.getHostName(), &quot;/zone1/ud1&quot;);</span>
+<span class="nc" id="L1081">        StaticDNSResolver.addNodeToRack(addr4.getHostName(), NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+<span class="nc" id="L1082">        StaticDNSResolver.addNodeToRack(addr5.getHostName(), &quot;/zone1/ud1&quot;);</span>
+
+<span class="nc" id="L1084">        zepp = new ZoneawareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L1085">        ClientConfiguration confLocal = new ClientConfiguration();</span>
+<span class="nc" id="L1086">        confLocal.addConfiguration(conf);</span>
+<span class="nc" id="L1087">        confLocal.setEnforceStrictZoneawarePlacement(false);</span>
+<span class="nc" id="L1088">        confLocal.setMinNumZonesPerWriteQuorum(3);</span>
+<span class="nc" id="L1089">        confLocal.setDesiredNumZonesPerWriteQuorum(4);</span>
+<span class="nc" id="L1090">        zepp.initialize(confLocal, Optional.&lt;DNSToSwitchMapping&gt; empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+<span class="nc" id="L1091">        zepp.withDefaultFaultDomain(NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+<span class="nc" id="L1093">        Set&lt;BookieSocketAddress&gt; rwAddrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L1094">        Set&lt;BookieSocketAddress&gt; roAddrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L1095">        Set&lt;BookieSocketAddress&gt; excludeBookies = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L1096">        rwAddrs.add(addr1);</span>
+<span class="nc" id="L1097">        rwAddrs.add(addr2);</span>
+<span class="nc" id="L1098">        rwAddrs.add(addr3);</span>
+<span class="nc" id="L1099">        rwAddrs.add(addr4);</span>
+<span class="nc" id="L1100">        rwAddrs.add(addr5);</span>
+<span class="nc" id="L1101">        excludeBookies.add(addr5);</span>
+<span class="nc" id="L1102">        zepp.onClusterChanged(rwAddrs, roAddrs);</span>
+        /*
+         * if enforceStrictZoneawarePlacement is not enabled, then there is no
+         * restrictions on ensSize and writeQSize and also bookie belonging to
+         * DEFAULT_ZONE_AND_UPGRADEDOMAIN can be a candidate.
+         */
+<span class="nc" id="L1108">        PlacementResult&lt;List&lt;BookieSocketAddress&gt;&gt; newEnsemblePlacementResult = zepp.newEnsemble(4, 3, 2, null,</span>
+                excludeBookies);
+<span class="nc" id="L1110">        Set&lt;BookieSocketAddress&gt; newEnsembleSet = new HashSet&lt;BookieSocketAddress&gt;(</span>
+<span class="nc" id="L1111">                newEnsemblePlacementResult.getResult());</span>
+<span class="nc" id="L1112">        assertEquals(&quot;New ensemble should contain 4 rw bookies&quot;, 4, newEnsembleSet.size());</span>
+<span class="nc" id="L1113">        assertFalse(&quot;excludeBookie should not be included in the ensemble&quot;, newEnsembleSet.contains(addr5));</span>
+<span class="nc" id="L1114">        assertEquals(&quot;PlacementPolicyAdherence&quot;, PlacementPolicyAdherence.FAIL,</span>
+<span class="nc" id="L1115">                newEnsemblePlacementResult.isAdheringToPolicy());</span>
+
+<span class="nc" id="L1117">        rwAddrs.remove(addr4);</span>
+<span class="nc" id="L1118">        roAddrs.add(addr4);</span>
+<span class="nc" id="L1119">        zepp.onClusterChanged(rwAddrs, roAddrs);</span>
+        try {
+            /*
+             * since there is no bookie available, newEnsemble should fail.
+             */
+<span class="nc" id="L1124">            zepp.newEnsemble(4, 3, 2, null, excludeBookies);</span>
+<span class="nc" id="L1125">            fail(&quot;Creation of new ensemble randomly should fail because of not sufficient bookies&quot;);</span>
+<span class="nc" id="L1126">        } catch (BKException.BKNotEnoughBookiesException bkne) {</span>
+            // expected NotEnoughBookiesException
+<span class="nc" id="L1128">        }</span>
+<span class="nc" id="L1129">    }</span>
+
+    @Test
+    public void testReplaceBookieRandomly() throws Exception {
+<span class="nc" id="L1133">        zepp.uninitalize();</span>
+<span class="nc" id="L1134">        updateMyUpgradeDomain(NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+        // Update cluster
+<span class="nc" id="L1137">        BookieSocketAddress addr5 = new BookieSocketAddress(&quot;127.0.0.6&quot;, 3181);</span>
+<span class="nc" id="L1138">        BookieSocketAddress addr6 = new BookieSocketAddress(&quot;127.0.0.7&quot;, 3181);</span>
+<span class="nc" id="L1139">        BookieSocketAddress addr7 = new BookieSocketAddress(&quot;127.0.0.8&quot;, 3181);</span>
+
+        // update dns mapping
+<span class="nc" id="L1142">        StaticDNSResolver.addNodeToRack(addr1.getHostName(), &quot;/zone1/ud1&quot;);</span>
+<span class="nc" id="L1143">        StaticDNSResolver.addNodeToRack(addr2.getHostName(), &quot;/zone1/ud1&quot;);</span>
+<span class="nc" id="L1144">        StaticDNSResolver.addNodeToRack(addr3.getHostName(), &quot;/zone1/ud1&quot;);</span>
+<span class="nc" id="L1145">        StaticDNSResolver.addNodeToRack(addr4.getHostName(), &quot;/zone1/ud1&quot;);</span>
+<span class="nc" id="L1146">        StaticDNSResolver.addNodeToRack(addr5.getHostName(), &quot;/zone1/ud1&quot;);</span>
+<span class="nc" id="L1147">        StaticDNSResolver.addNodeToRack(addr6.getHostName(), &quot;/zone1/ud1&quot;);</span>
+<span class="nc" id="L1148">        StaticDNSResolver.addNodeToRack(addr7.getHostName(), NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+<span class="nc" id="L1150">        zepp = new ZoneawareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L1151">        ClientConfiguration confLocal = new ClientConfiguration();</span>
+<span class="nc" id="L1152">        confLocal.addConfiguration(conf);</span>
+<span class="nc" id="L1153">        confLocal.setEnforceStrictZoneawarePlacement(false);</span>
+<span class="nc" id="L1154">        confLocal.setMinNumZonesPerWriteQuorum(3);</span>
+<span class="nc" id="L1155">        confLocal.setDesiredNumZonesPerWriteQuorum(4);</span>
+<span class="nc" id="L1156">        zepp.initialize(confLocal, Optional.&lt;DNSToSwitchMapping&gt; empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+<span class="nc" id="L1157">        zepp.withDefaultFaultDomain(NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+<span class="nc" id="L1159">        Set&lt;BookieSocketAddress&gt; rwAddrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L1160">        Set&lt;BookieSocketAddress&gt; roAddrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L1161">        Set&lt;BookieSocketAddress&gt; excludeBookies = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L1162">        rwAddrs.add(addr1);</span>
+<span class="nc" id="L1163">        rwAddrs.add(addr2);</span>
+<span class="nc" id="L1164">        rwAddrs.add(addr3);</span>
+<span class="nc" id="L1165">        rwAddrs.add(addr4);</span>
+<span class="nc" id="L1166">        rwAddrs.add(addr5);</span>
+<span class="nc" id="L1167">        rwAddrs.add(addr7);</span>
+
+<span class="nc" id="L1169">        roAddrs.add(addr6);</span>
+<span class="nc" id="L1170">        excludeBookies.add(addr5);</span>
+<span class="nc" id="L1171">        zepp.onClusterChanged(rwAddrs, roAddrs);</span>
+<span class="nc" id="L1172">        List&lt;BookieSocketAddress&gt; ensembleList = new ArrayList&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L1173">        ensembleList.add(addr1);</span>
+<span class="nc" id="L1174">        ensembleList.add(addr2);</span>
+<span class="nc" id="L1175">        ensembleList.add(addr3);</span>
+<span class="nc" id="L1176">        ensembleList.add(addr4);</span>
+
+<span class="nc" id="L1178">        PlacementResult&lt;BookieSocketAddress&gt; replaceResponse = zepp.replaceBookie(4, 3, 2, null, ensembleList, addr3,</span>
+                excludeBookies);
+<span class="nc" id="L1180">        BookieSocketAddress replaceBookie = replaceResponse.getResult();</span>
+        /*
+         * if enforceStrictZoneawarePlacement is not enabled, then there is no
+         * restrictions on ensSize and writeQSize and also bookie belonging to
+         * DEFAULT_ZONE_AND_UPGRADEDOMAIN can be a candidate.
+         */
+<span class="nc" id="L1186">        assertEquals(&quot;ReplaceBookie candidate&quot;, addr7, replaceBookie);</span>
+<span class="nc" id="L1187">        assertEquals(&quot;PlacementPolicyAdherence&quot;, PlacementPolicyAdherence.FAIL,</span>
+<span class="nc" id="L1188">                replaceResponse.isAdheringToPolicy());</span>
+
+<span class="nc" id="L1190">        rwAddrs.remove(addr7);</span>
+<span class="nc" id="L1191">        excludeBookies.add(addr7);</span>
+<span class="nc" id="L1192">        zepp.onClusterChanged(rwAddrs, roAddrs);</span>
+        try {
+            /*
+             * since there is no bookie available, replaceBookie should fail.
+             */
+<span class="nc" id="L1197">            zepp.replaceBookie(4, 3, 2, null, ensembleList, addr3, excludeBookies);</span>
+<span class="nc" id="L1198">            fail(&quot;ReplaceBookie should fail because of unavailable bookies&quot;);</span>
+<span class="nc" id="L1199">        } catch (BKException.BKNotEnoughBookiesException bkne) {</span>
+            // expected NotEnoughBookiesException
+<span class="nc" id="L1201">        }</span>
+<span class="nc" id="L1202">    }</span>
+
+    @Test
+    public void testIsEnsembleAdheringToPlacementPolicy() throws Exception {
+<span class="nc" id="L1206">        zepp.uninitalize();</span>
+<span class="nc" id="L1207">        updateMyUpgradeDomain(NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+        // Update cluster
+<span class="nc" id="L1210">        BookieSocketAddress addr5 = new BookieSocketAddress(&quot;127.0.0.6&quot;, 3181);</span>
+<span class="nc" id="L1211">        BookieSocketAddress addr6 = new BookieSocketAddress(&quot;127.0.0.7&quot;, 3181);</span>
+<span class="nc" id="L1212">        BookieSocketAddress addr7 = new BookieSocketAddress(&quot;127.0.0.8&quot;, 3181);</span>
+<span class="nc" id="L1213">        BookieSocketAddress addr8 = new BookieSocketAddress(&quot;127.0.0.9&quot;, 3181);</span>
+<span class="nc" id="L1214">        BookieSocketAddress addr9 = new BookieSocketAddress(&quot;127.0.0.10&quot;, 3181);</span>
+<span class="nc" id="L1215">        BookieSocketAddress addr10 = new BookieSocketAddress(&quot;127.0.0.11&quot;, 3181);</span>
+
+        // update dns mapping
+<span class="nc" id="L1218">        StaticDNSResolver.addNodeToRack(addr1.getHostName(), &quot;/zone1/ud1&quot;);</span>
+<span class="nc" id="L1219">        StaticDNSResolver.addNodeToRack(addr2.getHostName(), &quot;/zone1/ud2&quot;);</span>
+<span class="nc" id="L1220">        StaticDNSResolver.addNodeToRack(addr3.getHostName(), &quot;/zone1/ud2&quot;);</span>
+<span class="nc" id="L1221">        StaticDNSResolver.addNodeToRack(addr4.getHostName(), &quot;/zone2/ud1&quot;);</span>
+<span class="nc" id="L1222">        StaticDNSResolver.addNodeToRack(addr5.getHostName(), &quot;/zone2/ud2&quot;);</span>
+<span class="nc" id="L1223">        StaticDNSResolver.addNodeToRack(addr6.getHostName(), &quot;/zone2/ud2&quot;);</span>
+<span class="nc" id="L1224">        StaticDNSResolver.addNodeToRack(addr7.getHostName(), &quot;/zone3/ud1&quot;);</span>
+<span class="nc" id="L1225">        StaticDNSResolver.addNodeToRack(addr8.getHostName(), &quot;/zone3/ud2&quot;);</span>
+<span class="nc" id="L1226">        StaticDNSResolver.addNodeToRack(addr9.getHostName(), &quot;/zone3/ud2&quot;);</span>
+<span class="nc" id="L1227">        StaticDNSResolver.addNodeToRack(addr10.getHostName(), NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+<span class="nc" id="L1229">        zepp = new ZoneawareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L1230">        ClientConfiguration confLocal = new ClientConfiguration();</span>
+<span class="nc" id="L1231">        confLocal.addConfiguration(conf);</span>
+<span class="nc" id="L1232">        confLocal.setEnforceStrictZoneawarePlacement(true);</span>
+<span class="nc" id="L1233">        confLocal.setMinNumZonesPerWriteQuorum(2);</span>
+<span class="nc" id="L1234">        confLocal.setDesiredNumZonesPerWriteQuorum(3);</span>
+<span class="nc" id="L1235">        zepp.initialize(confLocal, Optional.&lt;DNSToSwitchMapping&gt; empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+<span class="nc" id="L1236">        zepp.withDefaultFaultDomain(NetworkTopology.DEFAULT_ZONE_AND_UPGRADEDOMAIN);</span>
+
+<span class="nc" id="L1238">        List&lt;BookieSocketAddress&gt; ensemble = new ArrayList&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L1239">        ensemble.add(addr1);</span>
+<span class="nc" id="L1240">        ensemble.add(addr2);</span>
+<span class="nc" id="L1241">        ensemble.add(addr3);</span>
+        // all bookies in same rack
+<span class="nc" id="L1243">        assertEquals(&quot;PlacementPolicyAdherence&quot;, PlacementPolicyAdherence.FAIL,</span>
+<span class="nc" id="L1244">                zepp.isEnsembleAdheringToPlacementPolicy(ensemble, 3, 2));</span>
+
+<span class="nc" id="L1246">        ensemble.clear();</span>
+<span class="nc" id="L1247">        ensemble.add(addr1);</span>
+<span class="nc" id="L1248">        ensemble.add(addr2);</span>
+<span class="nc" id="L1249">        ensemble.add(addr4);</span>
+        // bookies spread across minZones
+<span class="nc" id="L1251">        assertEquals(&quot;PlacementPolicyAdherence&quot;, PlacementPolicyAdherence.MEETS_SOFT,</span>
+<span class="nc" id="L1252">                zepp.isEnsembleAdheringToPlacementPolicy(ensemble, 3, 2));</span>
+
+<span class="nc" id="L1254">        ensemble.clear();</span>
+<span class="nc" id="L1255">        ensemble.add(addr1);</span>
+<span class="nc" id="L1256">        ensemble.add(addr4);</span>
+<span class="nc" id="L1257">        ensemble.add(addr7);</span>
+        // bookies spread across desirednumofzones
+<span class="nc" id="L1259">        assertEquals(&quot;PlacementPolicyAdherence&quot;, PlacementPolicyAdherence.MEETS_STRICT,</span>
+<span class="nc" id="L1260">                zepp.isEnsembleAdheringToPlacementPolicy(ensemble, 3, 2));</span>
+
+<span class="nc" id="L1262">        ensemble.clear();</span>
+<span class="nc" id="L1263">        ensemble.add(addr1);</span>
+<span class="nc" id="L1264">        ensemble.add(addr4);</span>
+        // writeQuorum should be greater than minZones
+<span class="nc" id="L1266">        assertEquals(&quot;PlacementPolicyAdherence&quot;, PlacementPolicyAdherence.FAIL,</span>
+<span class="nc" id="L1267">                zepp.isEnsembleAdheringToPlacementPolicy(ensemble, 2, 2));</span>
+
+<span class="nc" id="L1269">        ensemble.clear();</span>
+<span class="nc" id="L1270">        ensemble.add(addr2);</span>
+<span class="nc" id="L1271">        ensemble.add(addr3);</span>
+<span class="nc" id="L1272">        ensemble.add(addr4);</span>
+        // bookies from zone1 (addr2 and addr3) are in same UD
+<span class="nc" id="L1274">        assertEquals(&quot;PlacementPolicyAdherence&quot;, PlacementPolicyAdherence.FAIL,</span>
+<span class="nc" id="L1275">                zepp.isEnsembleAdheringToPlacementPolicy(ensemble, 3, 2));</span>
+
+<span class="nc" id="L1277">        ensemble.clear();</span>
+<span class="nc" id="L1278">        ensemble.add(addr1);</span>
+<span class="nc" id="L1279">        ensemble.add(addr4);</span>
+<span class="nc" id="L1280">        ensemble.add(addr7);</span>
+<span class="nc" id="L1281">        ensemble.add(addr10);</span>
+        // bookie from default faultdomain will cause PlacementPolicyAdherence
+        // to fail
+<span class="nc" id="L1284">        assertEquals(&quot;PlacementPolicyAdherence&quot;, PlacementPolicyAdherence.FAIL,</span>
+<span class="nc" id="L1285">                zepp.isEnsembleAdheringToPlacementPolicy(ensemble, 4, 2));</span>
+
+<span class="nc" id="L1287">        ensemble.clear();</span>
+<span class="nc" id="L1288">        ensemble.add(addr1);</span>
+<span class="nc" id="L1289">        ensemble.add(addr4);</span>
+<span class="nc" id="L1290">        ensemble.add(addr7);</span>
+<span class="nc" id="L1291">        ensemble.add(addr8);</span>
+<span class="nc" id="L1292">        ensemble.add(addr9);</span>
+        // bookies are spread across desired zones and bookie from same zone are
+        // spread across 2 UDs
+<span class="nc" id="L1295">        assertEquals(&quot;PlacementPolicyAdherence&quot;, PlacementPolicyAdherence.MEETS_STRICT,</span>
+<span class="nc" id="L1296">                zepp.isEnsembleAdheringToPlacementPolicy(ensemble, 5, 2));</span>
+
+<span class="nc" id="L1298">        ensemble.clear();</span>
+<span class="nc" id="L1299">        ensemble.add(addr1);</span>
+<span class="nc" id="L1300">        ensemble.add(addr4);</span>
+<span class="nc" id="L1301">        ensemble.add(addr7);</span>
+<span class="nc" id="L1302">        ensemble.add(addr2);</span>
+<span class="nc" id="L1303">        ensemble.add(addr8);</span>
+<span class="nc" id="L1304">        ensemble.add(addr9);</span>
+        /*
+         * writeset of addr2, addr8 and addr9 fails, because addr8 and addr9
+         * belong to z3u2
+         */
+<span class="nc" id="L1309">        assertEquals(&quot;PlacementPolicyAdherence&quot;, PlacementPolicyAdherence.FAIL,</span>
+<span class="nc" id="L1310">                zepp.isEnsembleAdheringToPlacementPolicy(ensemble, 3, 2));</span>
+
+<span class="nc" id="L1312">        ensemble.clear();</span>
+<span class="nc" id="L1313">        ensemble.add(addr1);</span>
+<span class="nc" id="L1314">        ensemble.add(addr4);</span>
+<span class="nc" id="L1315">        ensemble.add(addr9);</span>
+<span class="nc" id="L1316">        ensemble.add(addr2);</span>
+<span class="nc" id="L1317">        ensemble.add(addr8);</span>
+<span class="nc" id="L1318">        ensemble.add(addr7);</span>
+        /*
+         * writeset of addr9, addr2 and addr8 fails, because addr8 and addr9
+         * belong to z3u2
+         */
+<span class="nc" id="L1323">        assertEquals(&quot;PlacementPolicyAdherence&quot;, PlacementPolicyAdherence.FAIL,</span>
+<span class="nc" id="L1324">                zepp.isEnsembleAdheringToPlacementPolicy(ensemble, 3, 2));</span>
+
+<span class="nc" id="L1326">        ensemble.clear();</span>
+<span class="nc" id="L1327">        ensemble.add(addr1);</span>
+<span class="nc" id="L1328">        ensemble.add(addr4);</span>
+<span class="nc" id="L1329">        ensemble.add(addr9);</span>
+<span class="nc" id="L1330">        ensemble.add(addr2);</span>
+<span class="nc" id="L1331">        ensemble.add(addr7);</span>
+<span class="nc" id="L1332">        ensemble.add(addr8);</span>
+        /*
+         * writeset of addr2, addr7 and addr8 just meets soft.
+         */
+<span class="nc" id="L1336">        assertEquals(&quot;PlacementPolicyAdherence&quot;, PlacementPolicyAdherence.MEETS_SOFT,</span>
+<span class="nc" id="L1337">                zepp.isEnsembleAdheringToPlacementPolicy(ensemble, 3, 2));</span>
+<span class="nc" id="L1338">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

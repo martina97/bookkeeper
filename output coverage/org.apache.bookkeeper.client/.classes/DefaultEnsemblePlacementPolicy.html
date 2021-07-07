@@ -1,0 +1,309 @@
+
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html id="htmlId">
+<head>
+  <title>Coverage Report :: DefaultEnsemblePlacementPolicy</title>
+  <style type="text/css">
+    @import "../../.css/coverage.css";
+  </style>
+</head>
+
+<body>
+<div class="header"></div>
+
+<div class="content">
+<div class="breadCrumbs">
+    [ <a href="../../index.html">all classes</a> ]
+    [ <a href="../index.html">org.apache.bookkeeper.client</a> ]
+</div>
+
+<h1>Coverage Summary for Class: DefaultEnsemblePlacementPolicy (org.apache.bookkeeper.client)</h1>
+
+<table class="coverageStats">
+<tr>
+  <th class="name">Class</th>
+<th class="coverageStat 
+">
+  Class, %
+</th>
+<th class="coverageStat 
+">
+  Method, %
+</th>
+<th class="coverageStat 
+">
+  Line, %
+</th>
+</tr>
+<tr>
+  <td class="name">DefaultEnsemblePlacementPolicy</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 1)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 12)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 82)
+  </span>
+</td>
+</tr>
+
+</table>
+
+<br/>
+<br/>
+
+
+<div class="sourceCode"><i>1</i>&nbsp;/*
+<i>2</i>&nbsp; * Licensed to the Apache Software Foundation (ASF) under one
+<i>3</i>&nbsp; * or more contributor license agreements.  See the NOTICE file
+<i>4</i>&nbsp; * distributed with this work for additional information
+<i>5</i>&nbsp; * regarding copyright ownership.  The ASF licenses this file
+<i>6</i>&nbsp; * to you under the Apache License, Version 2.0 (the
+<i>7</i>&nbsp; * &quot;License&quot;); you may not use this file except in compliance
+<i>8</i>&nbsp; * with the License.  You may obtain a copy of the License at
+<i>9</i>&nbsp; *
+<i>10</i>&nbsp; *     http://www.apache.org/licenses/LICENSE-2.0
+<i>11</i>&nbsp; *
+<i>12</i>&nbsp; * Unless required by applicable law or agreed to in writing, software
+<i>13</i>&nbsp; * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+<i>14</i>&nbsp; * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+<i>15</i>&nbsp; * See the License for the specific language governing permissions and
+<i>16</i>&nbsp; * limitations under the License.
+<i>17</i>&nbsp; */
+<i>18</i>&nbsp;package org.apache.bookkeeper.client;
+<i>19</i>&nbsp;
+<i>20</i>&nbsp;import io.netty.util.HashedWheelTimer;
+<i>21</i>&nbsp;
+<i>22</i>&nbsp;import java.util.ArrayList;
+<i>23</i>&nbsp;import java.util.Collection;
+<i>24</i>&nbsp;import java.util.Collections;
+<i>25</i>&nbsp;import java.util.HashMap;
+<i>26</i>&nbsp;import java.util.HashSet;
+<i>27</i>&nbsp;import java.util.List;
+<i>28</i>&nbsp;import java.util.Map;
+<i>29</i>&nbsp;import java.util.Optional;
+<i>30</i>&nbsp;import java.util.Set;
+<i>31</i>&nbsp;import java.util.concurrent.locks.ReentrantReadWriteLock;
+<i>32</i>&nbsp;
+<i>33</i>&nbsp;import org.apache.bookkeeper.client.BKException.BKNotEnoughBookiesException;
+<i>34</i>&nbsp;import org.apache.bookkeeper.client.BookieInfoReader.BookieInfo;
+<i>35</i>&nbsp;import org.apache.bookkeeper.client.WeightedRandomSelection.WeightedObject;
+<i>36</i>&nbsp;import org.apache.bookkeeper.conf.ClientConfiguration;
+<i>37</i>&nbsp;import org.apache.bookkeeper.feature.FeatureProvider;
+<i>38</i>&nbsp;import org.apache.bookkeeper.net.BookieSocketAddress;
+<i>39</i>&nbsp;import org.apache.bookkeeper.net.DNSToSwitchMapping;
+<i>40</i>&nbsp;import org.apache.bookkeeper.stats.StatsLogger;
+<i>41</i>&nbsp;import org.apache.commons.collections4.CollectionUtils;
+<i>42</i>&nbsp;import org.slf4j.Logger;
+<i>43</i>&nbsp;import org.slf4j.LoggerFactory;
+<i>44</i>&nbsp;
+<i>45</i>&nbsp;/**
+<i>46</i>&nbsp; * Default Ensemble Placement Policy, which picks bookies randomly.
+<i>47</i>&nbsp; *
+<i>48</i>&nbsp; * @see EnsemblePlacementPolicy
+<i>49</i>&nbsp; */
+<i>50</i>&nbsp;public class DefaultEnsemblePlacementPolicy implements EnsemblePlacementPolicy {
+<b class="nc"><i>51</i>&nbsp;    static final Logger LOG = LoggerFactory.getLogger(DefaultEnsemblePlacementPolicy.class);</b>
+<b class="nc"><i>52</i>&nbsp;    static final Set&lt;BookieSocketAddress&gt; EMPTY_SET = new HashSet&lt;BookieSocketAddress&gt;();</b>
+<i>53</i>&nbsp;
+<i>54</i>&nbsp;    private boolean isWeighted;
+<i>55</i>&nbsp;    private int maxWeightMultiple;
+<b class="nc"><i>56</i>&nbsp;    private Set&lt;BookieSocketAddress&gt; knownBookies = new HashSet&lt;BookieSocketAddress&gt;();</b>
+<i>57</i>&nbsp;    private Map&lt;BookieSocketAddress, WeightedObject&gt; bookieInfoMap;
+<i>58</i>&nbsp;    private WeightedRandomSelection&lt;BookieSocketAddress&gt; weightedSelection;
+<i>59</i>&nbsp;    private final ReentrantReadWriteLock rwLock;
+<i>60</i>&nbsp;
+<b class="nc"><i>61</i>&nbsp;    DefaultEnsemblePlacementPolicy() {</b>
+<b class="nc"><i>62</i>&nbsp;        bookieInfoMap = new HashMap&lt;BookieSocketAddress, WeightedObject&gt;();</b>
+<b class="nc"><i>63</i>&nbsp;        rwLock = new ReentrantReadWriteLock();</b>
+<b class="nc"><i>64</i>&nbsp;    }</b>
+<i>65</i>&nbsp;
+<i>66</i>&nbsp;    @Override
+<i>67</i>&nbsp;    public PlacementResult&lt;List&lt;BookieSocketAddress&gt;&gt; newEnsemble(int ensembleSize, int quorumSize, int ackQuorumSize,
+<i>68</i>&nbsp;            Map&lt;String, byte[]&gt; customMetadata, Set&lt;BookieSocketAddress&gt; excludeBookies)
+<i>69</i>&nbsp;            throws BKNotEnoughBookiesException {
+<b class="nc"><i>70</i>&nbsp;        ArrayList&lt;BookieSocketAddress&gt; newBookies = new ArrayList&lt;BookieSocketAddress&gt;(ensembleSize);</b>
+<b class="nc"><i>71</i>&nbsp;        if (ensembleSize &lt;= 0) {</b>
+<b class="nc"><i>72</i>&nbsp;            return PlacementResult.of(newBookies, PlacementPolicyAdherence.FAIL);</b>
+<i>73</i>&nbsp;        }
+<i>74</i>&nbsp;        List&lt;BookieSocketAddress&gt; allBookies;
+<b class="nc"><i>75</i>&nbsp;        rwLock.readLock().lock();</b>
+<i>76</i>&nbsp;        try {
+<b class="nc"><i>77</i>&nbsp;            allBookies = new ArrayList&lt;BookieSocketAddress&gt;(knownBookies);</b>
+<i>78</i>&nbsp;        } finally {
+<b class="nc"><i>79</i>&nbsp;            rwLock.readLock().unlock();</b>
+<i>80</i>&nbsp;        }
+<i>81</i>&nbsp;
+<b class="nc"><i>82</i>&nbsp;        if (isWeighted) {</b>
+<i>83</i>&nbsp;            // hold the readlock while selecting bookies. We don&#39;t want the list of bookies
+<i>84</i>&nbsp;            // changing while we are creating the ensemble
+<b class="nc"><i>85</i>&nbsp;            rwLock.readLock().lock();</b>
+<i>86</i>&nbsp;            try {
+<b class="nc"><i>87</i>&nbsp;                if (CollectionUtils.subtract(allBookies, excludeBookies).size() &lt; ensembleSize) {</b>
+<b class="nc"><i>88</i>&nbsp;                    throw new BKNotEnoughBookiesException();</b>
+<i>89</i>&nbsp;                }
+<b class="nc"><i>90</i>&nbsp;                while (ensembleSize &gt; 0) {</b>
+<b class="nc"><i>91</i>&nbsp;                    BookieSocketAddress b = weightedSelection.getNextRandom();</b>
+<b class="nc"><i>92</i>&nbsp;                    if (newBookies.contains(b) || excludeBookies.contains(b)) {</b>
+<b class="nc"><i>93</i>&nbsp;                        continue;</b>
+<i>94</i>&nbsp;                    }
+<b class="nc"><i>95</i>&nbsp;                    newBookies.add(b);</b>
+<b class="nc"><i>96</i>&nbsp;                    --ensembleSize;</b>
+<b class="nc"><i>97</i>&nbsp;                    if (ensembleSize == 0) {</b>
+<b class="nc"><i>98</i>&nbsp;                        return PlacementResult.of(newBookies,</b>
+<b class="nc"><i>99</i>&nbsp;                                isEnsembleAdheringToPlacementPolicy(newBookies, quorumSize, ackQuorumSize));</b>
+<i>100</i>&nbsp;                    }
+<b class="nc"><i>101</i>&nbsp;                }</b>
+<i>102</i>&nbsp;            } finally {
+<b class="nc"><i>103</i>&nbsp;                rwLock.readLock().unlock();</b>
+<b class="nc"><i>104</i>&nbsp;            }</b>
+<i>105</i>&nbsp;        } else {
+<b class="nc"><i>106</i>&nbsp;            Collections.shuffle(allBookies);</b>
+<b class="nc"><i>107</i>&nbsp;            for (BookieSocketAddress bookie : allBookies) {</b>
+<b class="nc"><i>108</i>&nbsp;                if (excludeBookies.contains(bookie)) {</b>
+<b class="nc"><i>109</i>&nbsp;                    continue;</b>
+<i>110</i>&nbsp;                }
+<b class="nc"><i>111</i>&nbsp;                newBookies.add(bookie);</b>
+<b class="nc"><i>112</i>&nbsp;                --ensembleSize;</b>
+<b class="nc"><i>113</i>&nbsp;                if (ensembleSize == 0) {</b>
+<b class="nc"><i>114</i>&nbsp;                    return PlacementResult.of(newBookies,</b>
+<b class="nc"><i>115</i>&nbsp;                            isEnsembleAdheringToPlacementPolicy(newBookies, quorumSize, ackQuorumSize));</b>
+<i>116</i>&nbsp;                }
+<b class="nc"><i>117</i>&nbsp;            }</b>
+<i>118</i>&nbsp;        }
+<b class="nc"><i>119</i>&nbsp;        throw new BKNotEnoughBookiesException();</b>
+<i>120</i>&nbsp;    }
+<i>121</i>&nbsp;
+<i>122</i>&nbsp;    @Override
+<i>123</i>&nbsp;    public PlacementResult&lt;BookieSocketAddress&gt; replaceBookie(int ensembleSize, int writeQuorumSize, int ackQuorumSize,
+<i>124</i>&nbsp;            Map&lt;String, byte[]&gt; customMetadata, List&lt;BookieSocketAddress&gt; currentEnsemble,
+<i>125</i>&nbsp;            BookieSocketAddress bookieToReplace, Set&lt;BookieSocketAddress&gt; excludeBookies)
+<i>126</i>&nbsp;            throws BKNotEnoughBookiesException {
+<b class="nc"><i>127</i>&nbsp;        excludeBookies.addAll(currentEnsemble);</b>
+<b class="nc"><i>128</i>&nbsp;        List&lt;BookieSocketAddress&gt; addresses = newEnsemble(1, 1, 1, customMetadata, excludeBookies).getResult();</b>
+<i>129</i>&nbsp;
+<b class="nc"><i>130</i>&nbsp;        BookieSocketAddress candidateAddr = addresses.get(0);</b>
+<b class="nc"><i>131</i>&nbsp;        List&lt;BookieSocketAddress&gt; newEnsemble = new ArrayList&lt;BookieSocketAddress&gt;(currentEnsemble);</b>
+<b class="nc"><i>132</i>&nbsp;        newEnsemble.set(currentEnsemble.indexOf(bookieToReplace), candidateAddr);</b>
+<b class="nc"><i>133</i>&nbsp;        return PlacementResult.of(candidateAddr,</b>
+<b class="nc"><i>134</i>&nbsp;                isEnsembleAdheringToPlacementPolicy(newEnsemble, writeQuorumSize, ackQuorumSize));</b>
+<i>135</i>&nbsp;    }
+<i>136</i>&nbsp;
+<i>137</i>&nbsp;    @Override
+<i>138</i>&nbsp;    public Set&lt;BookieSocketAddress&gt; onClusterChanged(Set&lt;BookieSocketAddress&gt; writableBookies,
+<i>139</i>&nbsp;            Set&lt;BookieSocketAddress&gt; readOnlyBookies) {
+<b class="nc"><i>140</i>&nbsp;        rwLock.writeLock().lock();</b>
+<i>141</i>&nbsp;        try {
+<i>142</i>&nbsp;            HashSet&lt;BookieSocketAddress&gt; deadBookies;
+<b class="nc"><i>143</i>&nbsp;            deadBookies = new HashSet&lt;BookieSocketAddress&gt;(knownBookies);</b>
+<b class="nc"><i>144</i>&nbsp;            deadBookies.removeAll(writableBookies);</b>
+<i>145</i>&nbsp;            // readonly bookies should not be treated as dead bookies
+<b class="nc"><i>146</i>&nbsp;            deadBookies.removeAll(readOnlyBookies);</b>
+<b class="nc"><i>147</i>&nbsp;            if (this.isWeighted) {</b>
+<b class="nc"><i>148</i>&nbsp;                for (BookieSocketAddress b : deadBookies) {</b>
+<b class="nc"><i>149</i>&nbsp;                    this.bookieInfoMap.remove(b);</b>
+<b class="nc"><i>150</i>&nbsp;                }</b>
+<i>151</i>&nbsp;                @SuppressWarnings(&quot;unchecked&quot;)
+<b class="nc"><i>152</i>&nbsp;                Collection&lt;BookieSocketAddress&gt; newBookies = CollectionUtils.subtract(writableBookies, knownBookies);</b>
+<b class="nc"><i>153</i>&nbsp;                for (BookieSocketAddress b : newBookies) {</b>
+<b class="nc"><i>154</i>&nbsp;                    this.bookieInfoMap.put(b, new BookieInfo());</b>
+<b class="nc"><i>155</i>&nbsp;                }</b>
+<b class="nc"><i>156</i>&nbsp;                if (deadBookies.size() &gt; 0 || newBookies.size() &gt; 0) {</b>
+<b class="nc"><i>157</i>&nbsp;                    this.weightedSelection.updateMap(this.bookieInfoMap);</b>
+<i>158</i>&nbsp;                }
+<i>159</i>&nbsp;            }
+<b class="nc"><i>160</i>&nbsp;            knownBookies = writableBookies;</b>
+<b class="nc"><i>161</i>&nbsp;            return deadBookies;</b>
+<i>162</i>&nbsp;        } finally {
+<b class="nc"><i>163</i>&nbsp;            rwLock.writeLock().unlock();</b>
+<i>164</i>&nbsp;        }
+<i>165</i>&nbsp;    }
+<i>166</i>&nbsp;
+<i>167</i>&nbsp;    @Override
+<i>168</i>&nbsp;    public void registerSlowBookie(BookieSocketAddress bookieSocketAddress, long entryId) {
+<b class="nc"><i>169</i>&nbsp;        return;</b>
+<i>170</i>&nbsp;    }
+<i>171</i>&nbsp;
+<i>172</i>&nbsp;    @Override
+<i>173</i>&nbsp;    public DistributionSchedule.WriteSet reorderReadSequence(
+<i>174</i>&nbsp;            List&lt;BookieSocketAddress&gt; ensemble,
+<i>175</i>&nbsp;            BookiesHealthInfo bookiesHealthInfo,
+<i>176</i>&nbsp;            DistributionSchedule.WriteSet writeSet) {
+<b class="nc"><i>177</i>&nbsp;        return writeSet;</b>
+<i>178</i>&nbsp;    }
+<i>179</i>&nbsp;
+<i>180</i>&nbsp;    @Override
+<i>181</i>&nbsp;    public DistributionSchedule.WriteSet reorderReadLACSequence(
+<i>182</i>&nbsp;            List&lt;BookieSocketAddress&gt; ensemble,
+<i>183</i>&nbsp;            BookiesHealthInfo bookiesHealthInfo,
+<i>184</i>&nbsp;            DistributionSchedule.WriteSet writeSet) {
+<b class="nc"><i>185</i>&nbsp;        writeSet.addMissingIndices(ensemble.size());</b>
+<b class="nc"><i>186</i>&nbsp;        return writeSet;</b>
+<i>187</i>&nbsp;    }
+<i>188</i>&nbsp;
+<i>189</i>&nbsp;    @Override
+<i>190</i>&nbsp;    public EnsemblePlacementPolicy initialize(ClientConfiguration conf,
+<i>191</i>&nbsp;                                              Optional&lt;DNSToSwitchMapping&gt; optionalDnsResolver,
+<i>192</i>&nbsp;                                              HashedWheelTimer timer,
+<i>193</i>&nbsp;                                              FeatureProvider featureProvider,
+<i>194</i>&nbsp;                                              StatsLogger statsLogger) {
+<b class="nc"><i>195</i>&nbsp;        this.isWeighted = conf.getDiskWeightBasedPlacementEnabled();</b>
+<b class="nc"><i>196</i>&nbsp;        if (this.isWeighted) {</b>
+<b class="nc"><i>197</i>&nbsp;            this.maxWeightMultiple = conf.getBookieMaxWeightMultipleForWeightBasedPlacement();</b>
+<b class="nc"><i>198</i>&nbsp;            this.weightedSelection = new WeightedRandomSelectionImpl&lt;BookieSocketAddress&gt;(this.maxWeightMultiple);</b>
+<i>199</i>&nbsp;        }
+<b class="nc"><i>200</i>&nbsp;        return this;</b>
+<i>201</i>&nbsp;    }
+<i>202</i>&nbsp;
+<i>203</i>&nbsp;    @Override
+<i>204</i>&nbsp;    public void updateBookieInfo(Map&lt;BookieSocketAddress, BookieInfo&gt; bookieInfoMap) {
+<b class="nc"><i>205</i>&nbsp;        rwLock.writeLock().lock();</b>
+<i>206</i>&nbsp;        try {
+<b class="nc"><i>207</i>&nbsp;            for (Map.Entry&lt;BookieSocketAddress, BookieInfo&gt; e : bookieInfoMap.entrySet()) {</b>
+<b class="nc"><i>208</i>&nbsp;                this.bookieInfoMap.put(e.getKey(), e.getValue());</b>
+<b class="nc"><i>209</i>&nbsp;            }</b>
+<b class="nc"><i>210</i>&nbsp;            this.weightedSelection.updateMap(this.bookieInfoMap);</b>
+<i>211</i>&nbsp;        } finally {
+<b class="nc"><i>212</i>&nbsp;            rwLock.writeLock().unlock();</b>
+<i>213</i>&nbsp;        }
+<b class="nc"><i>214</i>&nbsp;    }</b>
+<i>215</i>&nbsp;
+<i>216</i>&nbsp;    @Override
+<i>217</i>&nbsp;    public void uninitalize() {
+<i>218</i>&nbsp;        // do nothing
+<b class="nc"><i>219</i>&nbsp;    }</b>
+<i>220</i>&nbsp;
+<i>221</i>&nbsp;    @Override
+<i>222</i>&nbsp;    public PlacementPolicyAdherence isEnsembleAdheringToPlacementPolicy(List&lt;BookieSocketAddress&gt; ensembleList,
+<i>223</i>&nbsp;            int writeQuorumSize, int ackQuorumSize) {
+<b class="nc"><i>224</i>&nbsp;        return PlacementPolicyAdherence.MEETS_STRICT;</b>
+<i>225</i>&nbsp;    }
+<i>226</i>&nbsp;}
+</div>
+</div>
+
+<div class="footer">
+    
+    <div style="float:right;">generated on 2021-06-28 15:57</div>
+</div>
+</body>
+</html>

@@ -1,0 +1,426 @@
+
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html id="htmlId">
+<head>
+  <title>Coverage Report :: LedgerOpenOp</title>
+  <style type="text/css">
+    @import "../../.css/coverage.css";
+  </style>
+</head>
+
+<body>
+<div class="header"></div>
+
+<div class="content">
+<div class="breadCrumbs">
+    [ <a href="../../index.html">all classes</a> ]
+    [ <a href="../index.html">org.apache.bookkeeper.client</a> ]
+</div>
+
+<h1>Coverage Summary for Class: LedgerOpenOp (org.apache.bookkeeper.client)</h1>
+
+<table class="coverageStats">
+
+<tr>
+  <th class="name">Class</th>
+<th class="coverageStat 
+">
+  Method, %
+</th>
+<th class="coverageStat 
+">
+  Line, %
+</th>
+</tr>
+<tr>
+  <td class="name">LedgerOpenOp</td>
+<td class="coverageStat">
+  <span class="percent">
+    87,5%
+  </span>
+  <span class="absValue">
+    (7/ 8)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    62,2%
+  </span>
+  <span class="absValue">
+    (46/ 74)
+  </span>
+</td>
+</tr>
+  <tr>
+    <td class="name">LedgerOpenOp$1</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 3)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 8)
+  </span>
+</td>
+  </tr>
+  <tr>
+    <td class="name">LedgerOpenOp$2</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 2)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 6)
+  </span>
+</td>
+  </tr>
+  <tr>
+    <td class="name">LedgerOpenOp$OpenBuilderImpl</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 3)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 23)
+  </span>
+</td>
+  </tr>
+<tr>
+  <td class="name"><strong>total</strong></td>
+<td class="coverageStat">
+  <span class="percent">
+    43,8%
+  </span>
+  <span class="absValue">
+    (7/ 16)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    41,4%
+  </span>
+  <span class="absValue">
+    (46/ 111)
+  </span>
+</td>
+</tr>
+</table>
+
+<br/>
+<br/>
+
+
+<div class="sourceCode"><i>1</i>&nbsp;/*
+<i>2</i>&nbsp; *
+<i>3</i>&nbsp; * Licensed to the Apache Software Foundation (ASF) under one
+<i>4</i>&nbsp; * or more contributor license agreements.  See the NOTICE file
+<i>5</i>&nbsp; * distributed with this work for additional information
+<i>6</i>&nbsp; * regarding copyright ownership.  The ASF licenses this file
+<i>7</i>&nbsp; * to you under the Apache License, Version 2.0 (the
+<i>8</i>&nbsp; * &quot;License&quot;); you may not use this file except in compliance
+<i>9</i>&nbsp; * with the License.  You may obtain a copy of the License at
+<i>10</i>&nbsp; *
+<i>11</i>&nbsp; *   http://www.apache.org/licenses/LICENSE-2.0
+<i>12</i>&nbsp; *
+<i>13</i>&nbsp; * Unless required by applicable law or agreed to in writing,
+<i>14</i>&nbsp; * software distributed under the License is distributed on an
+<i>15</i>&nbsp; * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+<i>16</i>&nbsp; * KIND, either express or implied.  See the License for the
+<i>17</i>&nbsp; * specific language governing permissions and limitations
+<i>18</i>&nbsp; * under the License.
+<i>19</i>&nbsp; *
+<i>20</i>&nbsp; */
+<i>21</i>&nbsp;
+<i>22</i>&nbsp;package org.apache.bookkeeper.client;
+<i>23</i>&nbsp;
+<i>24</i>&nbsp;import static org.apache.bookkeeper.client.BookKeeper.DigestType.fromApiDigestType;
+<i>25</i>&nbsp;
+<i>26</i>&nbsp;import java.security.GeneralSecurityException;
+<i>27</i>&nbsp;import java.util.Arrays;
+<i>28</i>&nbsp;import java.util.concurrent.CompletableFuture;
+<i>29</i>&nbsp;import java.util.concurrent.TimeUnit;
+<i>30</i>&nbsp;import java.util.concurrent.locks.ReentrantReadWriteLock;
+<i>31</i>&nbsp;
+<i>32</i>&nbsp;import org.apache.bookkeeper.client.AsyncCallback.OpenCallback;
+<i>33</i>&nbsp;import org.apache.bookkeeper.client.AsyncCallback.ReadLastConfirmedCallback;
+<i>34</i>&nbsp;import org.apache.bookkeeper.client.BookKeeper.DigestType;
+<i>35</i>&nbsp;import org.apache.bookkeeper.client.SyncCallbackUtils.SyncOpenCallback;
+<i>36</i>&nbsp;import org.apache.bookkeeper.client.api.BKException.Code;
+<i>37</i>&nbsp;import org.apache.bookkeeper.client.api.LedgerMetadata;
+<i>38</i>&nbsp;import org.apache.bookkeeper.client.api.ReadHandle;
+<i>39</i>&nbsp;import org.apache.bookkeeper.client.impl.OpenBuilderBase;
+<i>40</i>&nbsp;import org.apache.bookkeeper.stats.OpStatsLogger;
+<i>41</i>&nbsp;import org.apache.bookkeeper.util.MathUtils;
+<i>42</i>&nbsp;import org.apache.bookkeeper.util.OrderedGenericCallback;
+<i>43</i>&nbsp;import org.apache.bookkeeper.versioning.Versioned;
+<i>44</i>&nbsp;import org.slf4j.Logger;
+<i>45</i>&nbsp;import org.slf4j.LoggerFactory;
+<i>46</i>&nbsp;
+<i>47</i>&nbsp;/**
+<i>48</i>&nbsp; * Encapsulates the ledger open operation.
+<i>49</i>&nbsp; *
+<i>50</i>&nbsp; */
+<i>51</i>&nbsp;class LedgerOpenOp {
+<b class="fc"><i>52</i>&nbsp;    static final Logger LOG = LoggerFactory.getLogger(LedgerOpenOp.class);</b>
+<i>53</i>&nbsp;
+<i>54</i>&nbsp;    final BookKeeper bk;
+<i>55</i>&nbsp;    final long ledgerId;
+<i>56</i>&nbsp;    final OpenCallback cb;
+<i>57</i>&nbsp;    final Object ctx;
+<i>58</i>&nbsp;    ReadOnlyLedgerHandle lh;
+<i>59</i>&nbsp;    final byte[] passwd;
+<b class="fc"><i>60</i>&nbsp;    boolean doRecovery = true;</b>
+<b class="fc"><i>61</i>&nbsp;    boolean administrativeOpen = false;</b>
+<i>62</i>&nbsp;    long startTime;
+<i>63</i>&nbsp;    final OpStatsLogger openOpLogger;
+<i>64</i>&nbsp;
+<i>65</i>&nbsp;    final DigestType suggestedDigestType;
+<i>66</i>&nbsp;    final boolean enableDigestAutodetection;
+<i>67</i>&nbsp;
+<i>68</i>&nbsp;    /**
+<i>69</i>&nbsp;     * Constructor.
+<i>70</i>&nbsp;     *
+<i>71</i>&nbsp;     * @param bk
+<i>72</i>&nbsp;     * @param ledgerId
+<i>73</i>&nbsp;     * @param digestType. Ignored if conf.getEnableDigestTypeAutodetection() is true
+<i>74</i>&nbsp;     * @param passwd
+<i>75</i>&nbsp;     * @param cb
+<i>76</i>&nbsp;     * @param ctx
+<i>77</i>&nbsp;     */
+<i>78</i>&nbsp;    public LedgerOpenOp(BookKeeper bk, BookKeeperClientStats clientStats,
+<i>79</i>&nbsp;                        long ledgerId, DigestType digestType, byte[] passwd,
+<b class="fc"><i>80</i>&nbsp;                        OpenCallback cb, Object ctx) {</b>
+<b class="fc"><i>81</i>&nbsp;        this.bk = bk;</b>
+<b class="fc"><i>82</i>&nbsp;        this.ledgerId = ledgerId;</b>
+<b class="fc"><i>83</i>&nbsp;        this.passwd = passwd;</b>
+<b class="fc"><i>84</i>&nbsp;        this.cb = cb;</b>
+<b class="fc"><i>85</i>&nbsp;        this.ctx = ctx;</b>
+<b class="fc"><i>86</i>&nbsp;        this.enableDigestAutodetection = bk.getConf().getEnableDigestTypeAutodetection();</b>
+<b class="fc"><i>87</i>&nbsp;        this.suggestedDigestType = digestType;</b>
+<b class="fc"><i>88</i>&nbsp;        this.openOpLogger = clientStats.getOpenOpLogger();</b>
+<b class="fc"><i>89</i>&nbsp;    }</b>
+<i>90</i>&nbsp;
+<i>91</i>&nbsp;    public LedgerOpenOp(BookKeeper bk, BookKeeperClientStats clientStats,
+<b class="nc"><i>92</i>&nbsp;                        long ledgerId, OpenCallback cb, Object ctx) {</b>
+<b class="nc"><i>93</i>&nbsp;        this.bk = bk;</b>
+<b class="nc"><i>94</i>&nbsp;        this.ledgerId = ledgerId;</b>
+<b class="nc"><i>95</i>&nbsp;        this.cb = cb;</b>
+<b class="nc"><i>96</i>&nbsp;        this.ctx = ctx;</b>
+<i>97</i>&nbsp;
+<b class="nc"><i>98</i>&nbsp;        this.passwd = bk.getConf().getBookieRecoveryPasswd();</b>
+<b class="nc"><i>99</i>&nbsp;        this.administrativeOpen = true;</b>
+<b class="nc"><i>100</i>&nbsp;        this.enableDigestAutodetection = false;</b>
+<b class="nc"><i>101</i>&nbsp;        this.suggestedDigestType = bk.conf.getBookieRecoveryDigestType();</b>
+<b class="nc"><i>102</i>&nbsp;        this.openOpLogger = clientStats.getOpenOpLogger();</b>
+<b class="nc"><i>103</i>&nbsp;    }</b>
+<i>104</i>&nbsp;
+<i>105</i>&nbsp;    /**
+<i>106</i>&nbsp;     * Inititates the ledger open operation.
+<i>107</i>&nbsp;     */
+<i>108</i>&nbsp;    public void initiate() {
+<b class="fc"><i>109</i>&nbsp;        startTime = MathUtils.nowInNano();</b>
+<i>110</i>&nbsp;
+<i>111</i>&nbsp;        /**
+<i>112</i>&nbsp;         * Asynchronously read the ledger metadata node.
+<i>113</i>&nbsp;         */
+<b class="fc"><i>114</i>&nbsp;        bk.getLedgerManager().readLedgerMetadata(ledgerId)</b>
+<b class="fc"><i>115</i>&nbsp;            .whenComplete((metadata, exception) -&gt; {</b>
+<b class="fc"><i>116</i>&nbsp;                    if (exception != null) {</b>
+<b class="fc"><i>117</i>&nbsp;                        openComplete(BKException.getExceptionCode(exception), null);</b>
+<i>118</i>&nbsp;                    } else {
+<b class="fc"><i>119</i>&nbsp;                        openWithMetadata(metadata);</b>
+<i>120</i>&nbsp;                    }
+<b class="fc"><i>121</i>&nbsp;                });</b>
+<b class="fc"><i>122</i>&nbsp;    }</b>
+<i>123</i>&nbsp;
+<i>124</i>&nbsp;    /**
+<i>125</i>&nbsp;     * Inititates the ledger open operation without recovery.
+<i>126</i>&nbsp;     */
+<i>127</i>&nbsp;    public void initiateWithoutRecovery() {
+<b class="nc"><i>128</i>&nbsp;        this.doRecovery = false;</b>
+<b class="nc"><i>129</i>&nbsp;        initiate();</b>
+<b class="nc"><i>130</i>&nbsp;    }</b>
+<i>131</i>&nbsp;
+<i>132</i>&nbsp;    private void openWithMetadata(Versioned&lt;LedgerMetadata&gt; versionedMetadata) {
+<b class="fc"><i>133</i>&nbsp;        LedgerMetadata metadata = versionedMetadata.getValue();</b>
+<i>134</i>&nbsp;
+<i>135</i>&nbsp;        final byte[] passwd;
+<i>136</i>&nbsp;
+<i>137</i>&nbsp;        // we should use digest type from metadata *ONLY* when:
+<i>138</i>&nbsp;        // 1) digest type is stored in metadata
+<i>139</i>&nbsp;        // 2) `autodetection` is enabled
+<i>140</i>&nbsp;        DigestType digestType;
+<b class="pc"><i>141</i>&nbsp;        if (enableDigestAutodetection &amp;&amp; metadata.hasPassword()) {</b>
+<b class="fc"><i>142</i>&nbsp;            digestType = fromApiDigestType(metadata.getDigestType());</b>
+<i>143</i>&nbsp;        } else {
+<b class="fc"><i>144</i>&nbsp;            digestType = suggestedDigestType;</b>
+<i>145</i>&nbsp;        }
+<i>146</i>&nbsp;
+<i>147</i>&nbsp;        /* For an administrative open, the default passwords
+<i>148</i>&nbsp;         * are read from the configuration, but if the metadata
+<i>149</i>&nbsp;         * already contains passwords, use these instead. */
+<b class="pc"><i>150</i>&nbsp;        if (administrativeOpen &amp;&amp; metadata.hasPassword()) {</b>
+<b class="nc"><i>151</i>&nbsp;            passwd = metadata.getPassword();</b>
+<b class="nc"><i>152</i>&nbsp;            digestType = fromApiDigestType(metadata.getDigestType());</b>
+<i>153</i>&nbsp;        } else {
+<b class="fc"><i>154</i>&nbsp;            passwd = this.passwd;</b>
+<i>155</i>&nbsp;
+<b class="pc"><i>156</i>&nbsp;            if (metadata.hasPassword()) {</b>
+<b class="fc"><i>157</i>&nbsp;                if (!Arrays.equals(passwd, metadata.getPassword())) {</b>
+<b class="fc"><i>158</i>&nbsp;                    LOG.error(&quot;Provided passwd does not match that in metadata&quot;);</b>
+<b class="fc"><i>159</i>&nbsp;                    openComplete(BKException.Code.UnauthorizedAccessException, null);</b>
+<b class="fc"><i>160</i>&nbsp;                    return;</b>
+<i>161</i>&nbsp;                }
+<i>162</i>&nbsp;                // if `digest auto detection` is enabled, ignore the suggested digest type, this allows digest type
+<i>163</i>&nbsp;                // changes. e.g. moving from `crc32` to `crc32c`.
+<b class="pc"><i>164</i>&nbsp;                if (suggestedDigestType != fromApiDigestType(metadata.getDigestType()) &amp;&amp; !enableDigestAutodetection) {</b>
+<b class="fc"><i>165</i>&nbsp;                    LOG.error(&quot;Provided digest does not match that in metadata&quot;);</b>
+<b class="fc"><i>166</i>&nbsp;                    openComplete(BKException.Code.DigestMatchException, null);</b>
+<b class="fc"><i>167</i>&nbsp;                    return;</b>
+<i>168</i>&nbsp;                }
+<i>169</i>&nbsp;            }
+<i>170</i>&nbsp;        }
+<i>171</i>&nbsp;
+<i>172</i>&nbsp;        // get the ledger metadata back
+<i>173</i>&nbsp;        try {
+<b class="pc"><i>174</i>&nbsp;            lh = new ReadOnlyLedgerHandle(bk.getClientCtx(), ledgerId, versionedMetadata, digestType,</b>
+<i>175</i>&nbsp;                                          passwd, !doRecovery);
+<b class="nc"><i>176</i>&nbsp;        } catch (GeneralSecurityException e) {</b>
+<b class="nc"><i>177</i>&nbsp;            LOG.error(&quot;Security exception while opening ledger: &quot; + ledgerId, e);</b>
+<b class="nc"><i>178</i>&nbsp;            openComplete(BKException.Code.DigestNotInitializedException, null);</b>
+<b class="nc"><i>179</i>&nbsp;            return;</b>
+<b class="nc"><i>180</i>&nbsp;        } catch (NumberFormatException e) {</b>
+<b class="nc"><i>181</i>&nbsp;            LOG.error(&quot;Incorrectly entered parameter throttle: &quot; + bk.getConf().getThrottleValue(), e);</b>
+<b class="nc"><i>182</i>&nbsp;            openComplete(BKException.Code.IncorrectParameterException, null);</b>
+<b class="nc"><i>183</i>&nbsp;            return;</b>
+<b class="fc"><i>184</i>&nbsp;        }</b>
+<i>185</i>&nbsp;
+<b class="pc"><i>186</i>&nbsp;        if (metadata.isClosed()) {</b>
+<i>187</i>&nbsp;            // Ledger was closed properly
+<b class="fc"><i>188</i>&nbsp;            openComplete(BKException.Code.OK, lh);</b>
+<b class="fc"><i>189</i>&nbsp;            return;</b>
+<i>190</i>&nbsp;        }
+<i>191</i>&nbsp;
+<b class="nc"><i>192</i>&nbsp;        if (doRecovery) {</b>
+<b class="nc"><i>193</i>&nbsp;            lh.recover(new OrderedGenericCallback&lt;Void&gt;(bk.getMainWorkerPool(), ledgerId) {</b>
+<i>194</i>&nbsp;                @Override
+<i>195</i>&nbsp;                public void safeOperationComplete(int rc, Void result) {
+<b class="nc"><i>196</i>&nbsp;                    if (rc == BKException.Code.OK) {</b>
+<b class="nc"><i>197</i>&nbsp;                        openComplete(BKException.Code.OK, lh);</b>
+<b class="nc"><i>198</i>&nbsp;                    } else if (rc == BKException.Code.UnauthorizedAccessException) {</b>
+<b class="nc"><i>199</i>&nbsp;                        openComplete(BKException.Code.UnauthorizedAccessException, null);</b>
+<i>200</i>&nbsp;                    } else {
+<b class="nc"><i>201</i>&nbsp;                        openComplete(bk.getReturnRc(BKException.Code.LedgerRecoveryException), null);</b>
+<i>202</i>&nbsp;                    }
+<b class="nc"><i>203</i>&nbsp;                }</b>
+<i>204</i>&nbsp;                @Override
+<i>205</i>&nbsp;                public String toString() {
+<b class="nc"><i>206</i>&nbsp;                    return String.format(&quot;Recover(%d)&quot;, ledgerId);</b>
+<i>207</i>&nbsp;                }
+<i>208</i>&nbsp;            });
+<i>209</i>&nbsp;        } else {
+<b class="nc"><i>210</i>&nbsp;            lh.asyncReadLastConfirmed(new ReadLastConfirmedCallback() {</b>
+<i>211</i>&nbsp;                @Override
+<i>212</i>&nbsp;                public void readLastConfirmedComplete(int rc,
+<i>213</i>&nbsp;                        long lastConfirmed, Object ctx) {
+<b class="nc"><i>214</i>&nbsp;                    if (rc != BKException.Code.OK) {</b>
+<b class="nc"><i>215</i>&nbsp;                        openComplete(bk.getReturnRc(BKException.Code.ReadException), null);</b>
+<i>216</i>&nbsp;                    } else {
+<b class="nc"><i>217</i>&nbsp;                        lh.lastAddConfirmed = lh.lastAddPushed = lastConfirmed;</b>
+<b class="nc"><i>218</i>&nbsp;                        openComplete(BKException.Code.OK, lh);</b>
+<i>219</i>&nbsp;                    }
+<b class="nc"><i>220</i>&nbsp;                }</b>
+<i>221</i>&nbsp;            }, null);
+<i>222</i>&nbsp;
+<i>223</i>&nbsp;        }
+<b class="nc"><i>224</i>&nbsp;    }</b>
+<i>225</i>&nbsp;
+<i>226</i>&nbsp;    void openComplete(int rc, LedgerHandle lh) {
+<b class="fc"><i>227</i>&nbsp;        if (BKException.Code.OK != rc) {</b>
+<b class="fc"><i>228</i>&nbsp;            openOpLogger.registerFailedEvent(MathUtils.elapsedNanos(startTime), TimeUnit.NANOSECONDS);</b>
+<i>229</i>&nbsp;        } else {
+<b class="fc"><i>230</i>&nbsp;            openOpLogger.registerSuccessfulEvent(MathUtils.elapsedNanos(startTime), TimeUnit.NANOSECONDS);</b>
+<i>231</i>&nbsp;        }
+<b class="fc"><i>232</i>&nbsp;        cb.openComplete(rc, lh, ctx);</b>
+<b class="fc"><i>233</i>&nbsp;    }</b>
+<i>234</i>&nbsp;
+<i>235</i>&nbsp;    static final class OpenBuilderImpl extends OpenBuilderBase {
+<i>236</i>&nbsp;
+<i>237</i>&nbsp;        private final BookKeeper bk;
+<i>238</i>&nbsp;
+<b class="nc"><i>239</i>&nbsp;        OpenBuilderImpl(BookKeeper bookkeeper) {</b>
+<b class="nc"><i>240</i>&nbsp;            this.bk = bookkeeper;</b>
+<b class="nc"><i>241</i>&nbsp;        }</b>
+<i>242</i>&nbsp;
+<i>243</i>&nbsp;        @Override
+<i>244</i>&nbsp;        public CompletableFuture&lt;ReadHandle&gt; execute() {
+<b class="nc"><i>245</i>&nbsp;            CompletableFuture&lt;ReadHandle&gt; future = new CompletableFuture&lt;&gt;();</b>
+<b class="nc"><i>246</i>&nbsp;            SyncOpenCallback callback = new SyncOpenCallback(future);</b>
+<b class="nc"><i>247</i>&nbsp;            open(callback);</b>
+<b class="nc"><i>248</i>&nbsp;            return future;</b>
+<i>249</i>&nbsp;        }
+<i>250</i>&nbsp;
+<i>251</i>&nbsp;        private void open(OpenCallback cb) {
+<b class="nc"><i>252</i>&nbsp;            final int validateRc = validate();</b>
+<b class="nc"><i>253</i>&nbsp;            if (Code.OK != validateRc) {</b>
+<b class="nc"><i>254</i>&nbsp;                cb.openComplete(validateRc, null, null);</b>
+<b class="nc"><i>255</i>&nbsp;                return;</b>
+<i>256</i>&nbsp;            }
+<i>257</i>&nbsp;
+<b class="nc"><i>258</i>&nbsp;            LedgerOpenOp op = new LedgerOpenOp(bk, bk.getClientCtx().getClientStats(),</b>
+<b class="nc"><i>259</i>&nbsp;                                               ledgerId, fromApiDigestType(digestType),</b>
+<i>260</i>&nbsp;                                               password, cb, null);
+<b class="nc"><i>261</i>&nbsp;            ReentrantReadWriteLock closeLock = bk.getCloseLock();</b>
+<b class="nc"><i>262</i>&nbsp;            closeLock.readLock().lock();</b>
+<i>263</i>&nbsp;            try {
+<b class="nc"><i>264</i>&nbsp;                if (bk.isClosed()) {</b>
+<b class="nc"><i>265</i>&nbsp;                    cb.openComplete(BKException.Code.ClientClosedException, null, null);</b>
+<b class="nc"><i>266</i>&nbsp;                    return;</b>
+<i>267</i>&nbsp;                }
+<b class="nc"><i>268</i>&nbsp;                if (recovery) {</b>
+<b class="nc"><i>269</i>&nbsp;                    op.initiate();</b>
+<i>270</i>&nbsp;                } else {
+<b class="nc"><i>271</i>&nbsp;                    op.initiateWithoutRecovery();</b>
+<i>272</i>&nbsp;                }
+<i>273</i>&nbsp;            } finally {
+<b class="nc"><i>274</i>&nbsp;                closeLock.readLock().unlock();</b>
+<i>275</i>&nbsp;            }
+<b class="nc"><i>276</i>&nbsp;        }</b>
+<i>277</i>&nbsp;    }
+<i>278</i>&nbsp;
+<i>279</i>&nbsp;}
+</div>
+</div>
+
+<div class="footer">
+    
+    <div style="float:right;">generated on 2021-06-28 15:57</div>
+</div>
+</body>
+</html>

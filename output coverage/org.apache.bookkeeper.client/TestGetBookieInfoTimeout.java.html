@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TestGetBookieInfoTimeout.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">TestGetBookieInfoTimeout.java</span></div><h1>TestGetBookieInfoTimeout.java</h1><pre class="source lang-java linenums">package org.apache.bookkeeper.client;
+
+/*
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+
+import static org.junit.Assert.assertTrue;
+
+import io.netty.buffer.UnpooledByteBufAllocator;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.util.concurrent.DefaultThreadFactory;
+
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+
+import org.apache.bookkeeper.client.BKException.Code;
+import org.apache.bookkeeper.client.BookKeeper.DigestType;
+import org.apache.bookkeeper.client.BookieInfoReader.BookieInfo;
+import org.apache.bookkeeper.common.util.OrderedExecutor;
+import org.apache.bookkeeper.conf.ClientConfiguration;
+import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.proto.BookieClient;
+import org.apache.bookkeeper.proto.BookieClientImpl;
+import org.apache.bookkeeper.proto.BookkeeperInternalCallbacks.GetBookieInfoCallback;
+import org.apache.bookkeeper.proto.BookkeeperProtocol;
+import org.apache.bookkeeper.stats.NullStatsLogger;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * This unit test tests timeout of GetBookieInfo request.
+ *
+ */
+public class TestGetBookieInfoTimeout extends BookKeeperClusterTestCase {
+<span class="nc" id="L58">    private static final Logger LOG = LoggerFactory.getLogger(TestGetBookieInfoTimeout.class);</span>
+    DigestType digestType;
+    public EventLoopGroup eventLoopGroup;
+    public OrderedExecutor executor;
+    private ScheduledExecutorService scheduler;
+
+    public TestGetBookieInfoTimeout() {
+<span class="nc" id="L65">        super(10);</span>
+<span class="nc" id="L66">        this.digestType = DigestType.CRC32;</span>
+<span class="nc" id="L67">    }</span>
+
+    @Before
+    public void setUp() throws Exception {
+<span class="nc" id="L71">        super.setUp();</span>
+<span class="nc" id="L72">        eventLoopGroup = new NioEventLoopGroup();</span>
+
+<span class="nc" id="L74">        executor = OrderedExecutor.newBuilder()</span>
+<span class="nc" id="L75">                .name(&quot;BKClientOrderedSafeExecutor&quot;)</span>
+<span class="nc" id="L76">                .numThreads(2)</span>
+<span class="nc" id="L77">                .build();</span>
+<span class="nc" id="L78">        scheduler = Executors.newSingleThreadScheduledExecutor(</span>
+                new DefaultThreadFactory(&quot;BookKeeperClientScheduler&quot;));
+<span class="nc" id="L80">    }</span>
+
+    @After
+    public void tearDown() throws Exception {
+<span class="nc" id="L84">        scheduler.shutdown();</span>
+<span class="nc" id="L85">        eventLoopGroup.shutdownGracefully();</span>
+<span class="nc" id="L86">        executor.shutdown();</span>
+<span class="nc" id="L87">    }</span>
+
+    @Test
+    public void testGetBookieInfoTimeout() throws Exception {
+
+        // connect to the bookies and create a ledger
+<span class="nc" id="L93">        LedgerHandle writelh = bkc.createLedger(3, 3, digestType, &quot;testPasswd&quot;.getBytes());</span>
+<span class="nc" id="L94">        String tmp = &quot;Foobar&quot;;</span>
+<span class="nc" id="L95">        final int numEntries = 10;</span>
+<span class="nc bnc" id="L96" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L97">            writelh.addEntry(tmp.getBytes());</span>
+        }
+
+        // set timeout for getBookieInfo to be 2 secs and cause one of the bookies to go to sleep for 3X that time
+<span class="nc" id="L101">        ClientConfiguration cConf = new ClientConfiguration();</span>
+<span class="nc" id="L102">        cConf.setGetBookieInfoTimeout(2);</span>
+
+<span class="nc" id="L104">        final BookieSocketAddress bookieToSleep = writelh.getLedgerMetadata().getEnsembleAt(0).get(0);</span>
+<span class="nc" id="L105">        int sleeptime = cConf.getBookieInfoTimeout() * 3;</span>
+<span class="nc" id="L106">        CountDownLatch latch = sleepBookie(bookieToSleep, sleeptime);</span>
+<span class="nc" id="L107">        latch.await();</span>
+
+        // try to get bookie info from the sleeping bookie. It should fail with timeout error
+<span class="nc" id="L110">        BookieSocketAddress addr = new BookieSocketAddress(bookieToSleep.getSocketAddress().getHostString(),</span>
+<span class="nc" id="L111">                bookieToSleep.getPort());</span>
+<span class="nc" id="L112">        BookieClient bc = new BookieClientImpl(cConf, eventLoopGroup, UnpooledByteBufAllocator.DEFAULT, executor,</span>
+                scheduler, NullStatsLogger.INSTANCE);
+<span class="nc" id="L114">        long flags = BookkeeperProtocol.GetBookieInfoRequest.Flags.FREE_DISK_SPACE_VALUE</span>
+                | BookkeeperProtocol.GetBookieInfoRequest.Flags.TOTAL_DISK_CAPACITY_VALUE;
+
+        class CallbackObj {
+            int rc;
+            long requested;
+            @SuppressWarnings(&quot;unused&quot;)
+            long freeDiskSpace, totalDiskCapacity;
+<span class="nc" id="L122">            CountDownLatch latch = new CountDownLatch(1);</span>
+<span class="nc" id="L123">            CallbackObj(long requested) {</span>
+<span class="nc" id="L124">                this.requested = requested;</span>
+<span class="nc" id="L125">                this.rc = 0;</span>
+<span class="nc" id="L126">                this.freeDiskSpace = 0L;</span>
+<span class="nc" id="L127">                this.totalDiskCapacity = 0L;</span>
+<span class="nc" id="L128">            }</span>
+        }
+<span class="nc" id="L130">        CallbackObj obj = new CallbackObj(flags);</span>
+<span class="nc" id="L131">        bc.getBookieInfo(addr, flags, new GetBookieInfoCallback() {</span>
+            @Override
+            public void getBookieInfoComplete(int rc, BookieInfo bInfo, Object ctx) {
+<span class="nc" id="L134">                CallbackObj obj = (CallbackObj) ctx;</span>
+<span class="nc" id="L135">                obj.rc = rc;</span>
+<span class="nc bnc" id="L136" title="All 2 branches missed.">                if (rc == Code.OK) {</span>
+<span class="nc bnc" id="L137" title="All 2 branches missed.">                    if ((obj.requested &amp; BookkeeperProtocol.GetBookieInfoRequest.Flags.FREE_DISK_SPACE_VALUE) != 0) {</span>
+<span class="nc" id="L138">                        obj.freeDiskSpace = bInfo.getFreeDiskSpace();</span>
+                    }
+<span class="nc bnc" id="L140" title="All 2 branches missed.">                    if ((obj.requested &amp; BookkeeperProtocol.GetBookieInfoRequest.Flags.TOTAL_DISK_CAPACITY_VALUE)</span>
+                            != 0) {
+<span class="nc" id="L142">                        obj.totalDiskCapacity = bInfo.getTotalDiskSpace();</span>
+                    }
+                }
+<span class="nc" id="L145">                obj.latch.countDown();</span>
+<span class="nc" id="L146">            }</span>
+
+        }, obj);
+<span class="nc" id="L149">        obj.latch.await();</span>
+<span class="nc" id="L150">        LOG.debug(&quot;Return code: &quot; + obj.rc);</span>
+<span class="nc bnc" id="L151" title="All 2 branches missed.">        assertTrue(&quot;GetBookieInfo failed with unexpected error code: &quot; + obj.rc, obj.rc == Code.TimeoutException);</span>
+<span class="nc" id="L152">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

@@ -1,0 +1,255 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SortedLedgerStorageCheckpointTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$myBookieFenceLedgerTest.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.bookie</a> &gt; <span class="el_source">SortedLedgerStorageCheckpointTest.java</span></div><h1>SortedLedgerStorageCheckpointTest.java</h1><pre class="source lang-java linenums">/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+package org.apache.bookkeeper.bookie;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.mock;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import io.netty.buffer.UnpooledByteBufAllocator;
+
+import java.io.IOException;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.RequiredArgsConstructor;
+import lombok.ToString;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.bookkeeper.bookie.CheckpointSource.Checkpoint;
+import org.apache.bookkeeper.meta.LedgerManager;
+import org.apache.bookkeeper.stats.NullStatsLogger;
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+
+/**
+ * Test {@link SortedLedgerStorage}.
+ */
+<span class="nc" id="L51">@Slf4j</span>
+public class SortedLedgerStorageCheckpointTest extends LedgerStorageTestBase {
+
+    @Data
+<span class="nc" id="L55">    @RequiredArgsConstructor</span>
+<span class="nc" id="L56">    @ToString</span>
+<span class="nc bnc" id="L57" title="All 8 branches missed.">    @EqualsAndHashCode</span>
+    private static class TestCheckpoint implements Checkpoint {
+
+<span class="nc" id="L60">        private final long offset;</span>
+
+        @Override
+        public int compareTo(Checkpoint o) {
+<span class="nc bnc" id="L64" title="All 2 branches missed.">            if (Checkpoint.MAX == o) {</span>
+<span class="nc" id="L65">                return -1;</span>
+            }
+
+<span class="nc" id="L68">            TestCheckpoint other = (TestCheckpoint) o;</span>
+<span class="nc" id="L69">            return Long.compare(offset, other.offset);</span>
+        }
+
+    }
+
+<span class="nc" id="L74">    @RequiredArgsConstructor</span>
+    private static class TestCheckpointSource implements CheckpointSource {
+
+<span class="nc" id="L77">        private long currentOffset = 0;</span>
+
+        void advanceOffset(long numBytes) {
+<span class="nc" id="L80">            currentOffset += numBytes;</span>
+<span class="nc" id="L81">        }</span>
+
+        @Override
+        public Checkpoint newCheckpoint() {
+<span class="nc" id="L85">            TestCheckpoint cp = new TestCheckpoint(currentOffset);</span>
+<span class="nc" id="L86">            log.info(&quot;New checkpoint : {}&quot;, cp);</span>
+<span class="nc" id="L87">            return cp;</span>
+        }
+
+        @Override
+        public void checkpointComplete(Checkpoint checkpoint, boolean compact)
+            throws IOException {
+<span class="nc" id="L93">            log.info(&quot;Complete checkpoint : {}&quot;, checkpoint);</span>
+<span class="nc" id="L94">        }</span>
+    }
+
+    private SortedLedgerStorage storage;
+    private Checkpointer checkpointer;
+    private final LinkedBlockingQueue&lt;Checkpoint&gt; checkpoints;
+<span class="nc" id="L100">    private final TestCheckpointSource checkpointSrc = new TestCheckpointSource();</span>
+
+    public SortedLedgerStorageCheckpointTest() {
+<span class="nc" id="L103">        super();</span>
+<span class="nc" id="L104">        conf.setEntryLogSizeLimit(1024);</span>
+<span class="nc" id="L105">        conf.setEntryLogFilePreAllocationEnabled(false);</span>
+<span class="nc" id="L106">        this.checkpoints = new LinkedBlockingQueue&lt;&gt;();</span>
+<span class="nc" id="L107">    }</span>
+
+    @Before
+    @Override
+    public void setUp() throws Exception {
+<span class="nc" id="L112">        super.setUp();</span>
+
+        // initial checkpoint
+
+<span class="nc" id="L116">        this.storage = new SortedLedgerStorage();</span>
+<span class="nc" id="L117">        this.checkpointer = new Checkpointer() {</span>
+            @Override
+            public void startCheckpoint(Checkpoint checkpoint) {
+<span class="nc" id="L120">                storage.getScheduler().submit(() -&gt; {</span>
+<span class="nc" id="L121">                    log.info(&quot;Checkpoint the storage at {}&quot;, checkpoint);</span>
+                    try {
+<span class="nc" id="L123">                        storage.checkpoint(checkpoint);</span>
+<span class="nc" id="L124">                        checkpoints.add(checkpoint);</span>
+<span class="nc" id="L125">                    } catch (IOException e) {</span>
+<span class="nc" id="L126">                        log.error(&quot;Failed to checkpoint at {}&quot;, checkpoint, e);</span>
+<span class="nc" id="L127">                    }</span>
+<span class="nc" id="L128">                });</span>
+<span class="nc" id="L129">            }</span>
+
+            @Override
+            public void start() {
+                // no-op
+<span class="nc" id="L134">            }</span>
+        };
+
+        // if the SortedLedgerStorage need not to change bookie's state, pass StateManager==null is ok
+<span class="nc" id="L138">        this.storage.initialize(</span>
+            conf,
+<span class="nc" id="L140">            mock(LedgerManager.class),</span>
+            ledgerDirsManager,
+            ledgerDirsManager,
+            null,
+            checkpointSrc,
+            checkpointer,
+            NullStatsLogger.INSTANCE,
+            UnpooledByteBufAllocator.DEFAULT);
+<span class="nc" id="L148">    }</span>
+
+    @After
+    @Override
+    public void tearDown() throws Exception {
+<span class="nc bnc" id="L153" title="All 2 branches missed.">        if (null != storage) {</span>
+<span class="nc" id="L154">            storage.shutdown();</span>
+        }
+<span class="nc" id="L156">        super.tearDown();</span>
+<span class="nc" id="L157">    }</span>
+
+    ByteBuf prepareEntry(long ledgerId, long entryId) {
+<span class="nc" id="L160">        ByteBuf entry = Unpooled.buffer(4 * Long.BYTES);</span>
+        // ledger id, entry id, lac
+<span class="nc" id="L162">        entry.writeLong(ledgerId);</span>
+<span class="nc" id="L163">        entry.writeLong(entryId);</span>
+<span class="nc" id="L164">        entry.writeLong(entryId - 1);</span>
+        // data
+<span class="nc" id="L166">        entry.writeLong(entryId);</span>
+<span class="nc" id="L167">        return entry;</span>
+    }
+
+    @Test
+    public void testCheckpoint() throws Exception {
+        // memory table holds the first checkpoint, but it is not completed yet.
+<span class="nc" id="L173">        Checkpoint memtableCp = storage.memTable.kvmap.cp;</span>
+<span class="nc" id="L174">        assertEquals(new TestCheckpoint(0), memtableCp);</span>
+
+        // write entries into ledger storage
+<span class="nc" id="L177">        long lid = System.currentTimeMillis();</span>
+<span class="nc" id="L178">        storage.setMasterKey(lid, new byte[0]);</span>
+<span class="nc bnc" id="L179" title="All 2 branches missed.">        for (int i = 0; i &lt; 20; i++) {</span>
+<span class="nc" id="L180">            storage.addEntry(prepareEntry(lid, i));</span>
+        }
+        // simulate journal persists the entries in journal;
+<span class="nc" id="L183">        checkpointSrc.advanceOffset(100);</span>
+
+        // memory table holds the first checkpoint, but it is not completed yet.
+<span class="nc" id="L186">        memtableCp = storage.memTable.kvmap.cp;</span>
+<span class="nc" id="L187">        assertEquals(new TestCheckpoint(0), memtableCp);</span>
+
+        // trigger a memtable flush
+<span class="nc" id="L190">        Assert.assertNotNull(&quot;snapshot shouldn't have returned null&quot;, storage.memTable.snapshot());</span>
+<span class="nc" id="L191">        storage.onSizeLimitReached(checkpointSrc.newCheckpoint());</span>
+        // wait for checkpoint to complete
+<span class="nc" id="L193">        checkpoints.poll(Long.MAX_VALUE, TimeUnit.MILLISECONDS);</span>
+<span class="nc" id="L194">        assertEquals(new TestCheckpoint(100), storage.memTable.kvmap.cp);</span>
+<span class="nc" id="L195">        assertEquals(0, storage.memTable.kvmap.size());</span>
+<span class="nc" id="L196">    }</span>
+
+    @Test
+    public void testCheckpointAfterEntryLogRotated() throws Exception {
+        // memory table holds the first checkpoint, but it is not completed yet.
+<span class="nc" id="L201">        Checkpoint memtableCp = storage.memTable.kvmap.cp;</span>
+<span class="nc" id="L202">        assertEquals(new TestCheckpoint(0), memtableCp);</span>
+
+        // write entries into ledger storage
+<span class="nc" id="L205">        long lid = System.currentTimeMillis();</span>
+<span class="nc" id="L206">        storage.setMasterKey(lid, new byte[0]);</span>
+<span class="nc bnc" id="L207" title="All 2 branches missed.">        for (int i = 0; i &lt; 20; i++) {</span>
+<span class="nc" id="L208">            storage.addEntry(prepareEntry(lid, i));</span>
+        }
+        // simulate journal persists the entries in journal;
+<span class="nc" id="L211">        checkpointSrc.advanceOffset(100);</span>
+
+        // memory table holds the first checkpoint, but it is not completed yet.
+<span class="nc" id="L214">        memtableCp = storage.memTable.kvmap.cp;</span>
+<span class="nc" id="L215">        assertEquals(new TestCheckpoint(0), memtableCp);</span>
+<span class="nc" id="L216">        assertEquals(20, storage.memTable.kvmap.size());</span>
+
+<span class="nc" id="L218">        final CountDownLatch readyLatch = new CountDownLatch(1);</span>
+<span class="nc" id="L219">        storage.getScheduler().submit(() -&gt; {</span>
+            try {
+<span class="nc" id="L221">                readyLatch.await();</span>
+<span class="nc" id="L222">            } catch (InterruptedException e) {</span>
+<span class="nc" id="L223">                Thread.currentThread().interrupt();</span>
+<span class="nc" id="L224">            }</span>
+<span class="nc" id="L225">        });</span>
+
+        // simulate entry log is rotated (due to compaction)
+<span class="nc" id="L228">        EntryLogManagerForSingleEntryLog entryLogManager = (EntryLogManagerForSingleEntryLog) storage.getEntryLogger()</span>
+<span class="nc" id="L229">                .getEntryLogManager();</span>
+<span class="nc" id="L230">        entryLogManager.createNewLog(EntryLogger.UNASSIGNED_LEDGERID);</span>
+<span class="nc" id="L231">        long leastUnflushedLogId = storage.getEntryLogger().getLeastUnflushedLogId();</span>
+<span class="nc" id="L232">        long currentLogId = entryLogManager.getCurrentLogId();</span>
+<span class="nc" id="L233">        log.info(&quot;Least unflushed entry log : current = {}, leastUnflushed = {}&quot;, currentLogId, leastUnflushedLogId);</span>
+
+<span class="nc" id="L235">        readyLatch.countDown();</span>
+<span class="nc" id="L236">        assertNull(checkpoints.poll());</span>
+<span class="nc" id="L237">        assertEquals(new TestCheckpoint(0), storage.memTable.kvmap.cp);</span>
+<span class="nc" id="L238">        assertEquals(20, storage.memTable.kvmap.size());</span>
+
+        // trigger a memtable flush
+<span class="nc" id="L241">        Assert.assertNotNull(&quot;snapshot shouldn't have returned null&quot;, storage.memTable.snapshot());</span>
+<span class="nc" id="L242">        storage.onSizeLimitReached(checkpointSrc.newCheckpoint());</span>
+<span class="nc" id="L243">        assertEquals(new TestCheckpoint(100), checkpoints.poll(Long.MAX_VALUE, TimeUnit.MILLISECONDS));</span>
+
+        // all the entries are flushed out
+<span class="nc" id="L246">        assertEquals(new TestCheckpoint(100), storage.memTable.kvmap.cp);</span>
+<span class="nc" id="L247">        assertEquals(0, storage.memTable.kvmap.size());</span>
+<span class="nc" id="L248">        assertTrue(</span>
+            &quot;current log &quot; + currentLogId + &quot; contains entries added from memtable should be forced to disk&quot;
+<span class="nc" id="L250">            + &quot; but least unflushed log is &quot; + storage.getEntryLogger().getLeastUnflushedLogId(),</span>
+<span class="nc bnc" id="L251" title="All 2 branches missed.">            storage.getEntryLogger().getLeastUnflushedLogId() &gt; currentLogId);</span>
+<span class="nc" id="L252">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

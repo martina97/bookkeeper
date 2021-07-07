@@ -1,0 +1,209 @@
+
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html id="htmlId">
+<head>
+  <title>Coverage Report :: LastConfirmedAndEntryImpl</title>
+  <style type="text/css">
+    @import "../../.css/coverage.css";
+  </style>
+</head>
+
+<body>
+<div class="header"></div>
+
+<div class="content">
+<div class="breadCrumbs">
+    [ <a href="../../index.html">all classes</a> ]
+    [ <a href="../index.html">org.apache.bookkeeper.client.impl</a> ]
+</div>
+
+<h1>Coverage Summary for Class: LastConfirmedAndEntryImpl (org.apache.bookkeeper.client.impl)</h1>
+
+<table class="coverageStats">
+
+<tr>
+  <th class="name">Class</th>
+<th class="coverageStat 
+">
+  Method, %
+</th>
+<th class="coverageStat 
+">
+  Line, %
+</th>
+</tr>
+<tr>
+  <td class="name">LastConfirmedAndEntryImpl</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 7)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 23)
+  </span>
+</td>
+</tr>
+  <tr>
+    <td class="name">LastConfirmedAndEntryImpl$1</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 2)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 2)
+  </span>
+</td>
+  </tr>
+<tr>
+  <td class="name"><strong>total</strong></td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 9)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 25)
+  </span>
+</td>
+</tr>
+</table>
+
+<br/>
+<br/>
+
+
+<div class="sourceCode"><i>1</i>&nbsp;/**
+<i>2</i>&nbsp; *
+<i>3</i>&nbsp; * Licensed to the Apache Software Foundation (ASF) under one
+<i>4</i>&nbsp; * or more contributor license agreements.  See the NOTICE file
+<i>5</i>&nbsp; * distributed with this work for additional information
+<i>6</i>&nbsp; * regarding copyright ownership.  The ASF licenses this file
+<i>7</i>&nbsp; * to you under the Apache License, Version 2.0 (the
+<i>8</i>&nbsp; * &quot;License&quot;); you may not use this file except in compliance
+<i>9</i>&nbsp; * with the License.  You may obtain a copy of the License at
+<i>10</i>&nbsp; *
+<i>11</i>&nbsp; *   http://www.apache.org/licenses/LICENSE-2.0
+<i>12</i>&nbsp; *
+<i>13</i>&nbsp; * Unless required by applicable law or agreed to in writing,
+<i>14</i>&nbsp; * software distributed under the License is distributed on an
+<i>15</i>&nbsp; * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+<i>16</i>&nbsp; * KIND, either express or implied.  See the License for the
+<i>17</i>&nbsp; * specific language governing permissions and limitations
+<i>18</i>&nbsp; * under the License.
+<i>19</i>&nbsp; *
+<i>20</i>&nbsp; */
+<i>21</i>&nbsp;package org.apache.bookkeeper.client.impl;
+<i>22</i>&nbsp;
+<i>23</i>&nbsp;import io.netty.util.Recycler;
+<i>24</i>&nbsp;import io.netty.util.Recycler.Handle;
+<i>25</i>&nbsp;import org.apache.bookkeeper.client.api.LastConfirmedAndEntry;
+<i>26</i>&nbsp;import org.apache.bookkeeper.client.api.LedgerEntry;
+<i>27</i>&nbsp;
+<i>28</i>&nbsp;/**
+<i>29</i>&nbsp; * This contains LastAddConfirmed entryId and a LedgerEntry wanted to read.
+<i>30</i>&nbsp; * It is used for readLastAddConfirmedAndEntry.
+<i>31</i>&nbsp; */
+<i>32</i>&nbsp;public class LastConfirmedAndEntryImpl implements LastConfirmedAndEntry {
+<i>33</i>&nbsp;
+<b class="nc"><i>34</i>&nbsp;    private static final Recycler&lt;LastConfirmedAndEntryImpl&gt; RECYCLER = new Recycler&lt;LastConfirmedAndEntryImpl&gt;() {</b>
+<i>35</i>&nbsp;        @Override
+<i>36</i>&nbsp;        protected LastConfirmedAndEntryImpl newObject(Handle&lt;LastConfirmedAndEntryImpl&gt; handle) {
+<b class="nc"><i>37</i>&nbsp;            return new LastConfirmedAndEntryImpl(handle);</b>
+<i>38</i>&nbsp;        }
+<i>39</i>&nbsp;    };
+<i>40</i>&nbsp;
+<i>41</i>&nbsp;    public static LastConfirmedAndEntryImpl create(long lac, org.apache.bookkeeper.client.LedgerEntry entry) {
+<b class="nc"><i>42</i>&nbsp;        LastConfirmedAndEntryImpl entryImpl = RECYCLER.get();</b>
+<b class="nc"><i>43</i>&nbsp;        entryImpl.lac = lac;</b>
+<b class="nc"><i>44</i>&nbsp;        if (null == entry) {</b>
+<b class="nc"><i>45</i>&nbsp;            entryImpl.entry = null;</b>
+<i>46</i>&nbsp;        } else {
+<b class="nc"><i>47</i>&nbsp;            entryImpl.entry = LedgerEntryImpl.create(</b>
+<b class="nc"><i>48</i>&nbsp;                entry.getLedgerId(),</b>
+<b class="nc"><i>49</i>&nbsp;                entry.getEntryId(),</b>
+<b class="nc"><i>50</i>&nbsp;                entry.getLength(),</b>
+<b class="nc"><i>51</i>&nbsp;                entry.getEntryBuffer());</b>
+<i>52</i>&nbsp;        }
+<b class="nc"><i>53</i>&nbsp;        return entryImpl;</b>
+<i>54</i>&nbsp;    }
+<i>55</i>&nbsp;
+<i>56</i>&nbsp;    private final Handle&lt;LastConfirmedAndEntryImpl&gt; recycleHandle;
+<i>57</i>&nbsp;    private Long lac;
+<i>58</i>&nbsp;    private LedgerEntry entry;
+<i>59</i>&nbsp;
+<b class="nc"><i>60</i>&nbsp;    public LastConfirmedAndEntryImpl(Handle&lt;LastConfirmedAndEntryImpl&gt; handle) {</b>
+<b class="nc"><i>61</i>&nbsp;        this.recycleHandle = handle;</b>
+<b class="nc"><i>62</i>&nbsp;    }</b>
+<i>63</i>&nbsp;
+<i>64</i>&nbsp;    /**
+<i>65</i>&nbsp;     * {@inheritDoc}
+<i>66</i>&nbsp;     */
+<i>67</i>&nbsp;    @Override
+<i>68</i>&nbsp;    public long getLastAddConfirmed() {
+<b class="nc"><i>69</i>&nbsp;        return lac;</b>
+<i>70</i>&nbsp;    }
+<i>71</i>&nbsp;
+<i>72</i>&nbsp;    /**
+<i>73</i>&nbsp;     * {@inheritDoc}
+<i>74</i>&nbsp;     */
+<i>75</i>&nbsp;    @Override
+<i>76</i>&nbsp;    public boolean hasEntry() {
+<b class="nc"><i>77</i>&nbsp;        return entry != null;</b>
+<i>78</i>&nbsp;    }
+<i>79</i>&nbsp;
+<i>80</i>&nbsp;    /**
+<i>81</i>&nbsp;     * {@inheritDoc}
+<i>82</i>&nbsp;     */
+<i>83</i>&nbsp;    @Override
+<i>84</i>&nbsp;    public LedgerEntry getEntry() {
+<b class="nc"><i>85</i>&nbsp;        return entry;</b>
+<i>86</i>&nbsp;    }
+<i>87</i>&nbsp;
+<i>88</i>&nbsp;    /**
+<i>89</i>&nbsp;     * {@inheritDoc}
+<i>90</i>&nbsp;     */
+<i>91</i>&nbsp;    @Override
+<i>92</i>&nbsp;    public void close() {
+<b class="nc"><i>93</i>&nbsp;        this.lac = -1L;</b>
+<b class="nc"><i>94</i>&nbsp;        if (null != entry) {</b>
+<b class="nc"><i>95</i>&nbsp;            entry.close();</b>
+<b class="nc"><i>96</i>&nbsp;            entry = null;</b>
+<i>97</i>&nbsp;        }
+<b class="nc"><i>98</i>&nbsp;        recycleHandle.recycle(this);</b>
+<b class="nc"><i>99</i>&nbsp;    }</b>
+<i>100</i>&nbsp;}
+</div>
+</div>
+
+<div class="footer">
+    
+    <div style="float:right;">generated on 2021-06-28 15:57</div>
+</div>
+</body>
+</html>

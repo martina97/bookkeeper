@@ -1,0 +1,796 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ParallelLedgerRecoveryTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">ParallelLedgerRecoveryTest.java</span></div><h1>ParallelLedgerRecoveryTest.java</h1><pre class="source lang-java linenums">/*
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.client;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+
+import java.io.IOException;
+import java.util.Enumeration;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+
+import org.apache.bookkeeper.bookie.Bookie;
+import org.apache.bookkeeper.bookie.BookieException;
+import org.apache.bookkeeper.bookie.InterleavedLedgerStorage;
+import org.apache.bookkeeper.client.BookKeeper.DigestType;
+import org.apache.bookkeeper.client.api.LedgerMetadata;
+import org.apache.bookkeeper.client.api.WriteFlag;
+import org.apache.bookkeeper.conf.ClientConfiguration;
+import org.apache.bookkeeper.conf.ServerConfiguration;
+import org.apache.bookkeeper.meta.HierarchicalLedgerManagerFactory;
+import org.apache.bookkeeper.meta.LedgerManager;
+import org.apache.bookkeeper.meta.LedgerManagerFactory;
+import org.apache.bookkeeper.meta.MetadataDrivers;
+import org.apache.bookkeeper.meta.exceptions.Code;
+import org.apache.bookkeeper.meta.exceptions.MetadataException;
+import org.apache.bookkeeper.meta.zk.ZKMetadataBookieDriver;
+import org.apache.bookkeeper.meta.zk.ZKMetadataClientDriver;
+import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.proto.BookieProtocol;
+import org.apache.bookkeeper.proto.BookkeeperInternalCallbacks.GenericCallback;
+import org.apache.bookkeeper.proto.BookkeeperInternalCallbacks.LedgerMetadataListener;
+import org.apache.bookkeeper.proto.BookkeeperInternalCallbacks.Processor;
+import org.apache.bookkeeper.proto.BookkeeperInternalCallbacks.WriteCallback;
+import org.apache.bookkeeper.proto.checksum.DigestManager;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.apache.bookkeeper.util.ByteBufList;
+import org.apache.bookkeeper.versioning.Version;
+import org.apache.bookkeeper.versioning.Versioned;
+import org.apache.commons.lang3.mutable.MutableInt;
+import org.apache.zookeeper.AsyncCallback.VoidCallback;
+import org.apache.zookeeper.KeeperException;
+import org.junit.After;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Test parallel ledger recovery.
+ */
+public class ParallelLedgerRecoveryTest extends BookKeeperClusterTestCase {
+
+<span class="nc" id="L82">    static final Logger LOG = LoggerFactory.getLogger(ParallelLedgerRecoveryTest.class);</span>
+
+    static class TestLedgerManager implements LedgerManager {
+
+        final LedgerManager lm;
+<span class="nc" id="L87">        volatile CountDownLatch waitLatch = null;</span>
+        final ExecutorService executorService;
+
+<span class="nc" id="L90">        TestLedgerManager(LedgerManager lm) {</span>
+<span class="nc" id="L91">            this.lm = lm;</span>
+<span class="nc" id="L92">            this.executorService = Executors.newSingleThreadExecutor();</span>
+<span class="nc" id="L93">        }</span>
+
+        void setLatch(CountDownLatch waitLatch) {
+<span class="nc" id="L96">            this.waitLatch = waitLatch;</span>
+<span class="nc" id="L97">        }</span>
+
+        @Override
+        public CompletableFuture&lt;Versioned&lt;LedgerMetadata&gt;&gt; createLedgerMetadata(
+                long ledgerId, LedgerMetadata metadata) {
+<span class="nc" id="L102">            return lm.createLedgerMetadata(ledgerId, metadata);</span>
+        }
+
+        @Override
+        public CompletableFuture&lt;Void&gt; removeLedgerMetadata(long ledgerId, Version version) {
+<span class="nc" id="L107">            return lm.removeLedgerMetadata(ledgerId, version);</span>
+        }
+
+        @Override
+        public CompletableFuture&lt;Versioned&lt;LedgerMetadata&gt;&gt; readLedgerMetadata(long ledgerId) {
+<span class="nc" id="L112">            return lm.readLedgerMetadata(ledgerId);</span>
+        }
+
+        @Override
+        public LedgerRangeIterator getLedgerRanges(long zkOpTimeoutMs) {
+<span class="nc" id="L117">            return lm.getLedgerRanges(zkOpTimeoutMs);</span>
+        }
+
+        @Override
+        public CompletableFuture&lt;Versioned&lt;LedgerMetadata&gt;&gt; writeLedgerMetadata(long ledgerId, LedgerMetadata metadata,
+                                                                                Version currentVersion) {
+<span class="nc" id="L123">            final CountDownLatch cdl = waitLatch;</span>
+<span class="nc bnc" id="L124" title="All 2 branches missed.">            if (null != cdl) {</span>
+<span class="nc" id="L125">                CompletableFuture&lt;Versioned&lt;LedgerMetadata&gt;&gt; promise = new CompletableFuture&lt;&gt;();</span>
+<span class="nc" id="L126">                executorService.submit(new Runnable() {</span>
+                    @Override
+                    public void run() {
+                        try {
+<span class="nc" id="L130">                            cdl.await();</span>
+<span class="nc" id="L131">                        } catch (InterruptedException e) {</span>
+<span class="nc" id="L132">                            Thread.currentThread().interrupt();</span>
+<span class="nc" id="L133">                            LOG.error(&quot;Interrupted on waiting latch : &quot;, e);</span>
+<span class="nc" id="L134">                        }</span>
+<span class="nc" id="L135">                        lm.writeLedgerMetadata(ledgerId, metadata, currentVersion)</span>
+<span class="nc" id="L136">                            .whenComplete((metadata, exception) -&gt; {</span>
+<span class="nc bnc" id="L137" title="All 2 branches missed.">                                    if (exception != null) {</span>
+<span class="nc" id="L138">                                        promise.completeExceptionally(exception);</span>
+                                    } else {
+<span class="nc" id="L140">                                        promise.complete(metadata);</span>
+                                    }
+<span class="nc" id="L142">                                });</span>
+<span class="nc" id="L143">                    }</span>
+                });
+<span class="nc" id="L145">                return promise;</span>
+            } else {
+<span class="nc" id="L147">                return lm.writeLedgerMetadata(ledgerId, metadata, currentVersion);</span>
+            }
+        }
+
+        @Override
+        public void registerLedgerMetadataListener(long ledgerId, LedgerMetadataListener listener) {
+<span class="nc" id="L153">            lm.registerLedgerMetadataListener(ledgerId, listener);</span>
+<span class="nc" id="L154">        }</span>
+
+        @Override
+        public void unregisterLedgerMetadataListener(long ledgerId, LedgerMetadataListener listener) {
+<span class="nc" id="L158">            lm.unregisterLedgerMetadataListener(ledgerId, listener);</span>
+<span class="nc" id="L159">        }</span>
+
+        @Override
+        public void asyncProcessLedgers(Processor&lt;Long&gt; processor, VoidCallback finalCb, Object context,
+                                        int successRc, int failureRc) {
+<span class="nc" id="L164">            lm.asyncProcessLedgers(processor, finalCb, context, successRc, failureRc);</span>
+<span class="nc" id="L165">        }</span>
+
+        @Override
+        public void close() throws IOException {
+<span class="nc" id="L169">            lm.close();</span>
+<span class="nc" id="L170">            executorService.shutdown();</span>
+<span class="nc" id="L171">        }</span>
+    }
+
+<span class="nc" id="L174">    static class TestLedgerManagerFactory extends HierarchicalLedgerManagerFactory {</span>
+        @Override
+        public LedgerManager newLedgerManager() {
+<span class="nc" id="L177">            return new TestLedgerManager(super.newLedgerManager());</span>
+        }
+    }
+
+<span class="nc" id="L181">    static class TestMetadataClientDriver extends ZKMetadataClientDriver {</span>
+
+        @Override
+        public synchronized LedgerManagerFactory getLedgerManagerFactory() throws MetadataException {
+<span class="nc bnc" id="L185" title="All 2 branches missed.">            if (null == lmFactory) {</span>
+                try {
+<span class="nc" id="L187">                    lmFactory = new TestLedgerManagerFactory()</span>
+<span class="nc" id="L188">                        .initialize(conf, layoutManager, TestLedgerManagerFactory.CUR_VERSION);</span>
+<span class="nc" id="L189">                } catch (IOException e) {</span>
+<span class="nc" id="L190">                    throw new MetadataException(Code.METADATA_SERVICE_ERROR, e);</span>
+<span class="nc" id="L191">                }</span>
+            }
+<span class="nc" id="L193">            return lmFactory;</span>
+        }
+    }
+
+<span class="nc" id="L197">    static class TestMetadataBookieDriver extends ZKMetadataBookieDriver {</span>
+
+        @Override
+        public synchronized LedgerManagerFactory getLedgerManagerFactory() throws MetadataException {
+<span class="nc bnc" id="L201" title="All 2 branches missed.">            if (null == lmFactory) {</span>
+                try {
+<span class="nc" id="L203">                    lmFactory = new TestLedgerManagerFactory()</span>
+<span class="nc" id="L204">                        .initialize(conf, layoutManager, TestLedgerManagerFactory.CUR_VERSION);</span>
+<span class="nc" id="L205">                } catch (IOException e) {</span>
+<span class="nc" id="L206">                    throw new MetadataException(Code.METADATA_SERVICE_ERROR, e);</span>
+<span class="nc" id="L207">                }</span>
+            }
+<span class="nc" id="L209">            return lmFactory;</span>
+        }
+    }
+
+    final DigestType digestType;
+
+    public ParallelLedgerRecoveryTest() throws Exception {
+<span class="nc" id="L216">        super(3);</span>
+
+<span class="nc" id="L218">        this.digestType = DigestType.CRC32;</span>
+<span class="nc" id="L219">    }</span>
+
+    @Override
+    protected void startBKCluster(String metadataServiceUri) throws Exception {
+<span class="nc" id="L223">        MetadataDrivers.registerClientDriver(&quot;zk&quot;, TestMetadataClientDriver.class, true);</span>
+<span class="nc" id="L224">        MetadataDrivers.registerBookieDriver(&quot;zk&quot;, TestMetadataBookieDriver.class, true);</span>
+<span class="nc" id="L225">        baseConf.setLedgerManagerFactoryClass(TestLedgerManagerFactory.class);</span>
+<span class="nc" id="L226">        baseClientConf.setLedgerManagerFactoryClass(TestLedgerManagerFactory.class);</span>
+<span class="nc" id="L227">        baseClientConf.setReadEntryTimeout(60000);</span>
+<span class="nc" id="L228">        baseClientConf.setAddEntryTimeout(60000);</span>
+
+<span class="nc" id="L230">        super.startBKCluster(metadataServiceUri);</span>
+<span class="nc" id="L231">    }</span>
+
+    @After
+    @Override
+    public void tearDown() throws Exception {
+        try {
+<span class="nc" id="L237">            super.tearDown();</span>
+        } finally {
+<span class="nc" id="L239">            MetadataDrivers.registerClientDriver(&quot;zk&quot;, ZKMetadataClientDriver.class, true);</span>
+<span class="nc" id="L240">            MetadataDrivers.registerBookieDriver(&quot;zk&quot;, ZKMetadataBookieDriver.class, true);</span>
+        }
+<span class="nc" id="L242">    }</span>
+
+    @Test
+    public void testRecoverBeforeWriteMetadata1() throws Exception {
+<span class="nc" id="L246">        rereadDuringRecovery(true, 1, false, false);</span>
+<span class="nc" id="L247">    }</span>
+
+    @Test
+    public void testRecoverBeforeWriteMetadata2() throws Exception {
+<span class="nc" id="L251">        rereadDuringRecovery(true, 3, false, false);</span>
+<span class="nc" id="L252">    }</span>
+
+    @Test
+    public void testRecoverBeforeWriteMetadata3() throws Exception {
+<span class="nc" id="L256">        rereadDuringRecovery(false, 1, false, false);</span>
+<span class="nc" id="L257">    }</span>
+
+    @Test
+    public void testRecoverBeforeWriteMetadata4() throws Exception {
+<span class="nc" id="L261">        rereadDuringRecovery(false, 3, false, false);</span>
+<span class="nc" id="L262">    }</span>
+
+    @Test
+    public void testRereadDuringRecovery1() throws Exception {
+<span class="nc" id="L266">        rereadDuringRecovery(true, 1, true, false);</span>
+<span class="nc" id="L267">    }</span>
+
+    @Test
+    public void testRereadDuringRecovery2() throws Exception {
+<span class="nc" id="L271">        rereadDuringRecovery(true, 3, true, false);</span>
+<span class="nc" id="L272">    }</span>
+
+    @Test
+    public void testRereadDuringRecovery3() throws Exception {
+<span class="nc" id="L276">        rereadDuringRecovery(false, 1, true, false);</span>
+<span class="nc" id="L277">    }</span>
+
+    @Test
+    public void testRereadDuringRecovery4() throws Exception {
+<span class="nc" id="L281">        rereadDuringRecovery(false, 3, true, false);</span>
+<span class="nc" id="L282">    }</span>
+
+    @Test
+    public void testConcurrentRecovery1() throws Exception {
+<span class="nc" id="L286">        rereadDuringRecovery(true, 1, true, false);</span>
+<span class="nc" id="L287">    }</span>
+
+    @Test
+    public void testConcurrentRecovery2() throws Exception {
+<span class="nc" id="L291">        rereadDuringRecovery(true, 3, true, false);</span>
+<span class="nc" id="L292">    }</span>
+
+    @Test
+    public void testConcurrentRecovery3() throws Exception {
+<span class="nc" id="L296">        rereadDuringRecovery(false, 1, true, false);</span>
+<span class="nc" id="L297">    }</span>
+
+    @Test
+    public void testConcurrentRecovery4() throws Exception {
+<span class="nc" id="L301">        rereadDuringRecovery(false, 3, true, false);</span>
+<span class="nc" id="L302">    }</span>
+
+    private void rereadDuringRecovery(boolean parallelRead, int batchSize,
+                                      boolean updateMetadata, boolean close) throws Exception {
+<span class="nc" id="L306">        ClientConfiguration newConf = new ClientConfiguration();</span>
+<span class="nc" id="L307">        newConf.addConfiguration(baseClientConf);</span>
+<span class="nc" id="L308">        newConf.setEnableParallelRecoveryRead(parallelRead);</span>
+<span class="nc" id="L309">        newConf.setRecoveryReadBatchSize(batchSize);</span>
+<span class="nc" id="L310">        BookKeeper newBk = new BookKeeper(newConf);</span>
+
+<span class="nc" id="L312">        TestLedgerManager tlm = (TestLedgerManager) newBk.getUnderlyingLedgerManager();</span>
+
+<span class="nc" id="L314">        final LedgerHandle lh = newBk.createLedger(numBookies, 2, 2, digestType, &quot;&quot;.getBytes());</span>
+<span class="nc" id="L315">        CountDownLatch latch1 = new CountDownLatch(1);</span>
+<span class="nc" id="L316">        CountDownLatch latch2 = new CountDownLatch(1);</span>
+<span class="nc" id="L317">        sleepBookie(lh.getCurrentEnsemble().get(0), latch1);</span>
+<span class="nc" id="L318">        sleepBookie(lh.getCurrentEnsemble().get(1), latch2);</span>
+
+<span class="nc" id="L320">        int numEntries = (numBookies * 3) + 1;</span>
+<span class="nc" id="L321">        final AtomicInteger numPendingAdds = new AtomicInteger(numEntries);</span>
+<span class="nc" id="L322">        final CountDownLatch addDone = new CountDownLatch(1);</span>
+<span class="nc bnc" id="L323" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L324">            lh.asyncAddEntry((&quot;&quot; + i).getBytes(), new org.apache.bookkeeper.client.AsyncCallback.AddCallback() {</span>
+                @Override
+                public void addComplete(int rc, LedgerHandle lh, long entryId, Object ctx) {
+<span class="nc bnc" id="L327" title="All 2 branches missed.">                    if (BKException.Code.OK != rc) {</span>
+<span class="nc" id="L328">                        addDone.countDown();</span>
+<span class="nc" id="L329">                        return;</span>
+                    }
+<span class="nc bnc" id="L331" title="All 2 branches missed.">                    if (numPendingAdds.decrementAndGet() == 0) {</span>
+<span class="nc" id="L332">                        addDone.countDown();</span>
+                    }
+<span class="nc" id="L334">                }</span>
+            }, null);
+        }
+<span class="nc" id="L337">        latch1.countDown();</span>
+<span class="nc" id="L338">        latch2.countDown();</span>
+<span class="nc" id="L339">        addDone.await(10, TimeUnit.SECONDS);</span>
+<span class="nc" id="L340">        assertEquals(0, numPendingAdds.get());</span>
+
+<span class="nc" id="L342">        LOG.info(&quot;Added {} entries to ledger {}.&quot;, numEntries, lh.getId());</span>
+
+<span class="nc" id="L344">        long ledgerLenth = lh.getLength();</span>
+
+<span class="nc" id="L346">        LedgerHandle recoverLh = newBk.openLedgerNoRecovery(lh.getId(), digestType, &quot;&quot;.getBytes());</span>
+<span class="nc" id="L347">        assertEquals(BookieProtocol.INVALID_ENTRY_ID, recoverLh.getLastAddPushed());</span>
+<span class="nc" id="L348">        assertEquals(BookieProtocol.INVALID_ENTRY_ID, recoverLh.getLastAddConfirmed());</span>
+<span class="nc" id="L349">        assertEquals(0, recoverLh.getLength());</span>
+
+<span class="nc" id="L351">        LOG.info(&quot;OpenLedgerNoRecovery {}.&quot;, lh.getId());</span>
+
+<span class="nc" id="L353">        final CountDownLatch metadataLatch = new CountDownLatch(1);</span>
+
+<span class="nc" id="L355">        tlm.setLatch(metadataLatch);</span>
+
+<span class="nc" id="L357">        final CountDownLatch recoverLatch = new CountDownLatch(1);</span>
+<span class="nc" id="L358">        final AtomicBoolean success = new AtomicBoolean(false);</span>
+<span class="nc" id="L359">        ((ReadOnlyLedgerHandle) recoverLh).recover(new GenericCallback&lt;Void&gt;() {</span>
+            @Override
+            public void operationComplete(int rc, Void result) {
+<span class="nc" id="L362">                LOG.info(&quot;Recovering ledger {} completed : {}.&quot;, lh.getId(), rc);</span>
+<span class="nc bnc" id="L363" title="All 2 branches missed.">                success.set(BKException.Code.OK == rc);</span>
+<span class="nc" id="L364">                recoverLatch.countDown();</span>
+<span class="nc" id="L365">            }</span>
+        });
+
+        // clear the metadata latch
+<span class="nc" id="L369">        tlm.setLatch(null);</span>
+
+<span class="nc bnc" id="L371" title="All 2 branches missed.">        if (updateMetadata) {</span>
+<span class="nc bnc" id="L372" title="All 2 branches missed.">            if (close) {</span>
+<span class="nc" id="L373">                LOG.info(&quot;OpenLedger {} to close.&quot;, lh.getId());</span>
+<span class="nc" id="L374">                LedgerHandle newRecoverLh = newBk.openLedger(lh.getId(), digestType, &quot;&quot;.getBytes());</span>
+<span class="nc" id="L375">                newRecoverLh.close();</span>
+<span class="nc" id="L376">            } else {</span>
+<span class="nc" id="L377">                LOG.info(&quot;OpenLedgerNoRecovery {} again.&quot;, lh.getId());</span>
+<span class="nc" id="L378">                LedgerHandle newRecoverLh = newBk.openLedgerNoRecovery(lh.getId(), digestType, &quot;&quot;.getBytes());</span>
+<span class="nc" id="L379">                assertEquals(BookieProtocol.INVALID_ENTRY_ID, newRecoverLh.getLastAddPushed());</span>
+<span class="nc" id="L380">                assertEquals(BookieProtocol.INVALID_ENTRY_ID, newRecoverLh.getLastAddConfirmed());</span>
+
+                // mark the ledger as in recovery to update version.
+<span class="nc" id="L383">                ClientUtil.transformMetadata(newBk.getClientCtx(), newRecoverLh.getId(),</span>
+<span class="nc" id="L384">                        (metadata) -&gt; LedgerMetadataBuilder.from(metadata).withInRecoveryState().build());</span>
+
+<span class="nc" id="L386">                newRecoverLh.close();</span>
+<span class="nc" id="L387">                LOG.info(&quot;Updated ledger manager {}.&quot;, newRecoverLh.getLedgerMetadata());</span>
+            }
+        }
+
+        // resume metadata operation on recoverLh
+<span class="nc" id="L392">        metadataLatch.countDown();</span>
+
+<span class="nc" id="L394">        LOG.info(&quot;Resume metadata update.&quot;);</span>
+
+        // wait until recover completed
+<span class="nc" id="L397">        recoverLatch.await(20, TimeUnit.SECONDS);</span>
+<span class="nc" id="L398">        assertTrue(success.get());</span>
+<span class="nc" id="L399">        assertEquals(numEntries - 1, recoverLh.getLastAddPushed());</span>
+<span class="nc" id="L400">        assertEquals(numEntries - 1, recoverLh.getLastAddConfirmed());</span>
+<span class="nc" id="L401">        assertEquals(ledgerLenth, recoverLh.getLength());</span>
+<span class="nc" id="L402">        assertTrue(recoverLh.getLedgerMetadata().isClosed());</span>
+
+<span class="nc" id="L404">        Enumeration&lt;LedgerEntry&gt; enumeration = recoverLh.readEntries(0, numEntries - 1);</span>
+<span class="nc" id="L405">        int numReads = 0;</span>
+<span class="nc bnc" id="L406" title="All 2 branches missed.">        while (enumeration.hasMoreElements()) {</span>
+<span class="nc" id="L407">            LedgerEntry entry = enumeration.nextElement();</span>
+<span class="nc" id="L408">            assertEquals((long) numReads, entry.getEntryId());</span>
+<span class="nc" id="L409">            assertEquals(numReads, Integer.parseInt(new String(entry.getEntry())));</span>
+<span class="nc" id="L410">            ++numReads;</span>
+<span class="nc" id="L411">        }</span>
+<span class="nc" id="L412">        assertEquals(numEntries, numReads);</span>
+
+<span class="nc" id="L414">        recoverLh.close();</span>
+<span class="nc" id="L415">        newBk.close();</span>
+<span class="nc" id="L416">    }</span>
+
+    @Test
+    public void testRecoveryOnEntryGap() throws Exception {
+<span class="nc" id="L420">        byte[] passwd = &quot;recovery-on-entry-gap&quot;.getBytes(UTF_8);</span>
+<span class="nc" id="L421">        LedgerHandle lh = bkc.createLedger(1, 1, 1, DigestType.CRC32, passwd);</span>
+<span class="nc bnc" id="L422" title="All 2 branches missed.">        for (int i = 0; i &lt; 10; i++) {</span>
+<span class="nc" id="L423">            lh.addEntry((&quot;recovery-on-entry-gap-&quot; + i).getBytes(UTF_8));</span>
+        }
+
+        // simulate ledger writer failure on concurrent writes causing gaps
+
+<span class="nc" id="L428">        long entryId = 14;</span>
+<span class="nc" id="L429">        long lac = 8;</span>
+<span class="nc" id="L430">        byte[] data = &quot;recovery-on-entry-gap-gap&quot;.getBytes(UTF_8);</span>
+<span class="nc" id="L431">        ByteBufList toSend =</span>
+<span class="nc" id="L432">                lh.macManager.computeDigestAndPackageForSending(</span>
+<span class="nc" id="L433">                        entryId, lac, lh.getLength() + 100, Unpooled.wrappedBuffer(data, 0, data.length));</span>
+<span class="nc" id="L434">        final CountDownLatch addLatch = new CountDownLatch(1);</span>
+<span class="nc" id="L435">        final AtomicBoolean addSuccess = new AtomicBoolean(false);</span>
+<span class="nc" id="L436">        LOG.info(&quot;Add entry {} with lac = {}&quot;, entryId, lac);</span>
+
+<span class="nc" id="L438">        bkc.getBookieClient().addEntry(lh.getCurrentEnsemble().get(0),</span>
+<span class="nc" id="L439">                                       lh.getId(), lh.ledgerKey, entryId, toSend,</span>
+<span class="nc" id="L440">                                       new WriteCallback() {</span>
+                                           @Override
+                                           public void writeComplete(int rc, long ledgerId, long entryId,
+                                                                     BookieSocketAddress addr, Object ctx) {
+<span class="nc bnc" id="L444" title="All 2 branches missed.">                                               addSuccess.set(BKException.Code.OK == rc);</span>
+<span class="nc" id="L445">                                               addLatch.countDown();</span>
+<span class="nc" id="L446">                                           }</span>
+<span class="nc" id="L447">                                       }, 0, BookieProtocol.FLAG_NONE, false, WriteFlag.NONE);</span>
+<span class="nc" id="L448">        addLatch.await();</span>
+<span class="nc" id="L449">        assertTrue(&quot;add entry 14 should succeed&quot;, addSuccess.get());</span>
+
+<span class="nc" id="L451">        ClientConfiguration newConf = new ClientConfiguration();</span>
+<span class="nc" id="L452">        newConf.addConfiguration(baseClientConf);</span>
+<span class="nc" id="L453">        newConf.setEnableParallelRecoveryRead(true);</span>
+<span class="nc" id="L454">        newConf.setRecoveryReadBatchSize(10);</span>
+
+<span class="nc" id="L456">        BookKeeper newBk = new BookKeeper(newConf);</span>
+
+<span class="nc" id="L458">        final LedgerHandle recoverLh =</span>
+<span class="nc" id="L459">                newBk.openLedgerNoRecovery(lh.getId(), DigestType.CRC32, passwd);</span>
+
+<span class="nc" id="L461">        assertEquals(&quot;wrong lac found&quot;, 8L, recoverLh.getLastAddConfirmed());</span>
+
+<span class="nc" id="L463">        final CountDownLatch recoverLatch = new CountDownLatch(1);</span>
+<span class="nc" id="L464">        final AtomicLong newLac = new AtomicLong(-1);</span>
+<span class="nc" id="L465">        final AtomicBoolean isMetadataClosed = new AtomicBoolean(false);</span>
+<span class="nc" id="L466">        final AtomicInteger numSuccessCalls = new AtomicInteger(0);</span>
+<span class="nc" id="L467">        final AtomicInteger numFailureCalls = new AtomicInteger(0);</span>
+<span class="nc" id="L468">        ((ReadOnlyLedgerHandle) recoverLh).recover(new GenericCallback&lt;Void&gt;() {</span>
+            @Override
+            public void operationComplete(int rc, Void result) {
+<span class="nc bnc" id="L471" title="All 2 branches missed.">                if (BKException.Code.OK == rc) {</span>
+<span class="nc" id="L472">                    newLac.set(recoverLh.getLastAddConfirmed());</span>
+<span class="nc" id="L473">                    isMetadataClosed.set(recoverLh.getLedgerMetadata().isClosed());</span>
+<span class="nc" id="L474">                    numSuccessCalls.incrementAndGet();</span>
+                } else {
+<span class="nc" id="L476">                    numFailureCalls.incrementAndGet();</span>
+                }
+<span class="nc" id="L478">                recoverLatch.countDown();</span>
+<span class="nc" id="L479">            }</span>
+        });
+<span class="nc" id="L481">        recoverLatch.await();</span>
+<span class="nc" id="L482">        assertEquals(&quot;wrong lac found&quot;, 9L, newLac.get());</span>
+<span class="nc" id="L483">        assertTrue(&quot;metadata isn't closed after recovery&quot;, isMetadataClosed.get());</span>
+<span class="nc" id="L484">        Thread.sleep(5000);</span>
+<span class="nc" id="L485">        assertEquals(&quot;recovery callback should be triggered only once&quot;, 1, numSuccessCalls.get());</span>
+<span class="nc" id="L486">        assertEquals(&quot;recovery callback should be triggered only once&quot;, 0, numFailureCalls.get());</span>
+<span class="nc" id="L487">    }</span>
+
+    static class DelayResponseBookie extends Bookie {
+
+        static final class WriteCallbackEntry {
+
+            private final WriteCallback cb;
+            private final int rc;
+            private final long ledgerId;
+            private final long entryId;
+            private final BookieSocketAddress addr;
+            private final Object ctx;
+
+            WriteCallbackEntry(WriteCallback cb,
+                               int rc, long ledgerId, long entryId,
+<span class="nc" id="L502">                               BookieSocketAddress addr, Object ctx) {</span>
+<span class="nc" id="L503">                this.cb = cb;</span>
+<span class="nc" id="L504">                this.rc = rc;</span>
+<span class="nc" id="L505">                this.ledgerId = ledgerId;</span>
+<span class="nc" id="L506">                this.entryId = entryId;</span>
+<span class="nc" id="L507">                this.addr = addr;</span>
+<span class="nc" id="L508">                this.ctx = ctx;</span>
+<span class="nc" id="L509">            }</span>
+
+            public void callback() {
+<span class="nc" id="L512">                cb.writeComplete(rc, ledgerId, entryId, addr, ctx);</span>
+<span class="nc" id="L513">            }</span>
+        }
+
+<span class="nc" id="L516">        private final AtomicBoolean delayAddResponse = new AtomicBoolean(false);</span>
+<span class="nc" id="L517">        private final AtomicBoolean delayReadResponse = new AtomicBoolean(false);</span>
+<span class="nc" id="L518">        private final AtomicLong delayReadOnEntry = new AtomicLong(-1234L);</span>
+<span class="nc" id="L519">        private volatile CountDownLatch delayReadLatch = null;</span>
+<span class="nc" id="L520">        private final LinkedBlockingQueue&lt;WriteCallbackEntry&gt; delayQueue =</span>
+                new LinkedBlockingQueue&lt;WriteCallbackEntry&gt;();
+
+        public DelayResponseBookie(ServerConfiguration conf)
+                throws IOException, KeeperException, InterruptedException, BookieException {
+<span class="nc" id="L525">            super(conf);</span>
+<span class="nc" id="L526">        }</span>
+
+        @Override
+        public void addEntry(ByteBuf entry, boolean ackBeforeSync, final WriteCallback cb, Object ctx, byte[] masterKey)
+                throws IOException, BookieException, InterruptedException {
+<span class="nc" id="L531">            super.addEntry(entry, ackBeforeSync, new WriteCallback() {</span>
+                @Override
+                public void writeComplete(int rc, long ledgerId, long entryId,
+                                          BookieSocketAddress addr, Object ctx) {
+<span class="nc bnc" id="L535" title="All 2 branches missed.">                    if (delayAddResponse.get()) {</span>
+<span class="nc" id="L536">                        delayQueue.add(new WriteCallbackEntry(cb, rc, ledgerId, entryId, addr, ctx));</span>
+                    } else {
+<span class="nc" id="L538">                        cb.writeComplete(rc, ledgerId, entryId, addr, ctx);</span>
+                    }
+<span class="nc" id="L540">                }</span>
+            }, ctx, masterKey);
+<span class="nc" id="L542">        }</span>
+
+        @Override
+        public ByteBuf readEntry(long ledgerId, long entryId) throws IOException, NoLedgerException {
+<span class="nc" id="L546">            LOG.info(&quot;ReadEntry {} - {}&quot;, ledgerId, entryId);</span>
+<span class="nc bnc" id="L547" title="All 4 branches missed.">            if (delayReadResponse.get() &amp;&amp; delayReadOnEntry.get() == entryId) {</span>
+<span class="nc" id="L548">                CountDownLatch latch = delayReadLatch;</span>
+<span class="nc bnc" id="L549" title="All 2 branches missed.">                if (null != latch) {</span>
+                    try {
+<span class="nc" id="L551">                        latch.await();</span>
+<span class="nc" id="L552">                    } catch (InterruptedException e) {</span>
+<span class="nc" id="L553">                        Thread.currentThread().interrupt();</span>
+                        // no-op
+<span class="nc" id="L555">                    }</span>
+                }
+            }
+<span class="nc" id="L558">            return super.readEntry(ledgerId, entryId);</span>
+        }
+
+        void delayAdd(boolean delayed) {
+<span class="nc" id="L562">            this.delayAddResponse.set(delayed);</span>
+<span class="nc" id="L563">        }</span>
+
+        void delayRead(boolean delayed, long entryId, CountDownLatch delayReadLatch) {
+<span class="nc" id="L566">            this.delayReadResponse.set(delayed);</span>
+<span class="nc" id="L567">            this.delayReadOnEntry.set(entryId);</span>
+<span class="nc" id="L568">            this.delayReadLatch = delayReadLatch;</span>
+<span class="nc" id="L569">        }</span>
+
+    }
+
+    @Test
+    public void testRecoveryWhenClosingLedgerHandle() throws Exception {
+<span class="nc" id="L575">        byte[] passwd = &quot;recovery-when-closing-ledger-handle&quot;.getBytes(UTF_8);</span>
+
+<span class="nc" id="L577">        ClientConfiguration newConf = new ClientConfiguration();</span>
+<span class="nc" id="L578">        newConf.addConfiguration(baseClientConf);</span>
+<span class="nc" id="L579">        newConf.setEnableParallelRecoveryRead(true);</span>
+<span class="nc" id="L580">        newConf.setRecoveryReadBatchSize(1);</span>
+<span class="nc" id="L581">        newConf.setAddEntryTimeout(9999999);</span>
+<span class="nc" id="L582">        newConf.setReadEntryTimeout(9999999);</span>
+
+<span class="nc" id="L584">        final BookKeeper newBk0 = new BookKeeper(newConf);</span>
+<span class="nc" id="L585">        final LedgerHandle lh0 = newBk0.createLedger(1, 1, 1, digestType, passwd);</span>
+
+<span class="nc" id="L587">        final BookKeeper newBk1 = new BookKeeper(newConf);</span>
+<span class="nc" id="L588">        final LedgerHandle lh1 = newBk1.openLedgerNoRecovery(lh0.getId(), digestType, passwd);</span>
+<span class="nc" id="L589">        final TestLedgerManager tlm1 = (TestLedgerManager) newBk1.getUnderlyingLedgerManager();</span>
+
+<span class="nc" id="L591">        final BookKeeper readBk = new BookKeeper(newConf);</span>
+<span class="nc" id="L592">        final LedgerHandle readLh = readBk.openLedgerNoRecovery(lh0.getId(), digestType, passwd);</span>
+
+<span class="nc" id="L594">        LOG.info(&quot;Create ledger {}&quot;, lh0.getId());</span>
+
+        // 0) place the bookie with a fake bookie
+<span class="nc" id="L597">        BookieSocketAddress address = lh0.getCurrentEnsemble().get(0);</span>
+<span class="nc" id="L598">        ServerConfiguration conf = killBookie(address);</span>
+<span class="nc" id="L599">        conf.setLedgerStorageClass(InterleavedLedgerStorage.class.getName());</span>
+<span class="nc" id="L600">        DelayResponseBookie fakeBookie = new DelayResponseBookie(conf);</span>
+<span class="nc" id="L601">        bs.add(startBookie(conf, fakeBookie));</span>
+<span class="nc" id="L602">        bsConfs.add(conf);</span>
+
+        // 1) bk0 write two entries
+<span class="nc" id="L605">        lh0.addEntry(&quot;entry-0&quot;.getBytes(UTF_8));</span>
+<span class="nc" id="L606">        lh0.addEntry(&quot;entry-1&quot;.getBytes(UTF_8));</span>
+
+        // 2) readBk read last add confirmed
+<span class="nc" id="L609">        long lac = readLh.readLastConfirmed();</span>
+<span class="nc" id="L610">        assertEquals(0L, lac);</span>
+<span class="nc" id="L611">        lac = lh1.readLastConfirmed();</span>
+<span class="nc" id="L612">        assertEquals(0L, lac);</span>
+
+<span class="nc" id="L614">        final CountDownLatch addLatch = new CountDownLatch(3);</span>
+<span class="nc" id="L615">        final AtomicInteger numAddFailures = new AtomicInteger(0);</span>
+        // 3) bk0 write more entries in parallel
+<span class="nc" id="L617">        fakeBookie.delayAdd(true);</span>
+<span class="nc bnc" id="L618" title="All 2 branches missed.">        for (int i = 2; i &lt; 5; i++) {</span>
+<span class="nc" id="L619">            lh0.asyncAddEntry((&quot;entry-&quot; + i).getBytes(UTF_8), new AsyncCallback.AddCallback() {</span>
+                @Override
+                public void addComplete(int rc, LedgerHandle lh, long entryId, Object ctx) {
+<span class="nc bnc" id="L622" title="All 2 branches missed.">                    if (BKException.Code.OK != rc) {</span>
+<span class="nc" id="L623">                        numAddFailures.incrementAndGet();</span>
+                    }
+<span class="nc" id="L625">                    addLatch.countDown();</span>
+<span class="nc" id="L626">                }</span>
+            }, null);
+        }
+<span class="nc bnc" id="L629" title="All 2 branches missed.">        while (fakeBookie.delayQueue.size() &lt; 3) {</span>
+            // wait until all add requests are queued
+<span class="nc" id="L631">            Thread.sleep(100);</span>
+        }
+
+        // 4) lac moved to 1L
+<span class="nc" id="L635">        lac = readLh.readLastConfirmed();</span>
+<span class="nc" id="L636">        assertEquals(1L, lac);</span>
+<span class="nc" id="L637">        lac = lh1.readLastConfirmed();</span>
+<span class="nc" id="L638">        assertEquals(1L, lac);</span>
+
+        // 5) bk1 is doing recovery, but the metadata update is delayed
+<span class="nc" id="L641">        final CountDownLatch readLatch = new CountDownLatch(1);</span>
+<span class="nc" id="L642">        fakeBookie.delayAdd(false);</span>
+<span class="nc" id="L643">        fakeBookie.delayRead(true, 3L, readLatch);</span>
+<span class="nc" id="L644">        final CountDownLatch metadataLatch = new CountDownLatch(1);</span>
+<span class="nc" id="L645">        tlm1.setLatch(metadataLatch);</span>
+<span class="nc" id="L646">        final CountDownLatch recoverLatch = new CountDownLatch(1);</span>
+<span class="nc" id="L647">        final AtomicBoolean recoverSuccess = new AtomicBoolean(false);</span>
+<span class="nc" id="L648">        ((ReadOnlyLedgerHandle) lh1).recover(new GenericCallback&lt;Void&gt;() {</span>
+            @Override
+            public void operationComplete(int rc, Void result) {
+<span class="nc" id="L651">                LOG.info(&quot;Recovering ledger {} completed : {}&quot;, lh1.getId(), rc);</span>
+<span class="nc bnc" id="L652" title="All 2 branches missed.">                recoverSuccess.set(BKException.Code.OK == rc);</span>
+<span class="nc" id="L653">                recoverLatch.countDown();</span>
+<span class="nc" id="L654">            }</span>
+        });
+<span class="nc" id="L656">        Thread.sleep(2000);</span>
+<span class="nc" id="L657">        readLatch.countDown();</span>
+
+        // we don't expected lac being updated before we successfully marked the ledger in recovery
+<span class="nc" id="L660">        lac = readLh.readLastConfirmed();</span>
+<span class="nc" id="L661">        assertEquals(1L, lac);</span>
+
+        // 6) bk0 closes ledger before bk1 marks in recovery
+<span class="nc" id="L664">        lh0.close();</span>
+<span class="nc" id="L665">        assertEquals(1L, lh0.getLastAddConfirmed());</span>
+
+        // 7) bk1 proceed recovery and succeed
+<span class="nc" id="L668">        metadataLatch.countDown();</span>
+<span class="nc" id="L669">        recoverLatch.await();</span>
+<span class="nc" id="L670">        assertTrue(recoverSuccess.get());</span>
+<span class="nc" id="L671">        assertEquals(1L, lh1.getLastAddConfirmed());</span>
+
+        // 8) make sure we won't see lac advanced during ledger is closed by bk0 and recovered by bk1
+<span class="nc" id="L674">        final AtomicLong lacHolder = new AtomicLong(-1234L);</span>
+<span class="nc" id="L675">        final AtomicInteger rcHolder = new AtomicInteger(-1234);</span>
+<span class="nc" id="L676">        final CountDownLatch doneLatch = new CountDownLatch(1);</span>
+
+<span class="nc" id="L678">        new ReadLastConfirmedOp(bkc.getBookieClient(),</span>
+                                readLh.distributionSchedule,
+                                readLh.macManager,
+                                readLh.ledgerId,
+<span class="nc" id="L682">                                readLh.getLedgerMetadata().getAllEnsembles().lastEntry().getValue(),</span>
+                                readLh.ledgerKey,
+<span class="nc" id="L684">                new ReadLastConfirmedOp.LastConfirmedDataCallback() {</span>
+                    @Override
+                    public void readLastConfirmedDataComplete(int rc, DigestManager.RecoveryData data) {
+<span class="nc" id="L687">                        rcHolder.set(rc);</span>
+<span class="nc" id="L688">                        lacHolder.set(data.getLastAddConfirmed());</span>
+<span class="nc" id="L689">                        doneLatch.countDown();</span>
+<span class="nc" id="L690">                    }</span>
+<span class="nc" id="L691">                }).initiate();</span>
+<span class="nc" id="L692">        doneLatch.await();</span>
+<span class="nc" id="L693">        assertEquals(BKException.Code.OK, rcHolder.get());</span>
+<span class="nc" id="L694">        assertEquals(1L, lacHolder.get());</span>
+
+<span class="nc" id="L696">        newBk0.close();</span>
+<span class="nc" id="L697">        newBk1.close();</span>
+<span class="nc" id="L698">        readBk.close();</span>
+<span class="nc" id="L699">    }</span>
+
+    /**
+     * Validate ledger can recover with response: (Qw - Qa)+1.
+     * @throws Exception
+     */
+    @Test
+    public void testRecoveryWithUnavailableBookie() throws Exception {
+
+<span class="nc" id="L708">        byte[] passwd = &quot;&quot;.getBytes(UTF_8);</span>
+<span class="nc" id="L709">        ClientConfiguration newConf = new ClientConfiguration();</span>
+<span class="nc" id="L710">        newConf.addConfiguration(baseClientConf);</span>
+<span class="nc" id="L711">        final BookKeeper readBk = new BookKeeper(newConf);</span>
+<span class="nc" id="L712">        final BookKeeper newBk0 = new BookKeeper(newConf);</span>
+
+        /**
+         * Test Group-1 : Expected Response for recovery: Qr = (Qw - Qa)+1 = (3
+         * -2) + 1 = 2
+         */
+<span class="nc" id="L718">        int ensembleSize = 3;</span>
+<span class="nc" id="L719">        int writeQuorumSize = 3;</span>
+<span class="nc" id="L720">        int ackQuormSize = 2;</span>
+<span class="nc" id="L721">        LedgerHandle lh0 = newBk0.createLedger(ensembleSize, writeQuorumSize, ackQuormSize, DigestType.DUMMY, passwd);</span>
+<span class="nc" id="L722">        LedgerHandle readLh = readBk.openLedgerNoRecovery(lh0.getId(), DigestType.DUMMY, passwd);</span>
+        // Test 1: bookie response: OK, NO_SUCH_LEDGER_EXISTS, NOT_AVAILABLE
+        // Expected: Recovery successful Q(response) = 2
+<span class="nc" id="L725">        int responseCode = readLACFromQuorum(readLh, BKException.Code.BookieHandleNotAvailableException,</span>
+                BKException.Code.OK, BKException.Code.NoSuchLedgerExistsException);
+<span class="nc" id="L727">        assertEquals(responseCode, BKException.Code.OK);</span>
+        // Test 2: bookie response: OK, NOT_AVAILABLE, NOT_AVAILABLE
+        // Expected: Recovery fail Q(response) = 1
+<span class="nc" id="L730">        responseCode = readLACFromQuorum(readLh, BKException.Code.BookieHandleNotAvailableException,</span>
+                BKException.Code.OK, BKException.Code.BookieHandleNotAvailableException);
+<span class="nc" id="L732">        assertEquals(responseCode, BKException.Code.BookieHandleNotAvailableException);</span>
+
+        /**
+         * Test Group-2 : Expected Response for recovery: Qr = (Qw - Qa)+1 = (2
+         * -2) + 1 = 1
+         */
+<span class="nc" id="L738">        ensembleSize = 2;</span>
+<span class="nc" id="L739">        writeQuorumSize = 2;</span>
+<span class="nc" id="L740">        ackQuormSize = 2;</span>
+<span class="nc" id="L741">        lh0 = newBk0.createLedger(ensembleSize, writeQuorumSize, ackQuormSize, DigestType.DUMMY, passwd);</span>
+<span class="nc" id="L742">        readLh = readBk.openLedgerNoRecovery(lh0.getId(), DigestType.DUMMY, passwd);</span>
+        // Test 1: bookie response: OK, NOT_AVAILABLE
+        // Expected: Recovery successful Q(response) = 1
+<span class="nc" id="L745">        responseCode = readLACFromQuorum(readLh, BKException.Code.BookieHandleNotAvailableException,</span>
+                BKException.Code.OK);
+<span class="nc" id="L747">        assertEquals(responseCode, BKException.Code.OK);</span>
+
+        // Test 1: bookie response: OK, NO_SUCH_LEDGER_EXISTS
+        // Expected: Recovery successful Q(response) = 2
+<span class="nc" id="L751">        responseCode = readLACFromQuorum(readLh, BKException.Code.NoSuchLedgerExistsException, BKException.Code.OK);</span>
+<span class="nc" id="L752">        assertEquals(responseCode, BKException.Code.OK);</span>
+
+        // Test 3: bookie response: NOT_AVAILABLE, NOT_AVAILABLE
+        // Expected: Recovery fail Q(response) = 0
+<span class="nc" id="L756">        responseCode = readLACFromQuorum(readLh, BKException.Code.BookieHandleNotAvailableException,</span>
+                BKException.Code.BookieHandleNotAvailableException);
+<span class="nc" id="L758">        assertEquals(responseCode, BKException.Code.BookieHandleNotAvailableException);</span>
+
+<span class="nc" id="L760">        newBk0.close();</span>
+<span class="nc" id="L761">        readBk.close();</span>
+<span class="nc" id="L762">    }</span>
+
+    private int readLACFromQuorum(LedgerHandle ledger, int... bookieLACResponse) throws Exception {
+<span class="nc" id="L765">        MutableInt responseCode = new MutableInt(100);</span>
+<span class="nc" id="L766">        CountDownLatch responseLatch = new CountDownLatch(1);</span>
+<span class="nc" id="L767">        ReadLastConfirmedOp readLCOp = new ReadLastConfirmedOp(</span>
+<span class="nc" id="L768">                bkc.getBookieClient(),</span>
+<span class="nc" id="L769">                ledger.getDistributionSchedule(),</span>
+<span class="nc" id="L770">                ledger.getDigestManager(),</span>
+<span class="nc" id="L771">                ledger.getId(),</span>
+<span class="nc" id="L772">                ledger.getLedgerMetadata().getAllEnsembles().lastEntry().getValue(),</span>
+<span class="nc" id="L773">                ledger.getLedgerKey(),</span>
+<span class="nc" id="L774">                new ReadLastConfirmedOp.LastConfirmedDataCallback() {</span>
+                    @Override
+                    public void readLastConfirmedDataComplete(int rc, DigestManager.RecoveryData data) {
+<span class="nc" id="L777">                        System.out.println(&quot;response = &quot; + rc);</span>
+<span class="nc" id="L778">                        responseCode.setValue(rc);</span>
+<span class="nc" id="L779">                        responseLatch.countDown();</span>
+<span class="nc" id="L780">                    }</span>
+                });
+<span class="nc" id="L782">        byte[] lac = new byte[Long.SIZE * 3];</span>
+<span class="nc" id="L783">        ByteBuf data = Unpooled.wrappedBuffer(lac, 0, lac.length);</span>
+<span class="nc" id="L784">        int writerIndex = data.writerIndex();</span>
+<span class="nc" id="L785">        data.resetWriterIndex();</span>
+<span class="nc" id="L786">        data.writeLong(ledger.getId());</span>
+<span class="nc" id="L787">        data.writeLong(0L);</span>
+<span class="nc" id="L788">        data.writerIndex(writerIndex);</span>
+<span class="nc bnc" id="L789" title="All 2 branches missed.">        for (int i = 0; i &lt; bookieLACResponse.length; i++) {</span>
+<span class="nc" id="L790">            readLCOp.readEntryComplete(bookieLACResponse[i], 0, 0, data, i);</span>
+        }
+<span class="nc" id="L792">        responseLatch.await();</span>
+<span class="nc" id="L793">        return responseCode.intValue();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

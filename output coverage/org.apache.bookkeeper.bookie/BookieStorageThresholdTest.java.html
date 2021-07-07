@@ -1,0 +1,256 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>BookieStorageThresholdTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$myBookieFenceLedgerTest.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.bookie</a> &gt; <span class="el_source">BookieStorageThresholdTest.java</span></div><h1>BookieStorageThresholdTest.java</h1><pre class="source lang-java linenums">/*
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+
+package org.apache.bookkeeper.bookie;
+
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import java.io.File;
+import java.util.Collections;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import org.apache.bookkeeper.bookie.LedgerDirsManager.LedgerDirsListener;
+import org.apache.bookkeeper.bookie.LedgerDirsManager.NoWritableLedgerDirException;
+import org.apache.bookkeeper.client.BookKeeper.DigestType;
+import org.apache.bookkeeper.client.LedgerHandle;
+import org.apache.bookkeeper.common.testing.annotations.FlakyTest;
+import org.apache.bookkeeper.conf.ServerConfiguration;
+import org.apache.bookkeeper.proto.BookieServer;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.apache.bookkeeper.util.DiskChecker;
+import org.apache.bookkeeper.util.TestUtils;
+import org.junit.Before;
+
+/**
+ * Test BookieStorage with a threshold.
+ */
+public class BookieStorageThresholdTest extends BookKeeperClusterTestCase {
+
+    private static final int NUM_BOOKIES = 1;
+    private static final int NUM_ENTRIES = 100;
+    private static final int ENTRY_SIZE = 1024;
+
+    final String msg;
+<span class="nc" id="L56">    DigestType digestType = DigestType.CRC32;</span>
+
+    public BookieStorageThresholdTest() {
+<span class="nc" id="L59">        super(NUM_BOOKIES);</span>
+        // a dummy message
+<span class="nc" id="L61">        StringBuilder msgSB = new StringBuilder();</span>
+<span class="nc bnc" id="L62" title="All 2 branches missed.">        for (int i = 0; i &lt; ENTRY_SIZE; i++) {</span>
+<span class="nc" id="L63">            msgSB.append(&quot;a&quot;);</span>
+        }
+<span class="nc" id="L65">        msg = msgSB.toString();</span>
+<span class="nc" id="L66">    }</span>
+
+    @Before
+    @Override
+    public void setUp() throws Exception {
+        // Set up the configuration properties needed.
+<span class="nc" id="L72">        baseConf.setEntryLogSizeLimit(NUM_ENTRIES * ENTRY_SIZE);</span>
+<span class="nc" id="L73">        baseConf.setFlushInterval(500);</span>
+        // setting very high intervals for GC intervals, so GC/compaction is not invoked by regular scheduler
+<span class="nc" id="L75">        baseConf.setGcWaitTime(60000);</span>
+<span class="nc" id="L76">        baseConf.setMinorCompactionInterval(600000);</span>
+<span class="nc" id="L77">        baseConf.setMajorCompactionInterval(700000);</span>
+<span class="nc" id="L78">        baseConf.setEntryLogFilePreAllocationEnabled(false);</span>
+<span class="nc" id="L79">        baseConf.setLedgerStorageClass(InterleavedLedgerStorage.class.getName());</span>
+        // set isForceGCAllowWhenNoSpace to true, which will forceGC when a disk is full (or when all disks are full)
+<span class="nc" id="L81">        baseConf.setIsForceGCAllowWhenNoSpace(true);</span>
+        // keep some lower value for DiskCheckInterval, so DiskChecker checks quite often
+<span class="nc" id="L83">        baseConf.setDiskCheckInterval(3000);</span>
+
+<span class="nc" id="L85">        super.setUp();</span>
+<span class="nc" id="L86">    }</span>
+
+    LedgerHandle[] prepareData(int numEntryLogs) throws Exception {
+        // since an entry log file can hold at most 100 entries
+        // first ledger write 2 entries, which is less than low water mark
+<span class="nc" id="L91">        int num1 = 2;</span>
+        // third ledger write more than high water mark entries
+<span class="nc" id="L93">        int num3 = (int) (NUM_ENTRIES * 0.7f);</span>
+        // second ledger write remaining entries, which is higher than low water
+        // mark and less than high water mark
+<span class="nc" id="L96">        int num2 = NUM_ENTRIES - num3 - num1;</span>
+
+<span class="nc" id="L98">        LedgerHandle[] lhs = new LedgerHandle[3];</span>
+<span class="nc bnc" id="L99" title="All 2 branches missed.">        for (int i = 0; i &lt; 3; ++i) {</span>
+<span class="nc" id="L100">            lhs[i] = bkc.createLedger(NUM_BOOKIES, NUM_BOOKIES, digestType, &quot;&quot;.getBytes());</span>
+        }
+
+<span class="nc bnc" id="L103" title="All 2 branches missed.">        for (int n = 0; n &lt; numEntryLogs; n++) {</span>
+<span class="nc bnc" id="L104" title="All 2 branches missed.">            for (int k = 0; k &lt; num1; k++) {</span>
+<span class="nc" id="L105">                lhs[0].addEntry(msg.getBytes());</span>
+            }
+<span class="nc bnc" id="L107" title="All 2 branches missed.">            for (int k = 0; k &lt; num2; k++) {</span>
+<span class="nc" id="L108">                lhs[1].addEntry(msg.getBytes());</span>
+            }
+<span class="nc bnc" id="L110" title="All 2 branches missed.">            for (int k = 0; k &lt; num3; k++) {</span>
+<span class="nc" id="L111">                lhs[2].addEntry(msg.getBytes());</span>
+            }
+        }
+
+<span class="nc" id="L115">        return lhs;</span>
+    }
+
+    /**
+     * A Threshold-based disk checker test.
+     */
+    public class ThresholdTestDiskChecker extends DiskChecker {
+
+        final AtomicBoolean injectDiskOutOfSpaceException;
+
+<span class="nc" id="L125">        public ThresholdTestDiskChecker(float threshold, float warnThreshold) {</span>
+<span class="nc" id="L126">            super(threshold, warnThreshold);</span>
+<span class="nc" id="L127">            injectDiskOutOfSpaceException = new AtomicBoolean();</span>
+<span class="nc" id="L128">        }</span>
+
+        public void setInjectDiskOutOfSpaceException(boolean setValue) {
+<span class="nc" id="L131">            injectDiskOutOfSpaceException.set(setValue);</span>
+<span class="nc" id="L132">        }</span>
+
+        @Override
+        public float checkDir(File dir) throws DiskErrorException, DiskOutOfSpaceException, DiskWarnThresholdException {
+<span class="nc bnc" id="L136" title="All 2 branches missed.">            if (injectDiskOutOfSpaceException.get()) {</span>
+<span class="nc" id="L137">                throw new DiskOutOfSpaceException(&quot;Injected DiskOutOfSpaceException&quot;,</span>
+<span class="nc" id="L138">                        baseConf.getDiskUsageThreshold() + 2);</span>
+            }
+<span class="nc" id="L140">            return super.checkDir(dir);</span>
+        }
+    }
+
+    @FlakyTest(value = &quot;https://github.com/apache/bookkeeper/issues/1562&quot;)
+    public void testStorageThresholdCompaction() throws Exception {
+<span class="nc" id="L146">        stopAllBookies();</span>
+<span class="nc" id="L147">        ServerConfiguration conf = newServerConfiguration();</span>
+<span class="nc" id="L148">        File ledgerDir1 = createTempDir(&quot;ledger&quot;, &quot;test1&quot;);</span>
+<span class="nc" id="L149">        File ledgerDir2 = createTempDir(&quot;ledger&quot;, &quot;test2&quot;);</span>
+<span class="nc" id="L150">        File journalDir = createTempDir(&quot;journal&quot;, &quot;test&quot;);</span>
+<span class="nc" id="L151">        String[] ledgerDirNames = new String[]{</span>
+<span class="nc" id="L152">            ledgerDir1.getPath(),</span>
+<span class="nc" id="L153">            ledgerDir2.getPath()</span>
+        };
+<span class="nc" id="L155">        conf.setLedgerDirNames(ledgerDirNames);</span>
+<span class="nc" id="L156">        conf.setJournalDirName(journalDir.getPath());</span>
+<span class="nc" id="L157">        BookieServer server = startBookie(conf);</span>
+<span class="nc" id="L158">        bs.add(server);</span>
+<span class="nc" id="L159">        bsConfs.add(conf);</span>
+<span class="nc" id="L160">        Bookie bookie = server.getBookie();</span>
+        // since we are going to set dependency injected dirsMonitor, so we need to shutdown
+        // the dirsMonitor which was created as part of the initialization of Bookie
+<span class="nc" id="L163">        bookie.dirsMonitor.shutdown();</span>
+
+<span class="nc" id="L165">        LedgerDirsManager ledgerDirsManager = bookie.getLedgerDirsManager();</span>
+
+        // flag latches
+<span class="nc" id="L168">        final CountDownLatch diskWritable = new CountDownLatch(1);</span>
+<span class="nc" id="L169">        final CountDownLatch diskFull = new CountDownLatch(1);</span>
+<span class="nc" id="L170">        ledgerDirsManager.addLedgerDirsListener(new LedgerDirsListener() {</span>
+
+            @Override
+            public void diskWritable(File disk) {
+<span class="nc" id="L174">                diskWritable.countDown();</span>
+<span class="nc" id="L175">            }</span>
+
+            @Override
+            public void diskFull(File disk) {
+<span class="nc" id="L179">                diskFull.countDown();</span>
+<span class="nc" id="L180">            }</span>
+
+        });
+
+        // Dependency Injected class
+<span class="nc" id="L185">        ThresholdTestDiskChecker thresholdTestDiskChecker = new ThresholdTestDiskChecker(</span>
+<span class="nc" id="L186">                baseConf.getDiskUsageThreshold(), baseConf.getDiskUsageWarnThreshold());</span>
+<span class="nc" id="L187">        bookie.dirsMonitor = new LedgerDirsMonitor(baseConf, thresholdTestDiskChecker,</span>
+<span class="nc" id="L188">                Collections.singletonList(ledgerDirsManager));</span>
+        // set the dirsMonitor and initiate/start it
+<span class="nc" id="L190">        bookie.dirsMonitor.init();</span>
+<span class="nc" id="L191">        bookie.dirsMonitor.start();</span>
+
+        // create ledgers and add fragments
+<span class="nc" id="L194">        LedgerHandle[] lhs = prepareData(3);</span>
+<span class="nc bnc" id="L195" title="All 2 branches missed.">        for (LedgerHandle lh : lhs) {</span>
+<span class="nc" id="L196">            lh.close();</span>
+        }
+
+        // delete ledger2 and ledger3
+<span class="nc" id="L200">        bkc.deleteLedger(lhs[1].getId());</span>
+<span class="nc" id="L201">        bkc.deleteLedger(lhs[2].getId());</span>
+
+        // validating that LedgerDirsListener are not triggered yet
+<span class="nc bnc" id="L204" title="All 2 branches missed.">        assertTrue(&quot;Disk Full shouldn't have been triggered yet&quot;, diskFull.getCount() == 1);</span>
+<span class="nc bnc" id="L205" title="All 2 branches missed.">        assertTrue(&quot;Disk writable shouldn't have been triggered yet&quot;, diskWritable.getCount() == 1);</span>
+        // set exception injection to true, so that next time when checkDir of DiskChecker (ThresholdTestDiskChecker) is
+        // called it will throw DiskOutOfSpaceException
+<span class="nc" id="L208">        thresholdTestDiskChecker.setInjectDiskOutOfSpaceException(true);</span>
+
+        // now we are waiting for diskFull latch count to get to 0.
+        // we are waiting for diskCheckInterval period, so that next time when LedgerDirsMonitor monitors diskusage of
+        // its directories, it would get DiskOutOfSpaceException and hence diskFull of all LedgerDirsListener would be
+        // called.
+<span class="nc" id="L214">        diskFull.await(baseConf.getDiskCheckInterval() + 500, TimeUnit.MILLISECONDS);</span>
+        // verifying that diskFull of all LedgerDirsListener are invoked, so countdown of diskFull should come down to 0
+<span class="nc bnc" id="L216" title="All 2 branches missed.">        assertTrue(&quot;Disk Full should have been triggered&quot;, diskFull.getCount() == 0);</span>
+        // making sure diskWritable of LedgerDirsListener are not invoked yet
+<span class="nc bnc" id="L218" title="All 2 branches missed.">        assertTrue(&quot;Disk writable shouldn't have been triggered yet&quot;, diskWritable.getCount() == 1);</span>
+        // waiting momentarily, because transition to Readonly mode happens asynchronously when there are no more
+        // writableLedgerDirs
+<span class="nc" id="L221">        Thread.sleep(500);</span>
+<span class="nc" id="L222">        assertTrue(&quot;Bookie should be transitioned to ReadOnly&quot;, bookie.isReadOnly());</span>
+        // since we set isForceGCAllowWhenNoSpace to true, when the disk is full (or when all disks are full) it does
+        // force GC.
+        // Because of getWritableLedgerDirsForNewLog, compaction would be able to create newlog and compact even though
+        // there are no writableLedgerDirs
+<span class="nc bnc" id="L227" title="All 2 branches missed.">        for (File ledgerDir : bookie.getLedgerDirsManager().getAllLedgerDirs()) {</span>
+<span class="nc" id="L228">            assertFalse(&quot;Found entry log file ([0,1,2].log. They should have been compacted&quot; + ledgerDir,</span>
+<span class="nc" id="L229">                TestUtils.hasLogFiles(ledgerDir.getParentFile(), true, 0, 1, 2));</span>
+<span class="nc" id="L230">        }</span>
+
+        try {
+<span class="nc" id="L233">            ledgerDirsManager.getWritableLedgerDirs();</span>
+<span class="nc" id="L234">            fail(&quot;It is expected that there wont be any Writable LedgerDirs and getWritableLedgerDirs &quot;</span>
+                    + &quot;is supposed to throw NoWritableLedgerDirException&quot;);
+<span class="nc" id="L236">        } catch (NoWritableLedgerDirException nowritableDirsException) {</span>
+<span class="nc" id="L237">        }</span>
+
+        // disable exception injection
+<span class="nc" id="L240">        thresholdTestDiskChecker.setInjectDiskOutOfSpaceException(false);</span>
+
+        // now we are waiting for diskWritable latch count to get to 0.
+        // we are waiting for diskCheckInterval period, so that next time when LedgerDirsMonitor monitors diskusage of
+        // its directories, it would find writableledgerdirectory and hence diskWritable of all LedgerDirsListener would
+        // be called.
+<span class="nc" id="L246">        diskWritable.await(baseConf.getDiskCheckInterval() + 500, TimeUnit.MILLISECONDS);</span>
+        // verifying that diskWritable of all LedgerDirsListener are invoked, so countdown of diskWritable should come
+        // down to 0
+<span class="nc bnc" id="L249" title="All 2 branches missed.">        assertTrue(&quot;Disk writable should have been triggered&quot;, diskWritable.getCount() == 0);</span>
+        // waiting momentarily, because transition to ReadWrite mode happens asynchronously when there is new
+        // writableLedgerDirectory
+<span class="nc" id="L252">        Thread.sleep(500);</span>
+<span class="nc" id="L253">        assertFalse(&quot;Bookie should be transitioned to ReadWrite&quot;, bookie.isReadOnly());</span>
+<span class="nc" id="L254">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

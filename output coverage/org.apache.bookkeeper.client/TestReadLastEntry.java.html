@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TestReadLastEntry.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">TestReadLastEntry.java</span></div><h1>TestReadLastEntry.java</h1><pre class="source lang-java linenums">/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.bookkeeper.client;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
+
+import java.util.Arrays;
+import java.util.Enumeration;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
+import org.apache.bookkeeper.client.AsyncCallback.ReadCallback;
+import org.apache.bookkeeper.client.BKException.Code;
+import org.apache.bookkeeper.client.BookKeeper.DigestType;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.junit.Test;
+
+/**
+  * Test read next entry and the latest last add confirmed.
+  */
+public class TestReadLastEntry extends BookKeeperClusterTestCase {
+
+    final DigestType digestType;
+
+    public TestReadLastEntry() {
+<span class="nc" id="L41">        super(1);</span>
+<span class="nc" id="L42">        this.digestType = DigestType.CRC32;</span>
+<span class="nc" id="L43">    }</span>
+
+    @Test
+    public void testTryReadLastEntryAsyncOnEmptyLedger() throws Exception {
+<span class="nc" id="L47">        final LedgerHandle lh = bkc.createLedger(1, 1, 1, digestType, &quot;&quot;.getBytes());</span>
+<span class="nc" id="L48">        lh.close();</span>
+
+<span class="nc" id="L50">        LedgerHandle readLh = bkc.openLedger(lh.getId(), digestType, &quot;&quot;.getBytes());</span>
+
+<span class="nc" id="L52">        final CountDownLatch latch1 = new CountDownLatch(1);</span>
+<span class="nc" id="L53">        final AtomicInteger rcStore = new AtomicInteger();</span>
+<span class="nc" id="L54">        readLh.asyncReadLastEntry(new ReadCallback() {</span>
+            @Override
+            public void readComplete(int rc, LedgerHandle lh, Enumeration&lt;LedgerEntry&gt; seq, Object ctx) {
+<span class="nc" id="L57">                rcStore.set(rc);</span>
+<span class="nc" id="L58">                latch1.countDown();</span>
+<span class="nc" id="L59">            }</span>
+        }, null);
+
+<span class="nc" id="L62">        latch1.await();</span>
+
+<span class="nc" id="L64">        assertEquals(BKException.Code.NoSuchEntryException, rcStore.get());</span>
+
+<span class="nc" id="L66">        lh.close();</span>
+<span class="nc" id="L67">        readLh.close();</span>
+<span class="nc" id="L68">    }</span>
+
+    @Test
+    public void testTryReadLastEntryOnEmptyLedger() throws Exception {
+<span class="nc" id="L72">        final LedgerHandle lh = bkc.createLedger(1, 1, 1, digestType, &quot;&quot;.getBytes());</span>
+<span class="nc" id="L73">        lh.close();</span>
+
+<span class="nc" id="L75">        LedgerHandle readLh = bkc.openLedger(lh.getId(), digestType, &quot;&quot;.getBytes());</span>
+        try {
+<span class="nc" id="L77">            LedgerEntry lastEntry = readLh.readLastEntry();</span>
+<span class="nc" id="L78">            fail(&quot;should fail with NoSuchEntryException&quot;);</span>
+<span class="nc" id="L79">        } catch (BKException e) {</span>
+<span class="nc" id="L80">            assertEquals(e.getCode(), Code.NoSuchEntryException);</span>
+<span class="nc" id="L81">        }</span>
+
+<span class="nc" id="L83">        lh.close();</span>
+<span class="nc" id="L84">        readLh.close();</span>
+<span class="nc" id="L85">    }</span>
+
+    @Test
+    public void testTryReadLastEntryAsync() throws Exception {
+<span class="nc" id="L89">        final LedgerHandle lh = bkc.createLedger(1, 1, 1, digestType, &quot;&quot;.getBytes());</span>
+<span class="nc" id="L90">        byte[] data = new byte[1024];</span>
+<span class="nc" id="L91">        Arrays.fill(data, (byte) 'x');</span>
+<span class="nc bnc" id="L92" title="All 2 branches missed.">        for (int j = 0; j &lt; 100; j++) {</span>
+<span class="nc" id="L93">            data[1023] = Integer.valueOf(j).byteValue();</span>
+<span class="nc" id="L94">            lh.addEntry(data);</span>
+        }
+<span class="nc" id="L96">        lh.close();</span>
+
+<span class="nc" id="L98">        LedgerHandle readLh = bkc.openLedger(lh.getId(), digestType, &quot;&quot;.getBytes());</span>
+<span class="nc" id="L99">        final CountDownLatch latch1 = new CountDownLatch(1);</span>
+<span class="nc" id="L100">        final AtomicInteger rcStore = new AtomicInteger();</span>
+<span class="nc" id="L101">        final AtomicInteger lastByteStore = new AtomicInteger();</span>
+
+<span class="nc" id="L103">        readLh.asyncReadLastEntry(new ReadCallback() {</span>
+            @Override
+            public void readComplete(int rc, LedgerHandle lh, Enumeration&lt;LedgerEntry&gt; seq, Object ctx) {
+<span class="nc" id="L106">                rcStore.set(rc);</span>
+<span class="nc" id="L107">                LedgerEntry entry = seq.nextElement();</span>
+<span class="nc" id="L108">                lastByteStore.set(Integer.valueOf(entry.getEntry()[1023]));</span>
+<span class="nc" id="L109">                latch1.countDown();</span>
+<span class="nc" id="L110">            }</span>
+        }, null);
+
+<span class="nc" id="L113">        latch1.await();</span>
+
+<span class="nc" id="L115">        assertEquals(BKException.Code.OK, rcStore.get());</span>
+<span class="nc" id="L116">        assertEquals(lastByteStore.byteValue(), data[1023]);</span>
+
+<span class="nc" id="L118">        lh.close();</span>
+<span class="nc" id="L119">        readLh.close();</span>
+<span class="nc" id="L120">    }</span>
+
+    @Test
+    public void testTryReadLastEntrySync() throws Exception {
+<span class="nc" id="L124">        final LedgerHandle lh = bkc.createLedger(1, 1, 1, digestType, &quot;&quot;.getBytes());</span>
+<span class="nc" id="L125">        byte[] data = new byte[1024];</span>
+<span class="nc" id="L126">        Arrays.fill(data, (byte) 'x');</span>
+<span class="nc bnc" id="L127" title="All 2 branches missed.">        for (int j = 0; j &lt; 100; j++) {</span>
+<span class="nc" id="L128">            data[1023] = Integer.valueOf(j).byteValue();</span>
+<span class="nc" id="L129">            lh.addEntry(data);</span>
+        }
+<span class="nc" id="L131">        lh.close();</span>
+
+<span class="nc" id="L133">        LedgerHandle readLh = bkc.openLedger(lh.getId(), digestType, &quot;&quot;.getBytes());</span>
+<span class="nc" id="L134">        LedgerEntry lastEntry = readLh.readLastEntry();</span>
+
+<span class="nc" id="L136">        assertEquals(lastEntry.getEntry()[1023], Integer.valueOf(99).byteValue());</span>
+
+<span class="nc" id="L138">        lh.close();</span>
+<span class="nc" id="L139">        readLh.close();</span>
+<span class="nc" id="L140">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

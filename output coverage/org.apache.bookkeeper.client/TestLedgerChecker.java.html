@@ -1,0 +1,506 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TestLedgerChecker.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">TestLedgerChecker.java</span></div><h1>TestLedgerChecker.java</h1><pre class="source lang-java linenums">/**
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.client;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicInteger;
+import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.proto.BookkeeperInternalCallbacks.GenericCallback;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Tests the functionality of LedgerChecker. This Ledger checker should be able
+ * to detect the correct underReplicated fragment
+ */
+public class TestLedgerChecker extends BookKeeperClusterTestCase {
+<span class="nc" id="L43">    private static final byte[] TEST_LEDGER_ENTRY_DATA = &quot;TestCheckerData&quot;</span>
+<span class="nc" id="L44">            .getBytes();</span>
+<span class="nc" id="L45">    private static final byte[] TEST_LEDGER_PASSWORD = &quot;testpasswd&quot;.getBytes();</span>
+<span class="nc" id="L46">    private static final Logger LOG = LoggerFactory.getLogger(TestLedgerChecker.class);</span>
+
+    public TestLedgerChecker() {
+<span class="nc" id="L49">        super(3);</span>
+<span class="nc" id="L50">    }</span>
+
+<span class="nc" id="L52">    class CheckerCallback implements GenericCallback&lt;Set&lt;LedgerFragment&gt;&gt; {</span>
+<span class="nc" id="L53">        private Set&lt;LedgerFragment&gt; result = null;</span>
+<span class="nc" id="L54">        private CountDownLatch latch = new CountDownLatch(1);</span>
+
+        public void operationComplete(int rc, Set&lt;LedgerFragment&gt; result) {
+<span class="nc" id="L57">            this.result = result;</span>
+<span class="nc" id="L58">            latch.countDown();</span>
+<span class="nc" id="L59">        }</span>
+
+        Set&lt;LedgerFragment&gt; waitAndGetResult() throws InterruptedException {
+<span class="nc" id="L62">            latch.await();</span>
+<span class="nc" id="L63">            return result;</span>
+        }
+    }
+
+    /**
+     * Tests that the LedgerChecker should detect the underReplicated fragments
+     * on multiple Bookie crashes.
+     */
+    @Test
+    public void testChecker() throws Exception {
+
+<span class="nc" id="L74">        LedgerHandle lh = bkc.createLedger(BookKeeper.DigestType.CRC32,</span>
+                TEST_LEDGER_PASSWORD);
+<span class="nc" id="L76">        startNewBookie();</span>
+
+<span class="nc bnc" id="L78" title="All 2 branches missed.">        for (int i = 0; i &lt; 10; i++) {</span>
+<span class="nc" id="L79">            lh.addEntry(TEST_LEDGER_ENTRY_DATA);</span>
+        }
+<span class="nc" id="L81">        BookieSocketAddress replicaToKill = lh.getLedgerMetadata().getAllEnsembles()</span>
+<span class="nc" id="L82">                .get(0L).get(0);</span>
+<span class="nc" id="L83">        LOG.info(&quot;Killing {}&quot;, replicaToKill);</span>
+<span class="nc" id="L84">        killBookie(replicaToKill);</span>
+
+<span class="nc bnc" id="L86" title="All 2 branches missed.">        for (int i = 0; i &lt; 10; i++) {</span>
+<span class="nc" id="L87">            lh.addEntry(TEST_LEDGER_ENTRY_DATA);</span>
+        }
+
+<span class="nc" id="L90">        Set&lt;LedgerFragment&gt; result = getUnderReplicatedFragments(lh);</span>
+<span class="nc" id="L91">        assertNotNull(&quot;Result shouldn't be null&quot;, result);</span>
+<span class="nc bnc" id="L92" title="All 2 branches missed.">        for (LedgerFragment r : result) {</span>
+<span class="nc" id="L93">            LOG.info(&quot;unreplicated fragment: {}&quot;, r);</span>
+<span class="nc" id="L94">        }</span>
+
+<span class="nc" id="L96">        assertEquals(&quot;Should have one missing fragment&quot;, 1, result.size());</span>
+<span class="nc" id="L97">        assertTrue(&quot;Fragment should be missing from first replica&quot;,</span>
+<span class="nc" id="L98">            result.iterator().next().getAddresses().contains(replicaToKill));</span>
+
+<span class="nc" id="L100">        BookieSocketAddress replicaToKill2 = lh.getLedgerMetadata()</span>
+<span class="nc" id="L101">                .getAllEnsembles().get(0L).get(1);</span>
+<span class="nc" id="L102">        LOG.info(&quot;Killing {}&quot;, replicaToKill2);</span>
+<span class="nc" id="L103">        killBookie(replicaToKill2);</span>
+
+<span class="nc" id="L105">        result = getUnderReplicatedFragments(lh);</span>
+<span class="nc" id="L106">        assertNotNull(&quot;Result shouldn't be null&quot;, result);</span>
+<span class="nc bnc" id="L107" title="All 2 branches missed.">        for (LedgerFragment r : result) {</span>
+<span class="nc" id="L108">            LOG.info(&quot;unreplicated fragment: {}&quot;, r);</span>
+<span class="nc" id="L109">        }</span>
+
+<span class="nc" id="L111">        AtomicInteger number = new AtomicInteger();</span>
+<span class="nc" id="L112">        result.forEach(ledgerFragment -&gt; number.addAndGet(ledgerFragment.getAddresses().size()));</span>
+<span class="nc" id="L113">        assertEquals(&quot;Should have three missing fragments&quot;, 3, number.get());</span>
+<span class="nc" id="L114">    }</span>
+
+    /**
+     * Tests that ledger checker should pick the fragment as bad only if any of
+     * the fragment entries not meeting the quorum.
+     */
+    // /////////////////////////////////////////////////////
+    // /////////Ensemble = 3, Quorum = 2 ///////////////////
+    // /Sample Ledger meta data should look like////////////
+    // /0 a b c /////*entry present in a,b. Now kill c//////
+    // /1 a b d ////////////////////////////////////////////
+    // /Here even though one BK failed at this stage, //////
+    // /we don't have any missed entries. Quorum satisfied//
+    // /So, there should not be any missing replicas.///////
+    // /////////////////////////////////////////////////////
+    @Test
+    public void testShouldNotGetTheFragmentIfThereIsNoMissedEntry()
+            throws Exception {
+
+<span class="nc" id="L133">        LedgerHandle lh = bkc.createLedger(3, 2, BookKeeper.DigestType.CRC32,</span>
+                TEST_LEDGER_PASSWORD);
+<span class="nc" id="L135">        lh.addEntry(TEST_LEDGER_ENTRY_DATA);</span>
+
+        // Entry should have added in first 2 Bookies.
+
+        // Kill the 3rd BK from ensemble.
+<span class="nc" id="L140">        List&lt;BookieSocketAddress&gt; firstEnsemble = lh.getLedgerMetadata()</span>
+<span class="nc" id="L141">                .getAllEnsembles().get(0L);</span>
+<span class="nc" id="L142">        BookieSocketAddress lastBookieFromEnsemble = firstEnsemble.get(2);</span>
+<span class="nc" id="L143">        LOG.info(&quot;Killing &quot; + lastBookieFromEnsemble + &quot; from ensemble=&quot;</span>
+                + firstEnsemble);
+<span class="nc" id="L145">        killBookie(lastBookieFromEnsemble);</span>
+
+<span class="nc" id="L147">        startNewBookie();</span>
+
+<span class="nc" id="L149">        LOG.info(&quot;Ensembles after first entry :&quot;</span>
+<span class="nc" id="L150">                + lh.getLedgerMetadata().getAllEnsembles());</span>
+
+        // Adding one more entry. Here enseble should be reformed.
+<span class="nc" id="L153">        lh.addEntry(TEST_LEDGER_ENTRY_DATA);</span>
+
+<span class="nc" id="L155">        LOG.info(&quot;Ensembles after second entry :&quot;</span>
+<span class="nc" id="L156">                + lh.getLedgerMetadata().getAllEnsembles());</span>
+
+<span class="nc" id="L158">        Set&lt;LedgerFragment&gt; result = getUnderReplicatedFragments(lh);</span>
+
+<span class="nc" id="L160">        assertNotNull(&quot;Result shouldn't be null&quot;, result);</span>
+
+<span class="nc bnc" id="L162" title="All 2 branches missed.">        for (LedgerFragment r : result) {</span>
+<span class="nc" id="L163">            LOG.info(&quot;unreplicated fragment: {}&quot;, r);</span>
+<span class="nc" id="L164">        }</span>
+
+<span class="nc" id="L166">        assertEquals(&quot;Should not have any missing fragment&quot;, 0, result.size());</span>
+<span class="nc" id="L167">    }</span>
+
+    /**
+     * Tests that LedgerChecker should give two fragments when 2 bookies failed
+     * in same ensemble when ensemble = 3, quorum = 2.
+     */
+    @Test
+    public void testShouldGetTwoFrgamentsIfTwoBookiesFailedInSameEnsemble()
+            throws Exception {
+
+<span class="nc" id="L177">        LedgerHandle lh = bkc.createLedger(3, 2, BookKeeper.DigestType.CRC32,</span>
+                TEST_LEDGER_PASSWORD);
+<span class="nc" id="L179">        startNewBookie();</span>
+<span class="nc" id="L180">        startNewBookie();</span>
+<span class="nc" id="L181">        lh.addEntry(TEST_LEDGER_ENTRY_DATA);</span>
+
+<span class="nc" id="L183">        List&lt;BookieSocketAddress&gt; firstEnsemble = lh.getLedgerMetadata()</span>
+<span class="nc" id="L184">                .getAllEnsembles().get(0L);</span>
+
+<span class="nc" id="L186">        BookieSocketAddress firstBookieFromEnsemble = firstEnsemble.get(0);</span>
+<span class="nc" id="L187">        killBookie(firstEnsemble, firstBookieFromEnsemble);</span>
+
+<span class="nc" id="L189">        BookieSocketAddress secondBookieFromEnsemble = firstEnsemble.get(1);</span>
+<span class="nc" id="L190">        killBookie(firstEnsemble, secondBookieFromEnsemble);</span>
+<span class="nc" id="L191">        lh.addEntry(TEST_LEDGER_ENTRY_DATA);</span>
+<span class="nc" id="L192">        Set&lt;LedgerFragment&gt; result = getUnderReplicatedFragments(lh);</span>
+
+<span class="nc" id="L194">        assertNotNull(&quot;Result shouldn't be null&quot;, result);</span>
+
+<span class="nc bnc" id="L196" title="All 2 branches missed.">        for (LedgerFragment r : result) {</span>
+<span class="nc" id="L197">            LOG.info(&quot;unreplicated fragment: {}&quot;, r);</span>
+<span class="nc" id="L198">        }</span>
+
+<span class="nc" id="L200">        assertEquals(&quot;There should be 1 fragments&quot;, 1, result.size());</span>
+<span class="nc" id="L201">        assertEquals(&quot;There should be 2 failed bookies in the fragment&quot;,</span>
+<span class="nc" id="L202">                2, result.iterator().next().getBookiesIndexes().size());</span>
+<span class="nc" id="L203">    }</span>
+
+    /**
+     * Tests that LedgerChecker should not get any underReplicated fragments, if
+     * corresponding ledger does not exists.
+     */
+    @Test
+    public void testShouldNotGetAnyFragmentIfNoLedgerPresent()
+            throws Exception {
+
+<span class="nc" id="L213">        LedgerHandle lh = bkc.createLedger(3, 2, BookKeeper.DigestType.CRC32,</span>
+                TEST_LEDGER_PASSWORD);
+
+<span class="nc" id="L216">        List&lt;BookieSocketAddress&gt; firstEnsemble = lh.getLedgerMetadata()</span>
+<span class="nc" id="L217">                .getAllEnsembles().get(0L);</span>
+<span class="nc" id="L218">        BookieSocketAddress firstBookieFromEnsemble = firstEnsemble.get(0);</span>
+<span class="nc" id="L219">        killBookie(firstBookieFromEnsemble);</span>
+<span class="nc" id="L220">        startNewBookie();</span>
+<span class="nc" id="L221">        lh.addEntry(TEST_LEDGER_ENTRY_DATA);</span>
+<span class="nc" id="L222">        bkc.deleteLedger(lh.getId());</span>
+<span class="nc" id="L223">        LOG.info(&quot;Waiting to see ledger id {} deletion&quot;, lh.getId());</span>
+<span class="nc" id="L224">        int retries = 40;</span>
+<span class="nc" id="L225">        boolean noSuchLedger = false;</span>
+<span class="nc bnc" id="L226" title="All 2 branches missed.">        while (retries &gt; 0) {</span>
+            try {
+<span class="nc" id="L228">                lh.readEntries(0, 0);</span>
+<span class="nc" id="L229">            } catch (BKException.BKNoSuchLedgerExistsException bkn) {</span>
+<span class="nc" id="L230">                noSuchLedger = true;</span>
+<span class="nc" id="L231">                break;</span>
+<span class="nc" id="L232">            }</span>
+<span class="nc" id="L233">            retries--;</span>
+<span class="nc" id="L234">            Thread.sleep(500);</span>
+        }
+<span class="nc" id="L236">        assertEquals(&quot;Ledger exists&quot;, true, noSuchLedger);</span>
+<span class="nc" id="L237">        Set&lt;LedgerFragment&gt; result = getUnderReplicatedFragments(lh);</span>
+<span class="nc" id="L238">        assertNotNull(&quot;Result shouldn't be null&quot;, result);</span>
+
+<span class="nc" id="L240">        assertEquals(&quot;There should be 0 fragments. But returned fragments are &quot;</span>
+<span class="nc" id="L241">                + result, 0, result.size());</span>
+<span class="nc" id="L242">    }</span>
+
+    /**
+     * Tests that LedgerChecker should get failed ensemble number of fragments
+     * if ensemble bookie failures on next entry.
+     */
+    @Test
+    public void testShouldGetFailedEnsembleNumberOfFgmntsIfEnsembleBookiesFailedOnNextWrite()
+            throws Exception {
+
+<span class="nc" id="L252">        startNewBookie();</span>
+<span class="nc" id="L253">        startNewBookie();</span>
+<span class="nc" id="L254">        LedgerHandle lh = bkc.createLedger(3, 2, BookKeeper.DigestType.CRC32,</span>
+                TEST_LEDGER_PASSWORD);
+<span class="nc bnc" id="L256" title="All 2 branches missed.">        for (int i = 0; i &lt; 3; i++) {</span>
+<span class="nc" id="L257">            lh.addEntry(TEST_LEDGER_ENTRY_DATA);</span>
+        }
+
+        // Kill all three bookies
+<span class="nc" id="L261">        List&lt;BookieSocketAddress&gt; firstEnsemble = lh.getLedgerMetadata()</span>
+<span class="nc" id="L262">                .getAllEnsembles().get(0L);</span>
+<span class="nc bnc" id="L263" title="All 2 branches missed.">        for (BookieSocketAddress bkAddr : firstEnsemble) {</span>
+<span class="nc" id="L264">            killBookie(firstEnsemble, bkAddr);</span>
+<span class="nc" id="L265">        }</span>
+
+<span class="nc" id="L267">        Set&lt;LedgerFragment&gt; result = getUnderReplicatedFragments(lh);</span>
+
+<span class="nc" id="L269">        assertNotNull(&quot;Result shouldn't be null&quot;, result);</span>
+
+<span class="nc bnc" id="L271" title="All 2 branches missed.">        for (LedgerFragment r : result) {</span>
+<span class="nc" id="L272">            LOG.info(&quot;unreplicated fragment: {}&quot;, r);</span>
+<span class="nc" id="L273">        }</span>
+
+<span class="nc" id="L275">        assertEquals(&quot;There should be 1 fragments&quot;, 1, result.size());</span>
+<span class="nc" id="L276">        assertEquals(&quot;There should be 3 failed bookies in the fragment&quot;,</span>
+<span class="nc" id="L277">                3, result.iterator().next().getBookiesIndexes().size());</span>
+<span class="nc" id="L278">    }</span>
+
+    /**
+     * Tests that LedgerChecker should not get any fragments as underReplicated
+     * if Ledger itself is empty.
+     */
+    @Test
+    public void testShouldNotGetAnyFragmentWithEmptyLedger() throws Exception {
+<span class="nc" id="L286">        LedgerHandle lh = bkc.createLedger(3, 2, BookKeeper.DigestType.CRC32,</span>
+                TEST_LEDGER_PASSWORD);
+<span class="nc" id="L288">        Set&lt;LedgerFragment&gt; result = getUnderReplicatedFragments(lh);</span>
+<span class="nc" id="L289">        assertNotNull(&quot;Result shouldn't be null&quot;, result);</span>
+<span class="nc" id="L290">        assertEquals(&quot;There should be 0 fragments. But returned fragments are &quot;</span>
+<span class="nc" id="L291">                + result, 0, result.size());</span>
+<span class="nc" id="L292">    }</span>
+
+    /**
+     * Tests that LedgerChecker should get all fragments if ledger is empty
+     * but all bookies in the ensemble are down.
+     * In this case, there's no way to tell whether data was written or not.
+     * In this case, there'll only be two fragments, as quorum is 2 and we only
+     * suspect that the first entry of the ledger could exist.
+     */
+    @Test
+    public void testShouldGet2FragmentsWithEmptyLedgerButBookiesDead() throws Exception {
+<span class="nc" id="L303">        LedgerHandle lh = bkc.createLedger(3, 2, BookKeeper.DigestType.CRC32,</span>
+                TEST_LEDGER_PASSWORD);
+<span class="nc bnc" id="L305" title="All 2 branches missed.">        for (BookieSocketAddress b : lh.getLedgerMetadata().getAllEnsembles().get(0L)) {</span>
+<span class="nc" id="L306">            killBookie(b);</span>
+<span class="nc" id="L307">        }</span>
+<span class="nc" id="L308">        Set&lt;LedgerFragment&gt; result = getUnderReplicatedFragments(lh);</span>
+<span class="nc" id="L309">        assertNotNull(&quot;Result shouldn't be null&quot;, result);</span>
+<span class="nc" id="L310">        assertEquals(&quot;There should be 1 fragments.&quot;, 1, result.size());</span>
+<span class="nc" id="L311">        assertEquals(&quot;There should be 2 failed bookies in the fragment&quot;,</span>
+<span class="nc" id="L312">                2, result.iterator().next().getBookiesIndexes().size());</span>
+<span class="nc" id="L313">    }</span>
+
+    /**
+     * Tests that LedgerChecker should one fragment as underReplicated
+     * if there is an open ledger with single entry written.
+     */
+    @Test
+    public void testShouldGetOneFragmentWithSingleEntryOpenedLedger() throws Exception {
+<span class="nc" id="L321">        LedgerHandle lh = bkc.createLedger(3, 3, BookKeeper.DigestType.CRC32,</span>
+                TEST_LEDGER_PASSWORD);
+<span class="nc" id="L323">        lh.addEntry(TEST_LEDGER_ENTRY_DATA);</span>
+<span class="nc" id="L324">        List&lt;BookieSocketAddress&gt; firstEnsemble = lh.getLedgerMetadata()</span>
+<span class="nc" id="L325">                .getAllEnsembles().get(0L);</span>
+<span class="nc" id="L326">        BookieSocketAddress lastBookieFromEnsemble = firstEnsemble.get(0);</span>
+<span class="nc" id="L327">        LOG.info(&quot;Killing &quot; + lastBookieFromEnsemble + &quot; from ensemble=&quot;</span>
+                + firstEnsemble);
+<span class="nc" id="L329">        killBookie(lastBookieFromEnsemble);</span>
+
+<span class="nc" id="L331">        startNewBookie();</span>
+
+        //Open ledger separately for Ledger checker.
+<span class="nc" id="L334">        LedgerHandle lh1 = bkc.openLedgerNoRecovery(lh.getId(), BookKeeper.DigestType.CRC32,</span>
+                TEST_LEDGER_PASSWORD);
+
+<span class="nc" id="L337">        Set&lt;LedgerFragment&gt; result = getUnderReplicatedFragments(lh1);</span>
+<span class="nc" id="L338">        assertNotNull(&quot;Result shouldn't be null&quot;, result);</span>
+<span class="nc" id="L339">        assertEquals(&quot;There should be 1 fragment. But returned fragments are &quot;</span>
+<span class="nc" id="L340">                + result, 1, result.size());</span>
+<span class="nc" id="L341">        assertEquals(&quot;There should be 1 failed bookies in the fragment&quot;,</span>
+<span class="nc" id="L342">                1, result.iterator().next().getBookiesIndexes().size());</span>
+<span class="nc" id="L343">    }</span>
+
+    /**
+     * Tests that LedgerChecker correctly identifies missing fragments
+     * when a single entry is written after an ensemble change.
+     * This is important, as the last add confirmed may be less than the
+     * first entry id of the final segment.
+     */
+    @Test
+    public void testSingleEntryAfterEnsembleChange() throws Exception {
+<span class="nc" id="L353">        LedgerHandle lh = bkc.createLedger(3, 3, BookKeeper.DigestType.CRC32,</span>
+                TEST_LEDGER_PASSWORD);
+<span class="nc bnc" id="L355" title="All 2 branches missed.">        for (int i = 0; i &lt; 10; i++) {</span>
+<span class="nc" id="L356">            lh.addEntry(TEST_LEDGER_ENTRY_DATA);</span>
+        }
+<span class="nc" id="L358">        List&lt;BookieSocketAddress&gt; firstEnsemble = lh.getLedgerMetadata()</span>
+<span class="nc" id="L359">                .getAllEnsembles().get(0L);</span>
+<span class="nc" id="L360">        DistributionSchedule.WriteSet writeSet = lh.getDistributionSchedule().getWriteSet(lh.getLastAddPushed());</span>
+<span class="nc" id="L361">        BookieSocketAddress lastBookieFromEnsemble = firstEnsemble.get(writeSet.get(0));</span>
+<span class="nc" id="L362">        LOG.info(&quot;Killing &quot; + lastBookieFromEnsemble + &quot; from ensemble=&quot;</span>
+                + firstEnsemble);
+<span class="nc" id="L364">        killBookie(lastBookieFromEnsemble);</span>
+<span class="nc" id="L365">        startNewBookie();</span>
+
+<span class="nc" id="L367">        lh.addEntry(TEST_LEDGER_ENTRY_DATA);</span>
+
+<span class="nc" id="L369">        writeSet = lh.getDistributionSchedule().getWriteSet(</span>
+<span class="nc" id="L370">                lh.getLastAddPushed());</span>
+<span class="nc" id="L371">        lastBookieFromEnsemble = firstEnsemble.get(writeSet.get(1));</span>
+<span class="nc" id="L372">        LOG.info(&quot;Killing &quot; + lastBookieFromEnsemble + &quot; from ensemble=&quot;</span>
+                + firstEnsemble);
+<span class="nc" id="L374">        killBookie(lastBookieFromEnsemble);</span>
+
+        //Open ledger separately for Ledger checker.
+<span class="nc" id="L377">        LedgerHandle lh1 = bkc.openLedgerNoRecovery(lh.getId(), BookKeeper.DigestType.CRC32,</span>
+                TEST_LEDGER_PASSWORD);
+
+<span class="nc" id="L380">        Set&lt;LedgerFragment&gt; result = getUnderReplicatedFragments(lh1);</span>
+<span class="nc" id="L381">        assertNotNull(&quot;Result shouldn't be null&quot;, result);</span>
+<span class="nc" id="L382">        assertEquals(&quot;There should be 2 fragments. But returned fragments are &quot;</span>
+<span class="nc" id="L383">                + result, 2, result.size());</span>
+<span class="nc bnc" id="L384" title="All 2 branches missed.">        for (LedgerFragment lf : result) {</span>
+<span class="nc bnc" id="L385" title="All 2 branches missed.">            if (lf.getFirstEntryId() == 0L) {</span>
+<span class="nc" id="L386">                assertEquals(&quot;There should be 2 failed bookies in first fragment&quot;,</span>
+<span class="nc" id="L387">                        2, lf.getBookiesIndexes().size());</span>
+            } else {
+<span class="nc" id="L389">                assertEquals(&quot;There should be 1 failed bookie in second fragment&quot;,</span>
+<span class="nc" id="L390">                        1, lf.getBookiesIndexes().size());</span>
+            }
+<span class="nc" id="L392">        }</span>
+<span class="nc" id="L393">    }</span>
+
+    /**
+     * Tests that LedgerChecker does not return any fragments
+     * from a closed ledger with 0 entries.
+     */
+    @Test
+    public void testClosedEmptyLedger() throws Exception {
+<span class="nc" id="L401">        LedgerHandle lh = bkc.createLedger(3, 3, BookKeeper.DigestType.CRC32,</span>
+                TEST_LEDGER_PASSWORD);
+<span class="nc" id="L403">        List&lt;BookieSocketAddress&gt; firstEnsemble = lh.getLedgerMetadata()</span>
+<span class="nc" id="L404">                .getAllEnsembles().get(0L);</span>
+<span class="nc" id="L405">        lh.close();</span>
+
+<span class="nc" id="L407">        BookieSocketAddress lastBookieFromEnsemble = firstEnsemble.get(0);</span>
+<span class="nc" id="L408">        LOG.info(&quot;Killing &quot; + lastBookieFromEnsemble + &quot; from ensemble=&quot;</span>
+                + firstEnsemble);
+<span class="nc" id="L410">        killBookie(lastBookieFromEnsemble);</span>
+
+        //Open ledger separately for Ledger checker.
+<span class="nc" id="L413">        LedgerHandle lh1 = bkc.openLedgerNoRecovery(lh.getId(), BookKeeper.DigestType.CRC32,</span>
+                TEST_LEDGER_PASSWORD);
+
+<span class="nc" id="L416">        Set&lt;LedgerFragment&gt; result = getUnderReplicatedFragments(lh1);</span>
+<span class="nc" id="L417">        assertNotNull(&quot;Result shouldn't be null&quot;, result);</span>
+<span class="nc" id="L418">        assertEquals(&quot;There should be 0 fragment. But returned fragments are &quot;</span>
+<span class="nc" id="L419">                + result, 0, result.size());</span>
+<span class="nc" id="L420">    }</span>
+
+    /**
+     * Tests that LedgerChecker does not return any fragments
+     * from a closed ledger with 0 entries.
+     */
+    @Test
+    public void testClosedSingleEntryLedger() throws Exception {
+<span class="nc" id="L428">        LedgerHandle lh = bkc.createLedger(3, 2, BookKeeper.DigestType.CRC32,</span>
+                TEST_LEDGER_PASSWORD);
+<span class="nc" id="L430">        List&lt;BookieSocketAddress&gt; firstEnsemble = lh.getLedgerMetadata()</span>
+<span class="nc" id="L431">            .getAllEnsembles().get(0L);</span>
+<span class="nc" id="L432">        lh.addEntry(TEST_LEDGER_ENTRY_DATA);</span>
+<span class="nc" id="L433">        lh.close();</span>
+
+        // kill bookie 2
+<span class="nc" id="L436">        BookieSocketAddress lastBookieFromEnsemble = firstEnsemble.get(2);</span>
+<span class="nc" id="L437">        LOG.info(&quot;Killing &quot; + lastBookieFromEnsemble + &quot; from ensemble=&quot;</span>
+                + firstEnsemble);
+<span class="nc" id="L439">        killBookie(lastBookieFromEnsemble);</span>
+
+        //Open ledger separately for Ledger checker.
+<span class="nc" id="L442">        LedgerHandle lh1 = bkc.openLedgerNoRecovery(lh.getId(), BookKeeper.DigestType.CRC32,</span>
+                TEST_LEDGER_PASSWORD);
+
+<span class="nc" id="L445">        Set&lt;LedgerFragment&gt; result = getUnderReplicatedFragments(lh1);</span>
+<span class="nc" id="L446">        assertNotNull(&quot;Result shouldn't be null&quot;, result);</span>
+<span class="nc" id="L447">        assertEquals(&quot;There should be 0 fragment. But returned fragments are &quot;</span>
+<span class="nc" id="L448">                + result, 0, result.size());</span>
+<span class="nc" id="L449">        lh1.close();</span>
+
+        // kill bookie 1
+<span class="nc" id="L452">        lastBookieFromEnsemble = firstEnsemble.get(1);</span>
+<span class="nc" id="L453">        LOG.info(&quot;Killing &quot; + lastBookieFromEnsemble + &quot; from ensemble=&quot;</span>
+                + firstEnsemble);
+<span class="nc" id="L455">        killBookie(lastBookieFromEnsemble);</span>
+<span class="nc" id="L456">        startNewBookie();</span>
+
+        //Open ledger separately for Ledger checker.
+<span class="nc" id="L459">        lh1 = bkc.openLedgerNoRecovery(lh.getId(), BookKeeper.DigestType.CRC32,</span>
+                TEST_LEDGER_PASSWORD);
+
+<span class="nc" id="L462">        result = getUnderReplicatedFragments(lh1);</span>
+<span class="nc" id="L463">        assertNotNull(&quot;Result shouldn't be null&quot;, result);</span>
+<span class="nc" id="L464">        assertEquals(&quot;There should be 1 fragment. But returned fragments are &quot;</span>
+<span class="nc" id="L465">                + result, 1, result.size());</span>
+<span class="nc" id="L466">        assertEquals(&quot;There should be 1 failed bookies in the fragment&quot;,</span>
+<span class="nc" id="L467">                1, result.iterator().next().getBookiesIndexes().size());</span>
+<span class="nc" id="L468">        lh1.close();</span>
+
+        // kill bookie 0
+<span class="nc" id="L471">        lastBookieFromEnsemble = firstEnsemble.get(0);</span>
+<span class="nc" id="L472">        LOG.info(&quot;Killing &quot; + lastBookieFromEnsemble + &quot; from ensemble=&quot;</span>
+                + firstEnsemble);
+<span class="nc" id="L474">        killBookie(lastBookieFromEnsemble);</span>
+<span class="nc" id="L475">        startNewBookie();</span>
+
+        //Open ledger separately for Ledger checker.
+<span class="nc" id="L478">        lh1 = bkc.openLedgerNoRecovery(lh.getId(), BookKeeper.DigestType.CRC32,</span>
+                TEST_LEDGER_PASSWORD);
+
+<span class="nc" id="L481">        result = getUnderReplicatedFragments(lh1);</span>
+<span class="nc" id="L482">        assertNotNull(&quot;Result shouldn't be null&quot;, result);</span>
+<span class="nc" id="L483">        assertEquals(&quot;There should be 1 fragment. But returned fragments are &quot;</span>
+<span class="nc" id="L484">                + result, 1, result.size());</span>
+<span class="nc" id="L485">        assertEquals(&quot;There should be 2 failed bookies in the fragment&quot;,</span>
+<span class="nc" id="L486">                2, result.iterator().next().getBookiesIndexes().size());</span>
+<span class="nc" id="L487">        lh1.close();</span>
+<span class="nc" id="L488">    }</span>
+
+    private Set&lt;LedgerFragment&gt; getUnderReplicatedFragments(LedgerHandle lh)
+            throws InterruptedException {
+<span class="nc" id="L492">        LedgerChecker checker = new LedgerChecker(bkc);</span>
+<span class="nc" id="L493">        CheckerCallback cb = new CheckerCallback();</span>
+<span class="nc" id="L494">        checker.checkLedger(lh, cb);</span>
+<span class="nc" id="L495">        Set&lt;LedgerFragment&gt; result = cb.waitAndGetResult();</span>
+<span class="nc" id="L496">        return result;</span>
+    }
+
+    private void killBookie(List&lt;BookieSocketAddress&gt; firstEnsemble, BookieSocketAddress ensemble)
+            throws Exception {
+<span class="nc" id="L501">        LOG.info(&quot;Killing &quot; + ensemble + &quot; from ensemble=&quot; + firstEnsemble);</span>
+<span class="nc" id="L502">        killBookie(ensemble);</span>
+<span class="nc" id="L503">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

@@ -1,0 +1,283 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TestDisableEnsembleChange.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">TestDisableEnsembleChange.java</span></div><h1>TestDisableEnsembleChange.java</h1><pre class="source lang-java linenums">/**
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.client;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.apache.bookkeeper.util.BookKeeperConstants.FEATURE_DISABLE_ENSEMBLE_CHANGE;
+import static org.apache.bookkeeper.util.TestUtils.assertEventuallyTrue;
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+import com.google.common.util.concurrent.RateLimiter;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.apache.bookkeeper.conf.ClientConfiguration;
+import org.apache.bookkeeper.conf.ServerConfiguration;
+import org.apache.bookkeeper.feature.SettableFeature;
+import org.apache.bookkeeper.feature.SettableFeatureProvider;
+import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Test Case on Disabling Ensemble Change Feature.
+ */
+public class TestDisableEnsembleChange extends BookKeeperClusterTestCase {
+
+<span class="nc" id="L55">    private static final Logger logger = LoggerFactory.getLogger(TestDisableEnsembleChange.class);</span>
+
+    public TestDisableEnsembleChange() {
+<span class="nc" id="L58">        super(4);</span>
+<span class="nc" id="L59">    }</span>
+
+    @Test
+    public void testDisableEnsembleChange() throws Exception {
+<span class="nc" id="L63">        disableEnsembleChangeTest(true);</span>
+<span class="nc" id="L64">    }</span>
+
+    @Test
+    public void testDisableEnsembleChangeNotEnoughBookies() throws Exception {
+<span class="nc" id="L68">        disableEnsembleChangeTest(false);</span>
+<span class="nc" id="L69">    }</span>
+
+    void disableEnsembleChangeTest(boolean startNewBookie) throws Exception {
+<span class="nc" id="L72">        ClientConfiguration conf = new ClientConfiguration();</span>
+<span class="nc" id="L73">        conf.setMetadataServiceUri(metadataServiceUri)</span>
+<span class="nc" id="L74">            .setDelayEnsembleChange(false)</span>
+<span class="nc" id="L75">            .setDisableEnsembleChangeFeatureName(FEATURE_DISABLE_ENSEMBLE_CHANGE);</span>
+
+<span class="nc" id="L77">        SettableFeatureProvider featureProvider = new SettableFeatureProvider(&quot;test&quot;, 0);</span>
+<span class="nc" id="L78">        BookKeeper bkc = BookKeeper.forConfig(conf)</span>
+<span class="nc" id="L79">                .featureProvider(featureProvider)</span>
+<span class="nc" id="L80">                .build();</span>
+
+<span class="nc" id="L82">        SettableFeature disableEnsembleChangeFeature = featureProvider.getFeature(FEATURE_DISABLE_ENSEMBLE_CHANGE);</span>
+<span class="nc" id="L83">        disableEnsembleChangeFeature.set(true);</span>
+
+<span class="nc" id="L85">        final byte[] password = new byte[0];</span>
+<span class="nc" id="L86">        final LedgerHandle lh = bkc.createLedger(4, 3, 2, BookKeeper.DigestType.CRC32, password);</span>
+<span class="nc" id="L87">        final AtomicBoolean finished = new AtomicBoolean(false);</span>
+<span class="nc" id="L88">        final AtomicBoolean failTest = new AtomicBoolean(false);</span>
+<span class="nc" id="L89">        final byte[] entry = &quot;test-disable-ensemble-change&quot;.getBytes(UTF_8);</span>
+
+<span class="nc" id="L91">        assertEquals(1, lh.getLedgerMetadata().getAllEnsembles().size());</span>
+<span class="nc" id="L92">        ArrayList&lt;BookieSocketAddress&gt; ensembleBeforeFailure =</span>
+<span class="nc" id="L93">                new ArrayList&lt;&gt;(lh.getLedgerMetadata().getAllEnsembles().entrySet().iterator().next().getValue());</span>
+
+<span class="nc" id="L95">        final RateLimiter rateLimiter = RateLimiter.create(10);</span>
+
+<span class="nc" id="L97">        Thread addThread = new Thread() {</span>
+            @Override
+            public void run() {
+                try {
+<span class="nc bnc" id="L101" title="All 2 branches missed.">                    while (!finished.get()) {</span>
+<span class="nc" id="L102">                        rateLimiter.acquire();</span>
+<span class="nc" id="L103">                        lh.addEntry(entry);</span>
+                    }
+<span class="nc" id="L105">                } catch (Exception e) {</span>
+<span class="nc" id="L106">                    logger.error(&quot;Exception on adding entry : &quot;, e);</span>
+<span class="nc" id="L107">                    failTest.set(true);</span>
+<span class="nc" id="L108">                }</span>
+<span class="nc" id="L109">            }</span>
+        };
+<span class="nc" id="L111">        addThread.start();</span>
+<span class="nc" id="L112">        Thread.sleep(2000);</span>
+<span class="nc" id="L113">        killBookie(0);</span>
+<span class="nc" id="L114">        Thread.sleep(2000);</span>
+<span class="nc" id="L115">        finished.set(true);</span>
+<span class="nc" id="L116">        addThread.join();</span>
+
+<span class="nc" id="L118">        assertFalse(&quot;Should not fail adding entries facing one bookie failure when disable ensemble change&quot;,</span>
+<span class="nc" id="L119">                failTest.get());</span>
+
+        // check the ensemble after failure
+<span class="nc" id="L122">        assertEquals(&quot;No new ensemble should be added when disable ensemble change.&quot;,</span>
+<span class="nc" id="L123">                1, lh.getLedgerMetadata().getAllEnsembles().size());</span>
+<span class="nc" id="L124">        ArrayList&lt;BookieSocketAddress&gt; ensembleAfterFailure =</span>
+<span class="nc" id="L125">                new ArrayList&lt;&gt;(lh.getLedgerMetadata().getAllEnsembles().entrySet().iterator().next().getValue());</span>
+<span class="nc" id="L126">        assertArrayEquals(ensembleBeforeFailure.toArray(new BookieSocketAddress[ensembleBeforeFailure.size()]),</span>
+<span class="nc" id="L127">                ensembleAfterFailure.toArray(new BookieSocketAddress[ensembleAfterFailure.size()]));</span>
+
+        // enable ensemble change
+<span class="nc" id="L130">        disableEnsembleChangeFeature.set(false);</span>
+<span class="nc bnc" id="L131" title="All 2 branches missed.">        if (startNewBookie) {</span>
+<span class="nc" id="L132">            startNewBookie();</span>
+        }
+
+        // reset add thread
+<span class="nc" id="L136">        finished.set(false);</span>
+<span class="nc" id="L137">        final CountDownLatch failLatch = new CountDownLatch(1);</span>
+
+<span class="nc" id="L139">        addThread = new Thread() {</span>
+            @Override
+            public void run() {
+                try {
+<span class="nc bnc" id="L143" title="All 2 branches missed.">                    while (!finished.get()) {</span>
+<span class="nc" id="L144">                        lh.addEntry(entry);</span>
+                    }
+<span class="nc" id="L146">                } catch (Exception e) {</span>
+<span class="nc" id="L147">                    logger.error(&quot;Exception on adding entry : &quot;, e);</span>
+<span class="nc" id="L148">                    failLatch.countDown();</span>
+<span class="nc" id="L149">                    failTest.set(true);</span>
+<span class="nc" id="L150">                }</span>
+<span class="nc" id="L151">            }</span>
+        };
+<span class="nc" id="L153">        addThread.start();</span>
+<span class="nc" id="L154">        failLatch.await(4000, TimeUnit.MILLISECONDS);</span>
+<span class="nc" id="L155">        finished.set(true);</span>
+<span class="nc" id="L156">        addThread.join();</span>
+
+<span class="nc bnc" id="L158" title="All 2 branches missed.">        if (startNewBookie) {</span>
+<span class="nc" id="L159">            assertFalse(&quot;Should not fail adding entries when enable ensemble change again.&quot;,</span>
+<span class="nc" id="L160">                    failTest.get());</span>
+<span class="nc" id="L161">            assertFalse(&quot;Ledger should be closed when enable ensemble change again.&quot;,</span>
+<span class="nc" id="L162">                    lh.getLedgerMetadata().isClosed());</span>
+<span class="nc" id="L163">            assertEquals(&quot;New ensemble should be added when enable ensemble change again.&quot;,</span>
+<span class="nc" id="L164">                    2, lh.getLedgerMetadata().getAllEnsembles().size());</span>
+        } else {
+<span class="nc" id="L166">            assertTrue(&quot;Should fail adding entries when enable ensemble change again.&quot;,</span>
+<span class="nc" id="L167">                    failTest.get());</span>
+            // The ledger close occurs in the background, so assert that it happens eventually
+<span class="nc" id="L169">            assertEventuallyTrue(&quot;Ledger should be closed when enable ensemble change again.&quot;,</span>
+<span class="nc" id="L170">                                 () -&gt; lh.getLedgerMetadata().isClosed());</span>
+        }
+<span class="nc" id="L172">    }</span>
+
+    @Test
+    public void testRetryFailureBookie() throws Exception {
+<span class="nc" id="L176">        ClientConfiguration conf = new ClientConfiguration();</span>
+<span class="nc" id="L177">        conf.setMetadataServiceUri(metadataServiceUri)</span>
+<span class="nc" id="L178">            .setDelayEnsembleChange(false)</span>
+<span class="nc" id="L179">            .setDisableEnsembleChangeFeatureName(FEATURE_DISABLE_ENSEMBLE_CHANGE);</span>
+
+<span class="nc" id="L181">        SettableFeatureProvider featureProvider = new SettableFeatureProvider(&quot;test&quot;, 0);</span>
+<span class="nc" id="L182">        BookKeeper bkc = BookKeeper.forConfig(conf)</span>
+<span class="nc" id="L183">                .featureProvider(featureProvider)</span>
+<span class="nc" id="L184">                .build();</span>
+
+<span class="nc" id="L186">        SettableFeature disableEnsembleChangeFeature = featureProvider.getFeature(FEATURE_DISABLE_ENSEMBLE_CHANGE);</span>
+<span class="nc" id="L187">        disableEnsembleChangeFeature.set(true);</span>
+
+<span class="nc" id="L189">        LedgerHandle lh = bkc.createLedger(4, 4, 4, BookKeeper.DigestType.CRC32, new byte[] {});</span>
+<span class="nc" id="L190">        byte[] entry = &quot;testRetryFailureBookie&quot;.getBytes();</span>
+<span class="nc bnc" id="L191" title="All 2 branches missed.">        for (int i = 0; i &lt; 10; i++) {</span>
+<span class="nc" id="L192">            lh.addEntry(entry);</span>
+        }
+        // kill a bookie
+<span class="nc" id="L195">        ServerConfiguration killedConf = killBookie(0);</span>
+
+<span class="nc" id="L197">        final AtomicInteger res = new AtomicInteger(0xdeadbeef);</span>
+<span class="nc" id="L198">        final CountDownLatch addLatch = new CountDownLatch(1);</span>
+<span class="nc" id="L199">        AsyncCallback.AddCallback cb = new AsyncCallback.AddCallback() {</span>
+            @Override
+                public void addComplete(int rc, LedgerHandle lh, long entryId, Object ctx) {
+<span class="nc" id="L202">                    logger.info(&quot;Add entry {} completed : rc {}.&quot;, entryId, rc);</span>
+<span class="nc" id="L203">                    res.set(rc);</span>
+<span class="nc" id="L204">                    addLatch.countDown();</span>
+<span class="nc" id="L205">                }</span>
+        };
+<span class="nc" id="L207">        lh.asyncAddEntry(entry, cb, null);</span>
+<span class="nc" id="L208">        assertFalse(&quot;Add entry operation should not complete.&quot;,</span>
+<span class="nc" id="L209">                addLatch.await(1000, TimeUnit.MILLISECONDS));</span>
+<span class="nc" id="L210">        assertEquals(res.get(), 0xdeadbeef);</span>
+        // start the original bookie
+<span class="nc" id="L212">        bsConfs.add(killedConf);</span>
+<span class="nc" id="L213">        bs.add(startBookie(killedConf));</span>
+<span class="nc" id="L214">        assertTrue(&quot;Add entry operation should complete at this point.&quot;,</span>
+<span class="nc" id="L215">                addLatch.await(10000, TimeUnit.MILLISECONDS));</span>
+<span class="nc" id="L216">        assertEquals(res.get(), BKException.Code.OK);</span>
+<span class="nc" id="L217">    }</span>
+
+    @Test
+    public void testRetrySlowBookie() throws Exception {
+<span class="nc" id="L221">        final int readTimeout = 2;</span>
+
+<span class="nc" id="L223">        ClientConfiguration conf = new ClientConfiguration();</span>
+<span class="nc" id="L224">        conf.setReadEntryTimeout(readTimeout)</span>
+<span class="nc" id="L225">            .setAddEntryTimeout(readTimeout)</span>
+<span class="nc" id="L226">            .setDelayEnsembleChange(false)</span>
+<span class="nc" id="L227">            .setDisableEnsembleChangeFeatureName(FEATURE_DISABLE_ENSEMBLE_CHANGE)</span>
+<span class="nc" id="L228">            .setMetadataServiceUri(metadataServiceUri);</span>
+
+<span class="nc" id="L230">        SettableFeatureProvider featureProvider = new SettableFeatureProvider(&quot;test&quot;, 0);</span>
+<span class="nc" id="L231">        BookKeeper bkc = BookKeeper.forConfig(conf)</span>
+<span class="nc" id="L232">                .featureProvider(featureProvider)</span>
+<span class="nc" id="L233">                .build();</span>
+
+<span class="nc" id="L235">        SettableFeature disableEnsembleChangeFeature = featureProvider.getFeature(FEATURE_DISABLE_ENSEMBLE_CHANGE);</span>
+<span class="nc" id="L236">        disableEnsembleChangeFeature.set(true);</span>
+
+<span class="nc" id="L238">        LedgerHandle lh = bkc.createLedger(4, 4, 4, BookKeeper.DigestType.CRC32, new byte[] {});</span>
+<span class="nc" id="L239">        byte[] entry = &quot;testRetryFailureBookie&quot;.getBytes();</span>
+<span class="nc bnc" id="L240" title="All 2 branches missed.">        for (int i = 0; i &lt; 10; i++) {</span>
+<span class="nc" id="L241">            lh.addEntry(entry);</span>
+        }
+
+<span class="nc" id="L244">        List&lt;BookieSocketAddress&gt; curEns = lh.getCurrentEnsemble();</span>
+
+<span class="nc" id="L246">        final CountDownLatch wakeupLatch = new CountDownLatch(1);</span>
+<span class="nc" id="L247">        final CountDownLatch suspendLatch = new CountDownLatch(1);</span>
+<span class="nc" id="L248">        sleepBookie(curEns.get(2), wakeupLatch, suspendLatch);</span>
+
+<span class="nc" id="L250">        suspendLatch.await();</span>
+
+<span class="nc" id="L252">        final AtomicInteger res = new AtomicInteger(0xdeadbeef);</span>
+<span class="nc" id="L253">        final CountDownLatch addLatch = new CountDownLatch(1);</span>
+<span class="nc" id="L254">        AsyncCallback.AddCallback cb = new AsyncCallback.AddCallback() {</span>
+            @Override
+                public void addComplete(int rc, LedgerHandle lh, long entryId, Object ctx) {
+<span class="nc" id="L257">                    logger.info(&quot;Add entry {} completed : rc {}.&quot;, entryId, rc);</span>
+<span class="nc" id="L258">                    res.set(rc);</span>
+<span class="nc" id="L259">                    addLatch.countDown();</span>
+<span class="nc" id="L260">                }</span>
+        };
+<span class="nc" id="L262">        lh.asyncAddEntry(entry, cb, null);</span>
+<span class="nc" id="L263">        assertFalse(&quot;Add entry operation should not complete.&quot;,</span>
+<span class="nc" id="L264">                addLatch.await(1000, TimeUnit.MILLISECONDS));</span>
+<span class="nc" id="L265">        assertEquals(res.get(), 0xdeadbeef);</span>
+        // wait until read timeout
+<span class="nc" id="L267">        assertFalse(&quot;Add entry operation should not complete even timeout.&quot;,</span>
+<span class="nc" id="L268">                addLatch.await(readTimeout, TimeUnit.SECONDS));</span>
+<span class="nc" id="L269">        assertEquals(res.get(), 0xdeadbeef);</span>
+        // wait one more read timeout, to ensure we resend multiple retries
+        // to ensure it works correctly
+<span class="nc" id="L272">        assertFalse(&quot;Add entry operation should not complete even timeout.&quot;,</span>
+<span class="nc" id="L273">                addLatch.await(readTimeout, TimeUnit.SECONDS));</span>
+<span class="nc" id="L274">        assertEquals(res.get(), 0xdeadbeef);</span>
+        // wakeup the sleep bookie
+<span class="nc" id="L276">        wakeupLatch.countDown();</span>
+<span class="nc" id="L277">        assertTrue(&quot;Add entry operation should complete at this point.&quot;,</span>
+<span class="nc" id="L278">                addLatch.await(10000, TimeUnit.MILLISECONDS));</span>
+<span class="nc" id="L279">        assertEquals(res.get(), BKException.Code.OK);</span>
+<span class="nc" id="L280">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

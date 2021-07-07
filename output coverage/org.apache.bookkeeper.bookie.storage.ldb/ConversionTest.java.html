@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ConversionTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$myBookieFenceLedgerTest.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.bookie.storage.ldb</a> &gt; <span class="el_source">ConversionTest.java</span></div><h1>ConversionTest.java</h1><pre class="source lang-java linenums">/**
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.bookie.storage.ldb;
+
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import io.netty.buffer.UnpooledByteBufAllocator;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.Set;
+
+import org.apache.bookkeeper.bookie.Bookie;
+import org.apache.bookkeeper.bookie.Bookie.NoLedgerException;
+import org.apache.bookkeeper.bookie.BookieShell;
+import org.apache.bookkeeper.bookie.CheckpointSource;
+import org.apache.bookkeeper.bookie.CheckpointSource.Checkpoint;
+import org.apache.bookkeeper.bookie.Checkpointer;
+import org.apache.bookkeeper.bookie.InterleavedLedgerStorage;
+import org.apache.bookkeeper.bookie.LedgerDirsManager;
+import org.apache.bookkeeper.conf.ServerConfiguration;
+import org.apache.bookkeeper.conf.TestBKConfiguration;
+import org.apache.bookkeeper.stats.NullStatsLogger;
+import org.apache.bookkeeper.util.DiskChecker;
+import org.apache.commons.io.FileUtils;
+import org.junit.Assert;
+import org.junit.Test;
+
+/**
+ * Test for BookieShell convert-to-db-storage command.
+ */
+<span class="nc" id="L53">public class ConversionTest {</span>
+
+<span class="nc" id="L55">    CheckpointSource checkpointSource = new CheckpointSource() {</span>
+        @Override
+        public Checkpoint newCheckpoint() {
+<span class="nc" id="L58">            return Checkpoint.MAX;</span>
+        }
+
+        @Override
+        public void checkpointComplete(Checkpoint checkpoint, boolean compact) throws IOException {
+<span class="nc" id="L63">        }</span>
+    };
+
+<span class="nc" id="L66">    Checkpointer checkpointer = new Checkpointer() {</span>
+        @Override
+        public void startCheckpoint(Checkpoint checkpoint) {
+            // No-op
+<span class="nc" id="L70">        }</span>
+
+        @Override
+        public void start() {
+            // no-op
+<span class="nc" id="L75">        }</span>
+    };
+
+    @Test
+    public void test() throws Exception {
+<span class="nc" id="L80">        File tmpDir = File.createTempFile(&quot;bkTest&quot;, &quot;.dir&quot;);</span>
+<span class="nc" id="L81">        tmpDir.delete();</span>
+<span class="nc" id="L82">        tmpDir.mkdir();</span>
+<span class="nc" id="L83">        File curDir = Bookie.getCurrentDirectory(tmpDir);</span>
+<span class="nc" id="L84">        Bookie.checkDirectoryStructure(curDir);</span>
+
+<span class="nc" id="L86">        System.out.println(tmpDir);</span>
+
+<span class="nc" id="L88">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L89">        conf.setLedgerDirNames(new String[] { tmpDir.toString() });</span>
+<span class="nc" id="L90">        LedgerDirsManager ledgerDirsManager = new LedgerDirsManager(conf, conf.getLedgerDirs(),</span>
+<span class="nc" id="L91">                new DiskChecker(conf.getDiskUsageThreshold(), conf.getDiskUsageWarnThreshold()));</span>
+
+<span class="nc" id="L93">        InterleavedLedgerStorage interleavedStorage = new InterleavedLedgerStorage();</span>
+<span class="nc" id="L94">        interleavedStorage.initialize(conf, null, ledgerDirsManager, ledgerDirsManager,</span>
+                null, checkpointSource, checkpointer, NullStatsLogger.INSTANCE, UnpooledByteBufAllocator.DEFAULT);
+
+        // Insert some ledger &amp; entries in the interleaved storage
+<span class="nc bnc" id="L98" title="All 2 branches missed.">        for (long ledgerId = 0; ledgerId &lt; 5; ledgerId++) {</span>
+<span class="nc" id="L99">            interleavedStorage.setMasterKey(ledgerId, (&quot;ledger-&quot; + ledgerId).getBytes());</span>
+<span class="nc" id="L100">            interleavedStorage.setFenced(ledgerId);</span>
+
+<span class="nc bnc" id="L102" title="All 2 branches missed.">            for (long entryId = 0; entryId &lt; 10000; entryId++) {</span>
+<span class="nc" id="L103">                ByteBuf entry = Unpooled.buffer(128);</span>
+<span class="nc" id="L104">                entry.writeLong(ledgerId);</span>
+<span class="nc" id="L105">                entry.writeLong(entryId);</span>
+<span class="nc" id="L106">                entry.writeBytes((&quot;entry-&quot; + entryId).getBytes());</span>
+
+<span class="nc" id="L108">                interleavedStorage.addEntry(entry);</span>
+            }
+        }
+
+<span class="nc" id="L112">        interleavedStorage.flush();</span>
+<span class="nc" id="L113">        interleavedStorage.shutdown();</span>
+
+        // Run conversion tool
+<span class="nc" id="L116">        BookieShell shell = new BookieShell();</span>
+<span class="nc" id="L117">        shell.setConf(conf);</span>
+<span class="nc" id="L118">        int res = shell.run(new String[] { &quot;convert-to-db-storage&quot; });</span>
+
+<span class="nc" id="L120">        Assert.assertEquals(0, res);</span>
+
+        // Verify that db index has the same entries
+<span class="nc" id="L123">        DbLedgerStorage dbStorage = new DbLedgerStorage();</span>
+<span class="nc" id="L124">        dbStorage.initialize(conf, null, ledgerDirsManager, ledgerDirsManager,</span>
+                null, checkpointSource, checkpointer, NullStatsLogger.INSTANCE, UnpooledByteBufAllocator.DEFAULT);
+
+<span class="nc" id="L127">        interleavedStorage = new InterleavedLedgerStorage();</span>
+<span class="nc" id="L128">        interleavedStorage.initialize(conf, null, ledgerDirsManager,</span>
+                ledgerDirsManager, null, checkpointSource, checkpointer, NullStatsLogger.INSTANCE,
+                UnpooledByteBufAllocator.DEFAULT);
+
+<span class="nc" id="L132">        Set&lt;Long&gt; ledgers = Sets.newTreeSet(dbStorage.getActiveLedgersInRange(0, Long.MAX_VALUE));</span>
+<span class="nc" id="L133">        Assert.assertEquals(Sets.newTreeSet(Lists.newArrayList(0L, 1L, 2L, 3L, 4L)), ledgers);</span>
+
+<span class="nc" id="L135">        ledgers = Sets.newTreeSet(interleavedStorage.getActiveLedgersInRange(0, Long.MAX_VALUE));</span>
+<span class="nc" id="L136">        Assert.assertEquals(Sets.newTreeSet(), ledgers);</span>
+
+<span class="nc bnc" id="L138" title="All 2 branches missed.">        for (long ledgerId = 0; ledgerId &lt; 5; ledgerId++) {</span>
+<span class="nc" id="L139">            Assert.assertEquals(true, dbStorage.isFenced(ledgerId));</span>
+<span class="nc" id="L140">            Assert.assertEquals(&quot;ledger-&quot; + ledgerId, new String(dbStorage.readMasterKey(ledgerId)));</span>
+
+<span class="nc bnc" id="L142" title="All 2 branches missed.">            for (long entryId = 0; entryId &lt; 10000; entryId++) {</span>
+<span class="nc" id="L143">                ByteBuf entry = Unpooled.buffer(1024);</span>
+<span class="nc" id="L144">                entry.writeLong(ledgerId);</span>
+<span class="nc" id="L145">                entry.writeLong(entryId);</span>
+<span class="nc" id="L146">                entry.writeBytes((&quot;entry-&quot; + entryId).getBytes());</span>
+
+<span class="nc" id="L148">                ByteBuf result = dbStorage.getEntry(ledgerId, entryId);</span>
+<span class="nc" id="L149">                Assert.assertEquals(entry, result);</span>
+<span class="nc" id="L150">                result.release();</span>
+
+                try {
+<span class="nc" id="L153">                    interleavedStorage.getEntry(ledgerId, entryId);</span>
+<span class="nc" id="L154">                    Assert.fail(&quot;entry should not exist&quot;);</span>
+<span class="nc" id="L155">                } catch (NoLedgerException e) {</span>
+                    // Ok
+<span class="nc" id="L157">                }</span>
+            }
+        }
+
+<span class="nc" id="L161">        interleavedStorage.shutdown();</span>
+<span class="nc" id="L162">        dbStorage.shutdown();</span>
+<span class="nc" id="L163">        FileUtils.forceDelete(tmpDir);</span>
+<span class="nc" id="L164">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

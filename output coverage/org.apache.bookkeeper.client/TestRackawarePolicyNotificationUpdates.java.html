@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TestRackawarePolicyNotificationUpdates.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">TestRackawarePolicyNotificationUpdates.java</span></div><h1>TestRackawarePolicyNotificationUpdates.java</h1><pre class="source lang-java linenums">/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.bookkeeper.client;
+
+import static org.apache.bookkeeper.client.RackawareEnsemblePlacementPolicyImpl.REPP_DNS_RESOLVER_CLASS;
+import static org.apache.bookkeeper.feature.SettableFeatureProvider.DISABLE_ALL;
+
+import com.google.common.collect.Sets;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+
+import io.netty.util.HashedWheelTimer;
+
+import java.net.InetAddress;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+
+import junit.framework.TestCase;
+
+import org.apache.bookkeeper.conf.ClientConfiguration;
+import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.net.DNSToSwitchMapping;
+import org.apache.bookkeeper.net.NetworkTopology;
+import org.apache.bookkeeper.stats.NullStatsLogger;
+import org.apache.bookkeeper.util.StaticDNSResolver;
+
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Test the rackaware ensemble placement policy.
+ */
+<span class="nc" id="L53">public class TestRackawarePolicyNotificationUpdates extends TestCase {</span>
+
+<span class="nc" id="L55">    static final Logger LOG = LoggerFactory.getLogger(TestRackawarePolicyNotificationUpdates.class);</span>
+
+    RackawareEnsemblePlacementPolicy repp;
+    HashedWheelTimer timer;
+<span class="nc" id="L59">    ClientConfiguration conf = new ClientConfiguration();</span>
+
+    @Override
+    protected void setUp() throws Exception {
+<span class="nc" id="L63">        super.setUp();</span>
+<span class="nc" id="L64">        conf.setProperty(REPP_DNS_RESOLVER_CLASS, StaticDNSResolver.class.getName());</span>
+
+<span class="nc" id="L66">        StaticDNSResolver.reset();</span>
+<span class="nc" id="L67">        StaticDNSResolver.addNodeToRack(InetAddress.getLocalHost().getHostAddress(),</span>
+                NetworkTopology.DEFAULT_REGION_AND_RACK);
+<span class="nc" id="L69">        StaticDNSResolver.addNodeToRack(&quot;127.0.0.1&quot;, NetworkTopology.DEFAULT_REGION_AND_RACK);</span>
+<span class="nc" id="L70">        StaticDNSResolver.addNodeToRack(&quot;localhost&quot;, NetworkTopology.DEFAULT_REGION_AND_RACK);</span>
+<span class="nc" id="L71">        LOG.info(&quot;Set up static DNS Resolver.&quot;);</span>
+
+<span class="nc" id="L73">        timer = new HashedWheelTimer(new ThreadFactoryBuilder().setNameFormat(&quot;TestTimer-%d&quot;).build(),</span>
+<span class="nc" id="L74">                conf.getTimeoutTimerTickDurationMs(), TimeUnit.MILLISECONDS, conf.getTimeoutTimerNumTicks());</span>
+
+<span class="nc" id="L76">        repp = new RackawareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L77">        repp.initialize(conf, Optional.&lt;DNSToSwitchMapping&gt; empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+<span class="nc" id="L78">        repp.withDefaultRack(NetworkTopology.DEFAULT_REGION_AND_RACK);</span>
+<span class="nc" id="L79">    }</span>
+
+    @Override
+    protected void tearDown() throws Exception {
+<span class="nc" id="L83">        repp.uninitalize();</span>
+<span class="nc" id="L84">        super.tearDown();</span>
+<span class="nc" id="L85">    }</span>
+
+    @Test
+    public void testNotifyRackChange() throws Exception {
+<span class="nc" id="L89">        BookieSocketAddress addr1 = new BookieSocketAddress(&quot;127.0.1.1&quot;, 3181);</span>
+<span class="nc" id="L90">        BookieSocketAddress addr2 = new BookieSocketAddress(&quot;127.0.1.2&quot;, 3181);</span>
+<span class="nc" id="L91">        BookieSocketAddress addr3 = new BookieSocketAddress(&quot;127.0.1.3&quot;, 3181);</span>
+<span class="nc" id="L92">        BookieSocketAddress addr4 = new BookieSocketAddress(&quot;127.0.1.4&quot;, 3181);</span>
+
+        // update dns mapping
+<span class="nc" id="L95">        StaticDNSResolver.addNodeToRack(addr1.getHostName(), &quot;/default-region/rack-1&quot;);</span>
+<span class="nc" id="L96">        StaticDNSResolver.addNodeToRack(addr2.getHostName(), &quot;/default-region/rack-2&quot;);</span>
+<span class="nc" id="L97">        StaticDNSResolver.addNodeToRack(addr3.getHostName(), &quot;/default-region/rack-2&quot;);</span>
+<span class="nc" id="L98">        StaticDNSResolver.addNodeToRack(addr4.getHostName(), &quot;/default-region/rack-2&quot;);</span>
+<span class="nc" id="L99">        int numOfAvailableRacks = 2;</span>
+
+        // Update cluster
+<span class="nc" id="L102">        Set&lt;BookieSocketAddress&gt; addrs = Sets.newHashSet(addr1, addr2, addr3, addr4);</span>
+<span class="nc" id="L103">        repp.onClusterChanged(addrs, new HashSet&lt;&gt;());</span>
+
+<span class="nc" id="L105">        int ensembleSize = 3;</span>
+<span class="nc" id="L106">        int writeQuorumSize = 2;</span>
+<span class="nc" id="L107">        int acqQuorumSize = 2;</span>
+<span class="nc" id="L108">        List&lt;BookieSocketAddress&gt; ensemble = repp.newEnsemble(ensembleSize, writeQuorumSize,</span>
+<span class="nc" id="L109">                acqQuorumSize, Collections.emptyMap(), Collections.emptySet()).getResult();</span>
+<span class="nc" id="L110">        int numCovered = TestRackawareEnsemblePlacementPolicy.getNumCoveredWriteQuorums(ensemble, writeQuorumSize,</span>
+<span class="nc" id="L111">                conf.getMinNumRacksPerWriteQuorum());</span>
+<span class="nc bnc" id="L112" title="All 4 branches missed.">        assertTrue(numCovered &gt;= 1 &amp;&amp; numCovered &lt; 3);</span>
+<span class="nc" id="L113">        assertTrue(ensemble.contains(addr1));</span>
+
+<span class="nc" id="L115">        List&lt;BookieSocketAddress&gt; bookieAddressList = new ArrayList&lt;&gt;();</span>
+<span class="nc" id="L116">        List&lt;String&gt; rackList = new ArrayList&lt;&gt;();</span>
+<span class="nc" id="L117">        bookieAddressList.add(addr2);</span>
+<span class="nc" id="L118">        rackList.add(&quot;/default-region/rack-3&quot;);</span>
+<span class="nc" id="L119">        StaticDNSResolver.changeRack(bookieAddressList, rackList);</span>
+<span class="nc" id="L120">        numOfAvailableRacks = numOfAvailableRacks + 1;</span>
+<span class="nc" id="L121">        acqQuorumSize = 1;</span>
+<span class="nc" id="L122">        ensemble = repp.newEnsemble(ensembleSize, writeQuorumSize, acqQuorumSize, Collections.emptyMap(),</span>
+<span class="nc" id="L123">                                    Collections.emptySet()).getResult();</span>
+<span class="nc" id="L124">        assertEquals(3, TestRackawareEnsemblePlacementPolicy.getNumCoveredWriteQuorums(ensemble, writeQuorumSize,</span>
+<span class="nc" id="L125">                conf.getMinNumRacksPerWriteQuorum()));</span>
+<span class="nc" id="L126">        assertTrue(ensemble.contains(addr1));</span>
+<span class="nc" id="L127">        assertTrue(ensemble.contains(addr2));</span>
+<span class="nc" id="L128">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

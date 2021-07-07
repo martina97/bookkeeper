@@ -1,0 +1,701 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>LedgerStorageCheckpointTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$myBookieFenceLedgerTest.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.bookie</a> &gt; <span class="el_source">LedgerStorageCheckpointTest.java</span></div><h1>LedgerStorageCheckpointTest.java</h1><pre class="source lang-java linenums">/**
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.bookie;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.time.Duration;
+import java.util.Enumeration;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Random;
+import java.util.Set;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.IntStream;
+import java.util.stream.LongStream;
+
+import org.apache.bookkeeper.bookie.EntryLogManagerForEntryLogPerLedger.BufferedLogChannelWithDirInfo;
+import org.apache.bookkeeper.bookie.EntryLogger.BufferedLogChannel;
+import org.apache.bookkeeper.bookie.Journal.LastLogMark;
+import org.apache.bookkeeper.client.BKException;
+import org.apache.bookkeeper.client.BookKeeper;
+import org.apache.bookkeeper.client.BookKeeper.DigestType;
+import org.apache.bookkeeper.client.LedgerEntry;
+import org.apache.bookkeeper.client.LedgerHandle;
+import org.apache.bookkeeper.common.testing.executors.MockExecutorController;
+import org.apache.bookkeeper.conf.ClientConfiguration;
+import org.apache.bookkeeper.conf.ServerConfiguration;
+import org.apache.bookkeeper.conf.TestBKConfiguration;
+import org.apache.bookkeeper.proto.BookieServer;
+import org.apache.bookkeeper.test.ZooKeeperUtil;
+import org.apache.bookkeeper.util.IOUtils;
+import org.apache.bookkeeper.util.PortManager;
+import org.apache.commons.io.FileUtils;
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.rules.TestName;
+import org.junit.runner.RunWith;
+import org.powermock.api.mockito.PowerMockito;
+import org.powermock.core.classloader.annotations.PowerMockIgnore;
+import org.powermock.core.classloader.annotations.PrepareForTest;
+import org.powermock.modules.junit4.PowerMockRunner;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * LedgerStorageCheckpointTest.
+ */
+@RunWith(PowerMockRunner.class)
+@PrepareForTest(SyncThread.class)
+@PowerMockIgnore(&quot;javax.*&quot;)
+<span class="nc" id="L80">public class LedgerStorageCheckpointTest {</span>
+<span class="nc" id="L81">    private static final Logger LOG = LoggerFactory</span>
+<span class="nc" id="L82">            .getLogger(LedgerStorageCheckpointTest.class);</span>
+
+<span class="nc" id="L84">    @Rule</span>
+    public final TestName runtime = new TestName();
+
+    // ZooKeeper related variables
+<span class="nc" id="L88">    protected final ZooKeeperUtil zkUtil = new ZooKeeperUtil();</span>
+
+    // BookKeeper related variables
+<span class="nc" id="L91">    protected final List&lt;File&gt; tmpDirs = new LinkedList&lt;File&gt;();</span>
+
+    // ScheduledExecutorService used by SyncThread
+    MockExecutorController executorController;
+
+    @Before
+    public void setUp() throws Exception {
+<span class="nc" id="L98">        LOG.info(&quot;Setting up test {}&quot;, getClass());</span>
+<span class="nc" id="L99">        PowerMockito.mockStatic(Executors.class);</span>
+
+        try {
+            // start zookeeper service
+<span class="nc" id="L103">            startZKCluster();</span>
+<span class="nc" id="L104">        } catch (Exception e) {</span>
+<span class="nc" id="L105">            LOG.error(&quot;Error setting up&quot;, e);</span>
+<span class="nc" id="L106">            throw e;</span>
+<span class="nc" id="L107">        }</span>
+
+<span class="nc" id="L109">        ScheduledExecutorService scheduledExecutorService = PowerMockito.mock(ScheduledExecutorService.class);</span>
+<span class="nc" id="L110">        executorController = new MockExecutorController()</span>
+<span class="nc" id="L111">                .controlSubmit(scheduledExecutorService)</span>
+<span class="nc" id="L112">                .controlScheduleAtFixedRate(scheduledExecutorService, 10);</span>
+<span class="nc" id="L113">        PowerMockito.when(scheduledExecutorService.awaitTermination(anyLong(), any(TimeUnit.class))).thenReturn(true);</span>
+<span class="nc" id="L114">        PowerMockito.when(Executors.newSingleThreadScheduledExecutor(any())).thenReturn(scheduledExecutorService);</span>
+<span class="nc" id="L115">    }</span>
+
+    @After
+    public void tearDown() throws Exception {
+<span class="nc" id="L119">        LOG.info(&quot;TearDown&quot;);</span>
+<span class="nc" id="L120">        Exception tearDownException = null;</span>
+        // stop zookeeper service
+        try {
+<span class="nc" id="L123">            stopZKCluster();</span>
+<span class="nc" id="L124">        } catch (Exception e) {</span>
+<span class="nc" id="L125">            LOG.error(&quot;Got Exception while trying to stop ZKCluster&quot;, e);</span>
+<span class="nc" id="L126">            tearDownException = e;</span>
+<span class="nc" id="L127">        }</span>
+        // cleanup temp dirs
+        try {
+<span class="nc" id="L130">            cleanupTempDirs();</span>
+<span class="nc" id="L131">        } catch (Exception e) {</span>
+<span class="nc" id="L132">            LOG.error(&quot;Got Exception while trying to cleanupTempDirs&quot;, e);</span>
+<span class="nc" id="L133">            tearDownException = e;</span>
+<span class="nc" id="L134">        }</span>
+<span class="nc bnc" id="L135" title="All 2 branches missed.">        if (tearDownException != null) {</span>
+<span class="nc" id="L136">            throw tearDownException;</span>
+        }
+<span class="nc" id="L138">    }</span>
+
+    /**
+     * Start zookeeper cluster.
+     *
+     * @throws Exception
+     */
+    protected void startZKCluster() throws Exception {
+<span class="nc" id="L146">        zkUtil.startCluster();</span>
+<span class="nc" id="L147">    }</span>
+
+    /**
+     * Stop zookeeper cluster.
+     *
+     * @throws Exception
+     */
+    protected void stopZKCluster() throws Exception {
+<span class="nc" id="L155">        zkUtil.killCluster();</span>
+<span class="nc" id="L156">    }</span>
+
+    protected void cleanupTempDirs() throws Exception {
+<span class="nc bnc" id="L159" title="All 2 branches missed.">        for (File f : tmpDirs) {</span>
+<span class="nc" id="L160">            FileUtils.deleteDirectory(f);</span>
+<span class="nc" id="L161">        }</span>
+<span class="nc" id="L162">    }</span>
+
+    protected File createTempDir(String prefix, String suffix) throws IOException {
+<span class="nc" id="L165">        File dir = IOUtils.createTempDir(prefix, suffix);</span>
+<span class="nc" id="L166">        tmpDirs.add(dir);</span>
+<span class="nc" id="L167">        return dir;</span>
+    }
+
+    private LogMark readLastMarkFile(File lastMarkFile) throws IOException {
+<span class="nc" id="L171">        byte[] buff = new byte[16];</span>
+<span class="nc" id="L172">        ByteBuffer bb = ByteBuffer.wrap(buff);</span>
+<span class="nc" id="L173">        LogMark rolledLogMark = new LogMark();</span>
+<span class="nc" id="L174">        FileInputStream fis = new FileInputStream(lastMarkFile);</span>
+<span class="nc" id="L175">        int bytesRead = fis.read(buff);</span>
+<span class="nc" id="L176">        fis.close();</span>
+<span class="nc bnc" id="L177" title="All 2 branches missed.">        if (bytesRead != 16) {</span>
+<span class="nc" id="L178">            throw new IOException(&quot;Couldn't read enough bytes from lastMark.&quot; + &quot; Wanted &quot; + 16 + &quot;, got &quot; + bytesRead);</span>
+        }
+<span class="nc" id="L180">        bb.clear();</span>
+<span class="nc" id="L181">        rolledLogMark.readLogMark(bb);</span>
+<span class="nc" id="L182">        return rolledLogMark;</span>
+    }
+
+    /*
+     * In this testcase, InterleavedLedgerStorage is used and validate if the
+     * checkpoint is called for every flushinterval period.
+     */
+    @Test
+    public void testPeriodicCheckpointForInterleavedLedgerStorage() throws Exception {
+<span class="nc" id="L191">        testPeriodicCheckpointForLedgerStorage(InterleavedLedgerStorage.class.getName());</span>
+<span class="nc" id="L192">    }</span>
+
+    /*
+     * In this testcase, SortedLedgerStorage is used and validate if the
+     * checkpoint is called for every flushinterval period.
+     */
+    @Test
+    public void testPeriodicCheckpointForSortedLedgerStorage() throws Exception {
+<span class="nc" id="L200">        testPeriodicCheckpointForLedgerStorage(SortedLedgerStorage.class.getName());</span>
+<span class="nc" id="L201">    }</span>
+
+    public void testPeriodicCheckpointForLedgerStorage(String ledgerStorageClassName) throws Exception {
+<span class="nc" id="L204">        File tmpDir = createTempDir(&quot;DiskCheck&quot;, &quot;test&quot;);</span>
+
+<span class="nc" id="L206">        final ServerConfiguration conf = TestBKConfiguration.newServerConfiguration()</span>
+<span class="nc" id="L207">                .setMetadataServiceUri(zkUtil.getMetadataServiceUri())</span>
+<span class="nc" id="L208">                .setZkTimeout(5000)</span>
+<span class="nc" id="L209">                .setJournalDirName(tmpDir.getPath())</span>
+<span class="nc" id="L210">                .setLedgerDirNames(new String[] { tmpDir.getPath() })</span>
+<span class="nc" id="L211">                .setAutoRecoveryDaemonEnabled(false)</span>
+<span class="nc" id="L212">                .setFlushInterval(2000)</span>
+<span class="nc" id="L213">                .setBookiePort(PortManager.nextFreePort())</span>
+                // entrylog per ledger is enabled
+<span class="nc" id="L215">                .setEntryLogPerLedgerEnabled(true)</span>
+<span class="nc" id="L216">                .setLedgerStorageClass(ledgerStorageClassName);</span>
+<span class="nc" id="L217">        Assert.assertEquals(&quot;Number of JournalDirs&quot;, 1, conf.getJournalDirs().length);</span>
+        // we know there is only one ledgerDir
+<span class="nc" id="L219">        File ledgerDir = Bookie.getCurrentDirectories(conf.getLedgerDirs())[0];</span>
+<span class="nc" id="L220">        BookieServer server = new BookieServer(conf);</span>
+<span class="nc" id="L221">        server.start();</span>
+<span class="nc" id="L222">        ClientConfiguration clientConf = new ClientConfiguration();</span>
+<span class="nc" id="L223">        clientConf.setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+<span class="nc" id="L224">        BookKeeper bkClient = new BookKeeper(clientConf);</span>
+
+<span class="nc" id="L226">        int numOfLedgers = 2;</span>
+<span class="nc" id="L227">        int numOfEntries = 5;</span>
+<span class="nc" id="L228">        byte[] dataBytes = &quot;data&quot;.getBytes();</span>
+
+<span class="nc bnc" id="L230" title="All 2 branches missed.">        for (int i = 0; i &lt; numOfLedgers; i++) {</span>
+<span class="nc" id="L231">            int ledgerIndex = i;</span>
+<span class="nc" id="L232">            LedgerHandle handle = bkClient.createLedgerAdv((long) i, 1, 1, 1, DigestType.CRC32, &quot;passwd&quot;.getBytes(),</span>
+                    null);
+<span class="nc bnc" id="L234" title="All 2 branches missed.">            for (int j = 0; j &lt; numOfEntries; j++) {</span>
+<span class="nc" id="L235">                handle.addEntry(j, dataBytes);</span>
+            }
+<span class="nc" id="L237">            handle.close();</span>
+        }
+
+<span class="nc" id="L240">        LastLogMark lastLogMarkAfterFirstSetOfAdds = server.getBookie().journals.get(0).getLastLogMark();</span>
+<span class="nc" id="L241">        LogMark curMarkAfterFirstSetOfAdds = lastLogMarkAfterFirstSetOfAdds.getCurMark();</span>
+
+<span class="nc" id="L243">        File lastMarkFile = new File(ledgerDir, &quot;lastMark&quot;);</span>
+        // lastMark file should be zero, because checkpoint hasn't happenend
+<span class="nc" id="L245">        LogMark logMarkFileBeforeCheckpoint = readLastMarkFile(lastMarkFile);</span>
+<span class="nc" id="L246">        Assert.assertEquals(&quot;lastMarkFile before checkpoint should be zero&quot;, 0,</span>
+<span class="nc" id="L247">                logMarkFileBeforeCheckpoint.compare(new LogMark()));</span>
+
+        // wait for flushInterval for SyncThread to do next iteration of checkpoint
+<span class="nc" id="L250">        executorController.advance(Duration.ofMillis(conf.getFlushInterval()));</span>
+        /*
+         * since we have waited for more than flushInterval SyncThread should
+         * have checkpointed. if entrylogperledger is not enabled, then we
+         * checkpoint only when currentLog in EntryLogger is rotated. but if
+         * entrylogperledger is enabled, then we checkpoint for every
+         * flushInterval period
+         */
+<span class="nc" id="L258">        Assert.assertTrue(&quot;lastMark file must be existing, because checkpoint should have happened&quot;,</span>
+<span class="nc" id="L259">                lastMarkFile.exists());</span>
+
+<span class="nc" id="L261">        LastLogMark lastLogMarkAfterCheckpoint = server.getBookie().journals.get(0).getLastLogMark();</span>
+<span class="nc" id="L262">        LogMark curMarkAfterCheckpoint = lastLogMarkAfterCheckpoint.getCurMark();</span>
+
+<span class="nc" id="L264">        LogMark rolledLogMark = readLastMarkFile(lastMarkFile);</span>
+<span class="nc" id="L265">        Assert.assertNotEquals(&quot;rolledLogMark should not be zero, since checkpoint has happenend&quot;, 0,</span>
+<span class="nc" id="L266">                rolledLogMark.compare(new LogMark()));</span>
+        /*
+         * Curmark should be equal before and after checkpoint, because we didnt
+         * add new entries during this period
+         */
+<span class="nc" id="L271">        Assert.assertTrue(&quot;Curmark should be equal before and after checkpoint&quot;,</span>
+<span class="nc bnc" id="L272" title="All 2 branches missed.">                curMarkAfterCheckpoint.compare(curMarkAfterFirstSetOfAdds) == 0);</span>
+        /*
+         * Curmark after checkpoint should be equal to rolled logmark, because
+         * we checkpointed
+         */
+<span class="nc" id="L277">        Assert.assertTrue(&quot;Curmark after first set of adds should be equal to rolled logmark&quot;,</span>
+<span class="nc bnc" id="L278" title="All 2 branches missed.">                curMarkAfterCheckpoint.compare(rolledLogMark) == 0);</span>
+
+        // add more ledger/entries
+<span class="nc bnc" id="L281" title="All 2 branches missed.">        for (int i = numOfLedgers; i &lt; 2 * numOfLedgers; i++) {</span>
+<span class="nc" id="L282">            int ledgerIndex = i;</span>
+<span class="nc" id="L283">            LedgerHandle handle = bkClient.createLedgerAdv((long) i, 1, 1, 1, DigestType.CRC32, &quot;passwd&quot;.getBytes(),</span>
+                    null);
+<span class="nc bnc" id="L285" title="All 2 branches missed.">            for (int j = 0; j &lt; numOfEntries; j++) {</span>
+<span class="nc" id="L286">                handle.addEntry(j, dataBytes);</span>
+            }
+<span class="nc" id="L288">            handle.close();</span>
+        }
+
+        // wait for flushInterval for SyncThread to do next iteration of checkpoint
+<span class="nc" id="L292">        executorController.advance(Duration.ofMillis(conf.getFlushInterval()));</span>
+
+<span class="nc" id="L294">        LastLogMark lastLogMarkAfterSecondSetOfAdds = server.getBookie().journals.get(0).getLastLogMark();</span>
+<span class="nc" id="L295">        LogMark curMarkAfterSecondSetOfAdds = lastLogMarkAfterSecondSetOfAdds.getCurMark();</span>
+
+<span class="nc" id="L297">        rolledLogMark = readLastMarkFile(lastMarkFile);</span>
+        /*
+         * Curmark after checkpoint should be equal to rolled logmark, because
+         * we checkpointed
+         */
+<span class="nc" id="L302">        Assert.assertTrue(&quot;Curmark after second set of adds should be equal to rolled logmark&quot;,</span>
+<span class="nc bnc" id="L303" title="All 2 branches missed.">                curMarkAfterSecondSetOfAdds.compare(rolledLogMark) == 0);</span>
+
+<span class="nc" id="L305">        server.shutdown();</span>
+<span class="nc" id="L306">        bkClient.close();</span>
+<span class="nc" id="L307">    }</span>
+
+    /*
+     * In this testcase, InterleavedLedgerStorage is used, entrylogperledger is
+     * enabled and validate that when entrylog is rotated it doesn't do
+     * checkpoint.
+     */
+    @Test
+    public void testCheckpointOfILSEntryLogIsRotatedWithELPLEnabled() throws Exception {
+<span class="nc" id="L316">        testCheckpointofILSWhenEntryLogIsRotated(true);</span>
+<span class="nc" id="L317">    }</span>
+
+    /*
+     * In this testcase, InterleavedLedgerStorage is used, entrylogperledger is
+     * not enabled and validate that when entrylog is rotated it does
+     * checkpoint.
+     */
+    @Test
+    public void testCheckpointOfILSEntryLogIsRotatedWithELPLDisabled() throws Exception {
+<span class="nc" id="L326">        testCheckpointofILSWhenEntryLogIsRotated(false);</span>
+<span class="nc" id="L327">    }</span>
+
+    public void testCheckpointofILSWhenEntryLogIsRotated(boolean entryLogPerLedgerEnabled) throws Exception {
+<span class="nc" id="L330">        File tmpDir = createTempDir(&quot;DiskCheck&quot;, &quot;test&quot;);</span>
+
+<span class="nc" id="L332">        final ServerConfiguration conf = TestBKConfiguration.newServerConfiguration()</span>
+<span class="nc" id="L333">                .setMetadataServiceUri(zkUtil.getMetadataServiceUri())</span>
+<span class="nc" id="L334">                .setZkTimeout(5000)</span>
+<span class="nc" id="L335">                .setJournalDirName(tmpDir.getPath())</span>
+<span class="nc" id="L336">                .setLedgerDirNames(new String[] { tmpDir.getPath() })</span>
+<span class="nc" id="L337">                .setAutoRecoveryDaemonEnabled(false)</span>
+                //set very high period for flushInterval
+<span class="nc" id="L339">                .setFlushInterval(30000)</span>
+<span class="nc" id="L340">                .setBookiePort(PortManager.nextFreePort())</span>
+                // entrylog per ledger is enabled
+<span class="nc" id="L342">                .setEntryLogPerLedgerEnabled(entryLogPerLedgerEnabled)</span>
+<span class="nc" id="L343">                .setLedgerStorageClass(InterleavedLedgerStorage.class.getName());</span>
+
+<span class="nc" id="L345">        Assert.assertEquals(&quot;Number of JournalDirs&quot;, 1, conf.getJournalDirs().length);</span>
+        // we know there is only one ledgerDir
+<span class="nc" id="L347">        File ledgerDir = Bookie.getCurrentDirectories(conf.getLedgerDirs())[0];</span>
+<span class="nc" id="L348">        BookieServer server = new BookieServer(conf);</span>
+<span class="nc" id="L349">        server.start();</span>
+<span class="nc" id="L350">        ClientConfiguration clientConf = new ClientConfiguration();</span>
+<span class="nc" id="L351">        clientConf.setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+<span class="nc" id="L352">        BookKeeper bkClient = new BookKeeper(clientConf);</span>
+<span class="nc" id="L353">        InterleavedLedgerStorage ledgerStorage = (InterleavedLedgerStorage) server.getBookie().ledgerStorage;</span>
+
+<span class="nc" id="L355">        int numOfEntries = 5;</span>
+<span class="nc" id="L356">        byte[] dataBytes = &quot;data&quot;.getBytes();</span>
+
+<span class="nc" id="L358">        long ledgerId = 10;</span>
+<span class="nc" id="L359">        LedgerHandle handle = bkClient.createLedgerAdv(ledgerId, 1, 1, 1, DigestType.CRC32, &quot;passwd&quot;.getBytes(), null);</span>
+<span class="nc bnc" id="L360" title="All 2 branches missed.">        for (int j = 0; j &lt; numOfEntries; j++) {</span>
+<span class="nc" id="L361">            handle.addEntry(j, dataBytes);</span>
+        }
+<span class="nc" id="L363">        handle.close();</span>
+        // simulate rolling entrylog
+<span class="nc" id="L365">        ((EntryLogManagerBase) ledgerStorage.getEntryLogger().getEntryLogManager()).createNewLog(ledgerId);</span>
+        // sleep for a bit for checkpoint to do its task
+<span class="nc" id="L367">        executorController.advance(Duration.ofMillis(500));</span>
+
+<span class="nc" id="L369">        File lastMarkFile = new File(ledgerDir, &quot;lastMark&quot;);</span>
+<span class="nc" id="L370">        LogMark rolledLogMark = readLastMarkFile(lastMarkFile);</span>
+<span class="nc bnc" id="L371" title="All 2 branches missed.">        if (entryLogPerLedgerEnabled) {</span>
+<span class="nc" id="L372">            Assert.assertEquals(</span>
+                    &quot;rolledLogMark should be zero, since checkpoint&quot;
+                            + &quot;shouldn't have happened when entryLog is rotated&quot;,
+<span class="nc" id="L375">                    0, rolledLogMark.compare(new LogMark()));</span>
+        } else {
+<span class="nc" id="L377">            Assert.assertNotEquals(&quot;rolledLogMark shouldn't be zero, since checkpoint&quot;</span>
+<span class="nc" id="L378">                    + &quot;should have happened when entryLog is rotated&quot;, 0, rolledLogMark.compare(new LogMark()));</span>
+        }
+<span class="nc" id="L380">        bkClient.close();</span>
+<span class="nc" id="L381">        server.shutdown();</span>
+<span class="nc" id="L382">    }</span>
+
+    /*
+     * In this testcase, SortedLedgerStorage is used, entrylogperledger is
+     * enabled and validate that when entrylog is rotated it doesn't do
+     * checkpoint.
+     */
+    @Test
+    public void testCheckpointOfSLSEntryLogIsRotatedWithELPLEnabled() throws Exception {
+<span class="nc" id="L391">        testCheckpointOfSLSWhenEntryLogIsRotated(true);</span>
+<span class="nc" id="L392">    }</span>
+
+    /*
+     * In this testcase, SortedLedgerStorage is used, entrylogperledger is
+     * not enabled and validate that when entrylog is rotated it does
+     * checkpoint.
+     */
+    @Test
+    public void testCheckpointOfSLSEntryLogIsRotatedWithELPLDisabled() throws Exception {
+<span class="nc" id="L401">        testCheckpointOfSLSWhenEntryLogIsRotated(false);</span>
+<span class="nc" id="L402">    }</span>
+
+    public void testCheckpointOfSLSWhenEntryLogIsRotated(boolean entryLogPerLedgerEnabled) throws Exception {
+<span class="nc" id="L405">        File tmpDir = createTempDir(&quot;DiskCheck&quot;, &quot;test&quot;);</span>
+
+<span class="nc" id="L407">        final ServerConfiguration conf = TestBKConfiguration.newServerConfiguration()</span>
+<span class="nc" id="L408">                .setMetadataServiceUri(zkUtil.getMetadataServiceUri())</span>
+<span class="nc" id="L409">                .setZkTimeout(5000)</span>
+<span class="nc" id="L410">                .setJournalDirName(tmpDir.getPath())</span>
+<span class="nc" id="L411">                .setLedgerDirNames(new String[] { tmpDir.getPath() })</span>
+<span class="nc" id="L412">                .setAutoRecoveryDaemonEnabled(false)</span>
+                //set very high period for flushInterval
+<span class="nc" id="L414">                .setFlushInterval(30000)</span>
+<span class="nc" id="L415">                .setBookiePort(PortManager.nextFreePort())</span>
+                // entrylog per ledger is enabled
+<span class="nc" id="L417">                .setEntryLogPerLedgerEnabled(entryLogPerLedgerEnabled)</span>
+<span class="nc" id="L418">                .setLedgerStorageClass(SortedLedgerStorage.class.getName())</span>
+                // set very low skipListSizeLimit and entryLogSizeLimit to simulate log file rotation
+<span class="nc" id="L420">                .setSkipListSizeLimit(1 * 1000 * 1000)</span>
+<span class="nc" id="L421">                .setEntryLogSizeLimit(2 * 1000 * 1000);</span>
+
+<span class="nc" id="L423">        Assert.assertEquals(&quot;Number of JournalDirs&quot;, 1, conf.getJournalDirs().length);</span>
+        // we know there is only one ledgerDir
+<span class="nc" id="L425">        File ledgerDir = Bookie.getCurrentDirectories(conf.getLedgerDirs())[0];</span>
+<span class="nc" id="L426">        BookieServer server = new BookieServer(conf);</span>
+<span class="nc" id="L427">        server.start();</span>
+<span class="nc" id="L428">        ClientConfiguration clientConf = new ClientConfiguration();</span>
+<span class="nc" id="L429">        clientConf.setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+<span class="nc" id="L430">        BookKeeper bkClient = new BookKeeper(clientConf);</span>
+
+<span class="nc" id="L432">        Random rand = new Random();</span>
+<span class="nc" id="L433">        byte[] dataBytes = new byte[10 * 1000];</span>
+<span class="nc" id="L434">        rand.nextBytes(dataBytes);</span>
+<span class="nc" id="L435">        int numOfEntries = ((int) conf.getEntryLogSizeLimit() + (100 * 1000)) / dataBytes.length;</span>
+
+<span class="nc" id="L437">        LedgerHandle handle = bkClient.createLedgerAdv(10, 1, 1, 1, DigestType.CRC32, &quot;passwd&quot;.getBytes(), null);</span>
+<span class="nc bnc" id="L438" title="All 2 branches missed.">        for (int j = 0; j &lt; numOfEntries; j++) {</span>
+<span class="nc" id="L439">            handle.addEntry(j, dataBytes);</span>
+        }
+<span class="nc" id="L441">        handle.close();</span>
+
+        // sleep for a bit for checkpoint to do its task
+<span class="nc" id="L444">        executorController.advance(Duration.ofMillis(500));</span>
+
+<span class="nc" id="L446">        File lastMarkFile = new File(ledgerDir, &quot;lastMark&quot;);</span>
+<span class="nc" id="L447">        LogMark rolledLogMark = readLastMarkFile(lastMarkFile);</span>
+<span class="nc bnc" id="L448" title="All 2 branches missed.">        if (entryLogPerLedgerEnabled) {</span>
+<span class="nc" id="L449">            Assert.assertEquals(</span>
+                    &quot;rolledLogMark should be zero, since checkpoint&quot;
+                            + &quot;shouldn't have happened when entryLog is rotated&quot;,
+<span class="nc" id="L452">                    0, rolledLogMark.compare(new LogMark()));</span>
+        } else {
+<span class="nc" id="L454">            Assert.assertNotEquals(&quot;rolledLogMark shouldn't be zero, since checkpoint&quot;</span>
+<span class="nc" id="L455">                    + &quot;should have happened when entryLog is rotated&quot;, 0, rolledLogMark.compare(new LogMark()));</span>
+        }
+<span class="nc" id="L457">        bkClient.close();</span>
+<span class="nc" id="L458">        server.shutdown();</span>
+<span class="nc" id="L459">    }</span>
+
+    /*
+     * in this method it checks if entryLogPerLedger is enabled, then
+     * InterLeavedLedgerStorage.checkpoint flushes current activelog and flushes
+     * all rotatedlogs and closes them.
+     *
+     */
+    @Test
+    public void testIfEntryLogPerLedgerEnabledCheckpointFlushesAllLogs() throws Exception {
+<span class="nc" id="L469">        File tmpDir = createTempDir(&quot;DiskCheck&quot;, &quot;test&quot;);</span>
+
+<span class="nc" id="L471">        final ServerConfiguration conf = TestBKConfiguration.newServerConfiguration()</span>
+<span class="nc" id="L472">                .setMetadataServiceUri(zkUtil.getMetadataServiceUri())</span>
+<span class="nc" id="L473">                .setZkTimeout(5000)</span>
+<span class="nc" id="L474">                .setJournalDirName(tmpDir.getPath())</span>
+<span class="nc" id="L475">                .setLedgerDirNames(new String[] { tmpDir.getPath() })</span>
+<span class="nc" id="L476">                .setAutoRecoveryDaemonEnabled(false)</span>
+                //set flushInterval
+<span class="nc" id="L478">                .setFlushInterval(3000)</span>
+<span class="nc" id="L479">                .setBookiePort(PortManager.nextFreePort())</span>
+                // entrylog per ledger is enabled
+<span class="nc" id="L481">                .setEntryLogPerLedgerEnabled(true)</span>
+<span class="nc" id="L482">                .setLedgerStorageClass(InterleavedLedgerStorage.class.getName())</span>
+                // set setFlushIntervalInBytes to some very high number
+<span class="nc" id="L484">                .setFlushIntervalInBytes(10000000);</span>
+
+<span class="nc" id="L486">        Assert.assertEquals(&quot;Number of JournalDirs&quot;, 1, conf.getJournalDirs().length);</span>
+        // we know there is only one ledgerDir
+<span class="nc" id="L488">        File ledgerDir = Bookie.getCurrentDirectories(conf.getLedgerDirs())[0];</span>
+<span class="nc" id="L489">        BookieServer server = new BookieServer(conf);</span>
+<span class="nc" id="L490">        server.start();</span>
+<span class="nc" id="L491">        ClientConfiguration clientConf = new ClientConfiguration();</span>
+<span class="nc" id="L492">        clientConf.setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+<span class="nc" id="L493">        BookKeeper bkClient = new BookKeeper(clientConf);</span>
+<span class="nc" id="L494">        InterleavedLedgerStorage ledgerStorage = (InterleavedLedgerStorage) server.getBookie().ledgerStorage;</span>
+<span class="nc" id="L495">        EntryLogger entryLogger = ledgerStorage.entryLogger;</span>
+<span class="nc" id="L496">        EntryLogManagerForEntryLogPerLedger entryLogManager = (EntryLogManagerForEntryLogPerLedger) entryLogger</span>
+<span class="nc" id="L497">                .getEntryLogManager();</span>
+
+<span class="nc" id="L499">        Random rand = new Random();</span>
+<span class="nc" id="L500">        int numOfEntries = 5;</span>
+<span class="nc" id="L501">        byte[] dataBytes = &quot;data&quot;.getBytes();</span>
+
+<span class="nc" id="L503">        int numOfLedgers = 3;</span>
+<span class="nc" id="L504">        long[] ledgerIds = new long[numOfLedgers];</span>
+        LedgerHandle handle;
+<span class="nc bnc" id="L506" title="All 2 branches missed.">        for (int i = 0; i &lt; numOfLedgers; i++) {</span>
+<span class="nc" id="L507">            ledgerIds[i] = rand.nextInt(100000) + 1;</span>
+<span class="nc" id="L508">            handle = bkClient.createLedgerAdv(ledgerIds[i], 1, 1, 1, DigestType.CRC32, &quot;passwd&quot;.getBytes(), null);</span>
+<span class="nc bnc" id="L509" title="All 2 branches missed.">            for (int j = 0; j &lt; numOfEntries; j++) {</span>
+<span class="nc" id="L510">                handle.addEntry(j, dataBytes);</span>
+            }
+            // simulate rolling entrylog
+<span class="nc" id="L513">            entryLogManager.createNewLog(ledgerIds[i]);</span>
+        }
+
+<span class="nc" id="L516">        Set&lt;BufferedLogChannelWithDirInfo&gt; copyOfCurrentLogsWithDirInfo = entryLogManager.getCopyOfCurrentLogs();</span>
+<span class="nc bnc" id="L517" title="All 2 branches missed.">        for (BufferedLogChannelWithDirInfo currentLogWithDirInfo : copyOfCurrentLogsWithDirInfo) {</span>
+<span class="nc" id="L518">            Assert.assertNotEquals(&quot;bytesWrittenSinceLastFlush shouldn't be zero&quot;, 0,</span>
+<span class="nc" id="L519">                    currentLogWithDirInfo.getLogChannel().getUnpersistedBytes());</span>
+<span class="nc" id="L520">        }</span>
+<span class="nc" id="L521">        Assert.assertNotEquals(&quot;There should be logChannelsToFlush&quot;, 0,</span>
+<span class="nc" id="L522">                entryLogManager.getRotatedLogChannels().size());</span>
+
+        /*
+         * wait for atleast flushInterval period, so that checkpoint can happen.
+         */
+<span class="nc" id="L527">        executorController.advance(Duration.ofMillis(conf.getFlushInterval()));</span>
+
+        /*
+         * since checkpoint happenend, there shouldn't be any logChannelsToFlush
+         * and bytesWrittenSinceLastFlush should be zero.
+         */
+<span class="nc" id="L533">        List&lt;BufferedLogChannel&gt; copyOfRotatedLogChannels = entryLogManager.getRotatedLogChannels();</span>
+<span class="nc bnc" id="L534" title="All 2 branches missed.">        Assert.assertTrue(&quot;There shouldn't be logChannelsToFlush&quot;,</span>
+<span class="nc bnc" id="L535" title="All 2 branches missed.">                ((copyOfRotatedLogChannels == null) || (copyOfRotatedLogChannels.size() == 0)));</span>
+
+<span class="nc" id="L537">        copyOfCurrentLogsWithDirInfo = entryLogManager.getCopyOfCurrentLogs();</span>
+<span class="nc bnc" id="L538" title="All 2 branches missed.">        for (BufferedLogChannelWithDirInfo currentLogWithDirInfo : copyOfCurrentLogsWithDirInfo) {</span>
+<span class="nc" id="L539">            Assert.assertEquals(&quot;bytesWrittenSinceLastFlush should be zero&quot;, 0,</span>
+<span class="nc" id="L540">                    currentLogWithDirInfo.getLogChannel().getUnpersistedBytes());</span>
+<span class="nc" id="L541">        }</span>
+<span class="nc" id="L542">    }</span>
+
+<span class="nc" id="L544">    static class MockInterleavedLedgerStorage extends InterleavedLedgerStorage {</span>
+        @Override
+        public void shutdown() {
+            // During BookieServer shutdown this method will be called
+            // and we want it to be noop.
+            // do nothing
+<span class="nc" id="L550">        }</span>
+
+        @Override
+        public synchronized void flush() throws IOException {
+            // this method will be called by SyncThread.shutdown.
+            // During BookieServer shutdown we want this method to be noop
+            // do nothing
+<span class="nc" id="L557">        }</span>
+    }
+
+    /*
+     * This is complete end-to-end scenario.
+     *
+     * 1) This testcase uses MockInterleavedLedgerStorage, which extends
+     * InterleavedLedgerStorage but doesn't do anything when Bookie is shutdown.
+     * This is needed to simulate Bookie crash.
+     * 2) entryLogPerLedger is enabled
+     * 3) ledgers are created and entries are added.
+     * 4) wait for flushInterval period for checkpoint to complete
+     * 5) simulate bookie crash
+     * 6) delete the journal files and lastmark file
+     * 7) Now restart the Bookie
+     * 8) validate that the entries which were written can be read successfully.
+     */
+    @Test
+    public void testCheckPointForEntryLoggerWithMultipleActiveEntryLogs() throws Exception {
+<span class="nc" id="L576">        File tmpDir = createTempDir(&quot;DiskCheck&quot;, &quot;test&quot;);</span>
+
+<span class="nc" id="L578">        final ServerConfiguration conf = TestBKConfiguration.newServerConfiguration()</span>
+<span class="nc" id="L579">                .setMetadataServiceUri(zkUtil.getMetadataServiceUri())</span>
+<span class="nc" id="L580">                .setZkTimeout(5000)</span>
+<span class="nc" id="L581">                .setJournalDirName(tmpDir.getPath())</span>
+<span class="nc" id="L582">                .setLedgerDirNames(new String[] { tmpDir.getPath() })</span>
+<span class="nc" id="L583">                .setAutoRecoveryDaemonEnabled(false)</span>
+<span class="nc" id="L584">                .setFlushInterval(3000)</span>
+<span class="nc" id="L585">                .setBookiePort(PortManager.nextFreePort())</span>
+                // entrylog per ledger is enabled
+<span class="nc" id="L587">                .setEntryLogPerLedgerEnabled(true)</span>
+<span class="nc" id="L588">                .setLedgerStorageClass(MockInterleavedLedgerStorage.class.getName());</span>
+
+<span class="nc" id="L590">        Assert.assertEquals(&quot;Number of JournalDirs&quot;, 1, conf.getJournalDirs().length);</span>
+        // we know there is only one ledgerDir
+<span class="nc" id="L592">        File ledgerDir = Bookie.getCurrentDirectories(conf.getLedgerDirs())[0];</span>
+<span class="nc" id="L593">        BookieServer server = new BookieServer(conf);</span>
+<span class="nc" id="L594">        server.start();</span>
+<span class="nc" id="L595">        ClientConfiguration clientConf = new ClientConfiguration();</span>
+<span class="nc" id="L596">        clientConf.setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+<span class="nc" id="L597">        final BookKeeper bkClient = new BookKeeper(clientConf);</span>
+
+<span class="nc" id="L599">        int numOfLedgers = 12;</span>
+<span class="nc" id="L600">        int numOfEntries = 100;</span>
+<span class="nc" id="L601">        byte[] dataBytes = &quot;data&quot;.getBytes();</span>
+<span class="nc" id="L602">        AtomicBoolean receivedExceptionForAdd = new AtomicBoolean(false);</span>
+<span class="nc" id="L603">        LongStream.range(0, numOfLedgers).parallel().mapToObj((ledgerId) -&gt; {</span>
+<span class="nc" id="L604">            LedgerHandle handle = null;</span>
+            try {
+<span class="nc" id="L606">                handle = bkClient.createLedgerAdv(ledgerId, 1, 1, 1, DigestType.CRC32, &quot;passwd&quot;.getBytes(), null);</span>
+<span class="nc" id="L607">            } catch (BKException | InterruptedException exc) {</span>
+<span class="nc" id="L608">                receivedExceptionForAdd.compareAndSet(false, true);</span>
+<span class="nc" id="L609">                LOG.error(&quot;Got Exception while trying to create LedgerHandle for ledgerId: &quot; + ledgerId, exc);</span>
+<span class="nc" id="L610">            }</span>
+<span class="nc" id="L611">            return handle;</span>
+<span class="nc" id="L612">        }).forEach((writeHandle) -&gt; {</span>
+<span class="nc" id="L613">            IntStream.range(0, numOfEntries).forEach((entryId) -&gt; {</span>
+                try {
+<span class="nc" id="L615">                    writeHandle.addEntry(entryId, dataBytes);</span>
+<span class="nc" id="L616">                } catch (BKException | InterruptedException exc) {</span>
+<span class="nc" id="L617">                    receivedExceptionForAdd.compareAndSet(false, true);</span>
+<span class="nc" id="L618">                    LOG.error(&quot;Got Exception while trying to AddEntry of ledgerId: &quot; + writeHandle.getId()</span>
+                            + &quot; entryId: &quot; + entryId, exc);
+<span class="nc" id="L620">                }</span>
+<span class="nc" id="L621">            });</span>
+            try {
+<span class="nc" id="L623">                writeHandle.close();</span>
+<span class="nc" id="L624">            } catch (BKException | InterruptedException e) {</span>
+<span class="nc" id="L625">                receivedExceptionForAdd.compareAndSet(false, true);</span>
+<span class="nc" id="L626">                LOG.error(&quot;Got Exception while trying to close writeHandle of ledgerId: &quot; + writeHandle.getId(), e);</span>
+<span class="nc" id="L627">            }</span>
+<span class="nc" id="L628">        });</span>
+
+<span class="nc" id="L630">        Assert.assertFalse(</span>
+                &quot;There shouldn't be any exceptions while creating writeHandle and adding entries to writeHandle&quot;,
+<span class="nc" id="L632">                receivedExceptionForAdd.get());</span>
+
+<span class="nc" id="L634">        executorController.advance(Duration.ofMillis(conf.getFlushInterval()));</span>
+        // since we have waited for more than flushInterval SyncThread should have checkpointed.
+        // if entrylogperledger is not enabled, then we checkpoint only when currentLog in EntryLogger
+        // is rotated. but if entrylogperledger is enabled, then we checkpoint for every flushInterval period
+<span class="nc" id="L638">        File lastMarkFile = new File(ledgerDir, &quot;lastMark&quot;);</span>
+<span class="nc" id="L639">        Assert.assertTrue(&quot;lastMark file must be existing, because checkpoint should have happened&quot;,</span>
+<span class="nc" id="L640">                lastMarkFile.exists());</span>
+<span class="nc" id="L641">        LogMark rolledLogMark = readLastMarkFile(lastMarkFile);</span>
+<span class="nc" id="L642">        Assert.assertNotEquals(&quot;rolledLogMark should not be zero, since checkpoint has happenend&quot;, 0,</span>
+<span class="nc" id="L643">                rolledLogMark.compare(new LogMark()));</span>
+
+<span class="nc" id="L645">        bkClient.close();</span>
+        // here we are calling shutdown, but MockInterleavedLedgerStorage shudown/flush
+        // methods are noop, so entrylogger is not flushed as part of this shutdown
+        // here we are trying to simulate Bookie crash, but there is no way to
+        // simulate bookie abrupt crash
+<span class="nc" id="L650">        server.shutdown();</span>
+
+        // delete journal files and lastMark, to make sure that we are not reading from
+        // Journal file
+<span class="nc" id="L654">        File[] journalDirs = conf.getJournalDirs();</span>
+<span class="nc bnc" id="L655" title="All 2 branches missed.">        for (File journalDir : journalDirs) {</span>
+<span class="nc" id="L656">            File journalDirectory = Bookie.getCurrentDirectory(journalDir);</span>
+<span class="nc" id="L657">            List&lt;Long&gt; journalLogsId = Journal.listJournalIds(journalDirectory, null);</span>
+<span class="nc bnc" id="L658" title="All 2 branches missed.">            for (long journalId : journalLogsId) {</span>
+<span class="nc" id="L659">                File journalFile = new File(journalDirectory, Long.toHexString(journalId) + &quot;.txn&quot;);</span>
+<span class="nc" id="L660">                journalFile.delete();</span>
+<span class="nc" id="L661">            }</span>
+        }
+
+        // we know there is only one ledgerDir
+<span class="nc" id="L665">        lastMarkFile = new File(ledgerDir, &quot;lastMark&quot;);</span>
+<span class="nc" id="L666">        lastMarkFile.delete();</span>
+
+        // now we are restarting BookieServer
+<span class="nc" id="L669">        conf.setLedgerStorageClass(InterleavedLedgerStorage.class.getName());</span>
+<span class="nc" id="L670">        server = new BookieServer(conf);</span>
+<span class="nc" id="L671">        server.start();</span>
+<span class="nc" id="L672">        BookKeeper newBKClient = new BookKeeper(clientConf);</span>
+        // since Bookie checkpointed successfully before shutdown/crash,
+        // we should be able to read from entryLogs though journal is deleted
+
+<span class="nc" id="L676">        AtomicBoolean receivedExceptionForRead = new AtomicBoolean(false);</span>
+
+<span class="nc" id="L678">        LongStream.range(0, numOfLedgers).parallel().forEach((ledgerId) -&gt; {</span>
+            try {
+<span class="nc" id="L680">                LedgerHandle lh = newBKClient.openLedger(ledgerId, DigestType.CRC32, &quot;passwd&quot;.getBytes());</span>
+<span class="nc" id="L681">                Enumeration&lt;LedgerEntry&gt; entries = lh.readEntries(0, numOfEntries - 1);</span>
+<span class="nc bnc" id="L682" title="All 2 branches missed.">                while (entries.hasMoreElements()) {</span>
+<span class="nc" id="L683">                    LedgerEntry entry = entries.nextElement();</span>
+<span class="nc" id="L684">                    byte[] readData = entry.getEntry();</span>
+<span class="nc" id="L685">                    Assert.assertEquals(&quot;Ledger Entry Data should match&quot;, new String(&quot;data&quot;.getBytes()),</span>
+                            new String(readData));
+<span class="nc" id="L687">                }</span>
+<span class="nc" id="L688">                lh.close();</span>
+<span class="nc" id="L689">            } catch (BKException | InterruptedException e) {</span>
+<span class="nc" id="L690">                receivedExceptionForRead.compareAndSet(false, true);</span>
+<span class="nc" id="L691">                LOG.error(&quot;Got Exception while trying to read entries of ledger, ledgerId: &quot; + ledgerId, e);</span>
+<span class="nc" id="L692">            }</span>
+<span class="nc" id="L693">        });</span>
+<span class="nc" id="L694">        Assert.assertFalse(&quot;There shouldn't be any exceptions while creating readHandle and while reading&quot;</span>
+<span class="nc" id="L695">                + &quot;entries using readHandle&quot;, receivedExceptionForRead.get());</span>
+
+<span class="nc" id="L697">        newBKClient.close();</span>
+<span class="nc" id="L698">        server.shutdown();</span>
+<span class="nc" id="L699">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

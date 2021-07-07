@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TestMaxEnsembleChangeNum.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">TestMaxEnsembleChangeNum.java</span></div><h1>TestMaxEnsembleChangeNum.java</h1><pre class="source lang-java linenums">/*
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.client;
+
+import static org.apache.bookkeeper.client.api.BKException.Code.WriteException;
+import static org.apache.bookkeeper.common.concurrent.FutureUtils.result;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
+
+import java.nio.ByteBuffer;
+import org.apache.bookkeeper.client.api.WriteHandle;
+import org.apache.bookkeeper.conf.ClientConfiguration;
+import org.junit.Test;
+
+/**
+ * Test ensemble change has a max num.
+ */
+<span class="nc" id="L36">public class TestMaxEnsembleChangeNum extends MockBookKeeperTestCase {</span>
+
+<span class="nc" id="L38">    private static final byte[] password = new byte[5];</span>
+<span class="nc" id="L39">    private static final byte[] data = new byte[5];</span>
+
+    @Test
+    public void testChangeEnsembleMaxNumWithWriter() throws Exception {
+        long lId;
+<span class="nc" id="L44">        int numEntries = 5;</span>
+<span class="nc" id="L45">        int changeNum = 5;</span>
+<span class="nc" id="L46">        setBookKeeperConfig(new ClientConfiguration().setDelayEnsembleChange(false).setMaxAllowedEnsembleChanges(5));</span>
+<span class="nc" id="L47">        try (WriteHandle writer = result(newCreateLedgerOp()</span>
+<span class="nc" id="L48">                .withAckQuorumSize(3)</span>
+<span class="nc" id="L49">                .withWriteQuorumSize(3)</span>
+<span class="nc" id="L50">                .withEnsembleSize(3)</span>
+<span class="nc" id="L51">                .withPassword(password)</span>
+<span class="nc" id="L52">                .execute())) {</span>
+<span class="nc" id="L53">            lId = writer.getId();</span>
+            //first fragment
+<span class="nc bnc" id="L55" title="All 2 branches missed.">            for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L56">                writer.append(ByteBuffer.wrap(data));</span>
+            }
+<span class="nc" id="L58">            assertEquals(&quot;There should be zero ensemble change&quot;,</span>
+<span class="nc" id="L59">                    1, getLedgerMetadata(lId).getAllEnsembles().size());</span>
+
+<span class="nc" id="L61">            simulateEnsembleChangeWithWriter(changeNum, numEntries, writer);</span>
+
+            // one more ensemble change
+<span class="nc" id="L64">            startNewBookie();</span>
+<span class="nc" id="L65">            killBookie(writer.getLedgerMetadata().getEnsembleAt(writer.getLastAddConfirmed()).get(0));</span>
+            // add failure
+            try {
+<span class="nc" id="L68">                writer.append(ByteBuffer.wrap(data));</span>
+<span class="nc" id="L69">                fail(&quot;should not come to here&quot;);</span>
+<span class="nc" id="L70">            } catch (BKException exception){</span>
+<span class="nc" id="L71">                assertEquals(exception.getCode(), WriteException);</span>
+<span class="nc" id="L72">            }</span>
+        }
+<span class="nc" id="L74">    }</span>
+
+    private void simulateEnsembleChangeWithWriter(int changeNum, int numEntries, WriteHandle writer) throws Exception{
+
+<span class="nc" id="L78">        int expectedSize = writer.getLedgerMetadata().getAllEnsembles().size() + 1;</span>
+        //kill bookie and add again
+<span class="nc bnc" id="L80" title="All 2 branches missed.">        for (int num = 0; num &lt; changeNum; num++){</span>
+<span class="nc" id="L81">            startNewBookie();</span>
+
+<span class="nc" id="L83">            killBookie(writer.getLedgerMetadata().getEnsembleAt(writer.getLastAddConfirmed()).get(0));</span>
+<span class="nc bnc" id="L84" title="All 2 branches missed.">            for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L85">                writer.append(ByteBuffer.wrap(data));</span>
+            }
+            // ensure there is a ensemble changed
+<span class="nc" id="L88">            assertEquals(&quot;There should be one ensemble change&quot;,</span>
+<span class="nc" id="L89">                    expectedSize + num, writer.getLedgerMetadata().getAllEnsembles().size());</span>
+        }
+<span class="nc" id="L91">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

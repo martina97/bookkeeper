@@ -1,0 +1,357 @@
+
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html id="htmlId">
+<head>
+  <title>Coverage Report :: LedgerMetadataIndex</title>
+  <style type="text/css">
+    @import "../../.css/coverage.css";
+  </style>
+</head>
+
+<body>
+<div class="header"></div>
+
+<div class="content">
+<div class="breadCrumbs">
+    [ <a href="../../index.html">all classes</a> ]
+    [ <a href="../index.html">org.apache.bookkeeper.bookie.storage.ldb</a> ]
+</div>
+
+<h1>Coverage Summary for Class: LedgerMetadataIndex (org.apache.bookkeeper.bookie.storage.ldb)</h1>
+
+<table class="coverageStats">
+
+<tr>
+  <th class="name">Class</th>
+<th class="coverageStat 
+">
+  Method, %
+</th>
+<th class="coverageStat 
+">
+  Line, %
+</th>
+</tr>
+<tr>
+  <td class="name">LedgerMetadataIndex</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 13)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 103)
+  </span>
+</td>
+</tr>
+  <tr>
+    <td class="name">LedgerMetadataIndex$1</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 2)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 2)
+  </span>
+</td>
+  </tr>
+<tr>
+  <td class="name"><strong>total</strong></td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 15)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 105)
+  </span>
+</td>
+</tr>
+</table>
+
+<br/>
+<br/>
+
+
+<div class="sourceCode"><i>1</i>&nbsp;/**
+<i>2</i>&nbsp; *
+<i>3</i>&nbsp; * Licensed to the Apache Software Foundation (ASF) under one
+<i>4</i>&nbsp; * or more contributor license agreements.  See the NOTICE file
+<i>5</i>&nbsp; * distributed with this work for additional information
+<i>6</i>&nbsp; * regarding copyright ownership.  The ASF licenses this file
+<i>7</i>&nbsp; * to you under the Apache License, Version 2.0 (the
+<i>8</i>&nbsp; * &quot;License&quot;); you may not use this file except in compliance
+<i>9</i>&nbsp; * with the License.  You may obtain a copy of the License at
+<i>10</i>&nbsp; *
+<i>11</i>&nbsp; *   http://www.apache.org/licenses/LICENSE-2.0
+<i>12</i>&nbsp; *
+<i>13</i>&nbsp; * Unless required by applicable law or agreed to in writing,
+<i>14</i>&nbsp; * software distributed under the License is distributed on an
+<i>15</i>&nbsp; * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+<i>16</i>&nbsp; * KIND, either express or implied.  See the License for the
+<i>17</i>&nbsp; * specific language governing permissions and limitations
+<i>18</i>&nbsp; * under the License.
+<i>19</i>&nbsp; *
+<i>20</i>&nbsp; */
+<i>21</i>&nbsp;package org.apache.bookkeeper.bookie.storage.ldb;
+<i>22</i>&nbsp;
+<i>23</i>&nbsp;import com.google.common.base.Predicate;
+<i>24</i>&nbsp;import com.google.common.collect.Iterables;
+<i>25</i>&nbsp;import com.google.protobuf.ByteString;
+<i>26</i>&nbsp;
+<i>27</i>&nbsp;import java.io.Closeable;
+<i>28</i>&nbsp;import java.io.IOException;
+<i>29</i>&nbsp;import java.nio.file.FileSystems;
+<i>30</i>&nbsp;import java.util.AbstractMap.SimpleEntry;
+<i>31</i>&nbsp;import java.util.Arrays;
+<i>32</i>&nbsp;import java.util.Map.Entry;
+<i>33</i>&nbsp;import java.util.concurrent.ConcurrentLinkedQueue;
+<i>34</i>&nbsp;import java.util.concurrent.atomic.AtomicInteger;
+<i>35</i>&nbsp;
+<i>36</i>&nbsp;import org.apache.bookkeeper.bookie.Bookie;
+<i>37</i>&nbsp;import org.apache.bookkeeper.bookie.BookieException;
+<i>38</i>&nbsp;import org.apache.bookkeeper.bookie.storage.ldb.DbLedgerStorageDataFormats.LedgerData;
+<i>39</i>&nbsp;import org.apache.bookkeeper.bookie.storage.ldb.KeyValueStorage.CloseableIterator;
+<i>40</i>&nbsp;import org.apache.bookkeeper.bookie.storage.ldb.KeyValueStorageFactory.DbConfigType;
+<i>41</i>&nbsp;import org.apache.bookkeeper.conf.ServerConfiguration;
+<i>42</i>&nbsp;import org.apache.bookkeeper.stats.StatsLogger;
+<i>43</i>&nbsp;import org.apache.bookkeeper.util.collections.ConcurrentLongHashMap;
+<i>44</i>&nbsp;import org.slf4j.Logger;
+<i>45</i>&nbsp;import org.slf4j.LoggerFactory;
+<i>46</i>&nbsp;
+<i>47</i>&nbsp;/**
+<i>48</i>&nbsp; * Maintains an index for the ledgers metadata.
+<i>49</i>&nbsp; *
+<i>50</i>&nbsp; * &lt;p&gt;The key is the ledgerId and the value is the {@link LedgerData} content.
+<i>51</i>&nbsp; */
+<i>52</i>&nbsp;public class LedgerMetadataIndex implements Closeable {
+<i>53</i>&nbsp;    // Contains all ledgers stored in the bookie
+<i>54</i>&nbsp;    private final ConcurrentLongHashMap&lt;LedgerData&gt; ledgers;
+<i>55</i>&nbsp;    private final AtomicInteger ledgersCount;
+<i>56</i>&nbsp;
+<i>57</i>&nbsp;    private final KeyValueStorage ledgersDb;
+<i>58</i>&nbsp;    private final LedgerMetadataIndexStats stats;
+<i>59</i>&nbsp;
+<i>60</i>&nbsp;    // Holds ledger modifications applied in memory map, and pending to be flushed on db
+<i>61</i>&nbsp;    private final ConcurrentLinkedQueue&lt;Entry&lt;Long, LedgerData&gt;&gt; pendingLedgersUpdates;
+<i>62</i>&nbsp;
+<i>63</i>&nbsp;    // Holds ledger ids that were delete from memory map, and pending to be flushed on db
+<i>64</i>&nbsp;    private final ConcurrentLinkedQueue&lt;Long&gt; pendingDeletedLedgers;
+<i>65</i>&nbsp;
+<i>66</i>&nbsp;    public LedgerMetadataIndex(ServerConfiguration conf, KeyValueStorageFactory storageFactory, String basePath,
+<b class="nc"><i>67</i>&nbsp;            StatsLogger stats) throws IOException {</b>
+<b class="nc"><i>68</i>&nbsp;        String ledgersPath = FileSystems.getDefault().getPath(basePath, &quot;ledgers&quot;).toFile().toString();</b>
+<b class="nc"><i>69</i>&nbsp;        ledgersDb = storageFactory.newKeyValueStorage(ledgersPath, DbConfigType.Small, conf);</b>
+<i>70</i>&nbsp;
+<b class="nc"><i>71</i>&nbsp;        ledgers = new ConcurrentLongHashMap&lt;&gt;();</b>
+<b class="nc"><i>72</i>&nbsp;        ledgersCount = new AtomicInteger();</b>
+<i>73</i>&nbsp;
+<i>74</i>&nbsp;        // Read all ledgers from db
+<b class="nc"><i>75</i>&nbsp;        CloseableIterator&lt;Entry&lt;byte[], byte[]&gt;&gt; iterator = ledgersDb.iterator();</b>
+<i>76</i>&nbsp;        try {
+<b class="nc"><i>77</i>&nbsp;            while (iterator.hasNext()) {</b>
+<b class="nc"><i>78</i>&nbsp;                Entry&lt;byte[], byte[]&gt; entry = iterator.next();</b>
+<b class="nc"><i>79</i>&nbsp;                long ledgerId = ArrayUtil.getLong(entry.getKey(), 0);</b>
+<b class="nc"><i>80</i>&nbsp;                LedgerData ledgerData = LedgerData.parseFrom(entry.getValue());</b>
+<b class="nc"><i>81</i>&nbsp;                ledgers.put(ledgerId, ledgerData);</b>
+<b class="nc"><i>82</i>&nbsp;                ledgersCount.incrementAndGet();</b>
+<b class="nc"><i>83</i>&nbsp;            }</b>
+<i>84</i>&nbsp;        } finally {
+<b class="nc"><i>85</i>&nbsp;            iterator.close();</b>
+<i>86</i>&nbsp;        }
+<i>87</i>&nbsp;
+<b class="nc"><i>88</i>&nbsp;        this.pendingLedgersUpdates = new ConcurrentLinkedQueue&lt;Entry&lt;Long, LedgerData&gt;&gt;();</b>
+<b class="nc"><i>89</i>&nbsp;        this.pendingDeletedLedgers = new ConcurrentLinkedQueue&lt;Long&gt;();</b>
+<i>90</i>&nbsp;
+<b class="nc"><i>91</i>&nbsp;        this.stats = new LedgerMetadataIndexStats(</b>
+<i>92</i>&nbsp;            stats,
+<b class="nc"><i>93</i>&nbsp;            () -&gt; (long) ledgersCount.get());</b>
+<b class="nc"><i>94</i>&nbsp;    }</b>
+<i>95</i>&nbsp;
+<i>96</i>&nbsp;    @Override
+<i>97</i>&nbsp;    public void close() throws IOException {
+<b class="nc"><i>98</i>&nbsp;        ledgersDb.close();</b>
+<b class="nc"><i>99</i>&nbsp;    }</b>
+<i>100</i>&nbsp;
+<i>101</i>&nbsp;    public LedgerData get(long ledgerId) throws IOException {
+<b class="nc"><i>102</i>&nbsp;        LedgerData ledgerData = ledgers.get(ledgerId);</b>
+<b class="nc"><i>103</i>&nbsp;        if (ledgerData == null) {</b>
+<b class="nc"><i>104</i>&nbsp;            if (log.isDebugEnabled()) {</b>
+<b class="nc"><i>105</i>&nbsp;                log.debug(&quot;Ledger not found {}&quot;, ledgerId);</b>
+<i>106</i>&nbsp;            }
+<b class="nc"><i>107</i>&nbsp;            throw new Bookie.NoLedgerException(ledgerId);</b>
+<i>108</i>&nbsp;        }
+<i>109</i>&nbsp;
+<b class="nc"><i>110</i>&nbsp;        return ledgerData;</b>
+<i>111</i>&nbsp;    }
+<i>112</i>&nbsp;
+<i>113</i>&nbsp;    public void set(long ledgerId, LedgerData ledgerData) throws IOException {
+<b class="nc"><i>114</i>&nbsp;        ledgerData = LedgerData.newBuilder(ledgerData).setExists(true).build();</b>
+<i>115</i>&nbsp;
+<b class="nc"><i>116</i>&nbsp;        if (ledgers.put(ledgerId, ledgerData) == null) {</b>
+<b class="nc"><i>117</i>&nbsp;            if (log.isDebugEnabled()) {</b>
+<b class="nc"><i>118</i>&nbsp;                log.debug(&quot;Added new ledger {}&quot;, ledgerId);</b>
+<i>119</i>&nbsp;            }
+<b class="nc"><i>120</i>&nbsp;            ledgersCount.incrementAndGet();</b>
+<i>121</i>&nbsp;        }
+<i>122</i>&nbsp;
+<b class="nc"><i>123</i>&nbsp;        pendingLedgersUpdates.add(new SimpleEntry&lt;Long, LedgerData&gt;(ledgerId, ledgerData));</b>
+<b class="nc"><i>124</i>&nbsp;        pendingDeletedLedgers.remove(ledgerId);</b>
+<b class="nc"><i>125</i>&nbsp;    }</b>
+<i>126</i>&nbsp;
+<i>127</i>&nbsp;    public void delete(long ledgerId) throws IOException {
+<b class="nc"><i>128</i>&nbsp;        if (ledgers.remove(ledgerId) != null) {</b>
+<b class="nc"><i>129</i>&nbsp;            if (log.isDebugEnabled()) {</b>
+<b class="nc"><i>130</i>&nbsp;                log.debug(&quot;Removed ledger {}&quot;, ledgerId);</b>
+<i>131</i>&nbsp;            }
+<b class="nc"><i>132</i>&nbsp;            ledgersCount.decrementAndGet();</b>
+<i>133</i>&nbsp;        }
+<i>134</i>&nbsp;
+<b class="nc"><i>135</i>&nbsp;        pendingDeletedLedgers.add(ledgerId);</b>
+<b class="nc"><i>136</i>&nbsp;        pendingLedgersUpdates.removeIf(e -&gt; e.getKey() == ledgerId);</b>
+<b class="nc"><i>137</i>&nbsp;    }</b>
+<i>138</i>&nbsp;
+<i>139</i>&nbsp;    public Iterable&lt;Long&gt; getActiveLedgersInRange(final long firstLedgerId, final long lastLedgerId)
+<i>140</i>&nbsp;            throws IOException {
+<b class="nc"><i>141</i>&nbsp;        return Iterables.filter(ledgers.keys(), new Predicate&lt;Long&gt;() {</b>
+<i>142</i>&nbsp;            @Override
+<i>143</i>&nbsp;            public boolean apply(Long ledgerId) {
+<b class="nc"><i>144</i>&nbsp;                return ledgerId &gt;= firstLedgerId &amp;&amp; ledgerId &lt; lastLedgerId;</b>
+<i>145</i>&nbsp;            }
+<i>146</i>&nbsp;        });
+<i>147</i>&nbsp;    }
+<i>148</i>&nbsp;
+<i>149</i>&nbsp;    public boolean setFenced(long ledgerId) throws IOException {
+<b class="nc"><i>150</i>&nbsp;        LedgerData ledgerData = get(ledgerId);</b>
+<b class="nc"><i>151</i>&nbsp;        if (ledgerData.getFenced()) {</b>
+<b class="nc"><i>152</i>&nbsp;            return false;</b>
+<i>153</i>&nbsp;        }
+<i>154</i>&nbsp;
+<b class="nc"><i>155</i>&nbsp;        LedgerData newLedgerData = LedgerData.newBuilder(ledgerData).setFenced(true).build();</b>
+<i>156</i>&nbsp;
+<b class="nc"><i>157</i>&nbsp;        if (ledgers.put(ledgerId, newLedgerData) == null) {</b>
+<i>158</i>&nbsp;            // Ledger had been deleted
+<b class="nc"><i>159</i>&nbsp;            if (log.isDebugEnabled()) {</b>
+<b class="nc"><i>160</i>&nbsp;                log.debug(&quot;Re-inserted fenced ledger {}&quot;, ledgerId);</b>
+<i>161</i>&nbsp;            }
+<b class="nc"><i>162</i>&nbsp;            ledgersCount.incrementAndGet();</b>
+<i>163</i>&nbsp;        } else {
+<b class="nc"><i>164</i>&nbsp;            if (log.isDebugEnabled()) {</b>
+<b class="nc"><i>165</i>&nbsp;                log.debug(&quot;Set fenced ledger {}&quot;, ledgerId);</b>
+<i>166</i>&nbsp;            }
+<i>167</i>&nbsp;        }
+<i>168</i>&nbsp;
+<b class="nc"><i>169</i>&nbsp;        pendingLedgersUpdates.add(new SimpleEntry&lt;Long, LedgerData&gt;(ledgerId, newLedgerData));</b>
+<b class="nc"><i>170</i>&nbsp;        pendingDeletedLedgers.remove(ledgerId);</b>
+<b class="nc"><i>171</i>&nbsp;        return true;</b>
+<i>172</i>&nbsp;    }
+<i>173</i>&nbsp;
+<i>174</i>&nbsp;    public void setMasterKey(long ledgerId, byte[] masterKey) throws IOException {
+<b class="nc"><i>175</i>&nbsp;        LedgerData ledgerData = ledgers.get(ledgerId);</b>
+<b class="nc"><i>176</i>&nbsp;        if (ledgerData == null) {</b>
+<i>177</i>&nbsp;            // New ledger inserted
+<b class="nc"><i>178</i>&nbsp;            ledgerData = LedgerData.newBuilder().setExists(true).setFenced(false)</b>
+<b class="nc"><i>179</i>&nbsp;                    .setMasterKey(ByteString.copyFrom(masterKey)).build();</b>
+<b class="nc"><i>180</i>&nbsp;            if (log.isDebugEnabled()) {</b>
+<b class="nc"><i>181</i>&nbsp;                log.debug(&quot;Inserting new ledger {}&quot;, ledgerId);</b>
+<i>182</i>&nbsp;            }
+<i>183</i>&nbsp;        } else {
+<b class="nc"><i>184</i>&nbsp;            byte[] storedMasterKey = ledgerData.getMasterKey().toByteArray();</b>
+<b class="nc"><i>185</i>&nbsp;            if (ArrayUtil.isArrayAllZeros(storedMasterKey)) {</b>
+<i>186</i>&nbsp;                // update master key of the ledger
+<b class="nc"><i>187</i>&nbsp;                ledgerData = LedgerData.newBuilder(ledgerData).setMasterKey(ByteString.copyFrom(masterKey)).build();</b>
+<b class="nc"><i>188</i>&nbsp;                if (log.isDebugEnabled()) {</b>
+<b class="nc"><i>189</i>&nbsp;                    log.debug(&quot;Replace old master key {} with new master key {}&quot;, storedMasterKey, masterKey);</b>
+<i>190</i>&nbsp;                }
+<b class="nc"><i>191</i>&nbsp;            } else if (!Arrays.equals(storedMasterKey, masterKey) &amp;&amp; !ArrayUtil.isArrayAllZeros(masterKey)) {</b>
+<b class="nc"><i>192</i>&nbsp;                log.warn(&quot;Ledger {} masterKey in db can only be set once.&quot;, ledgerId);</b>
+<b class="nc"><i>193</i>&nbsp;                throw new IOException(BookieException.create(BookieException.Code.IllegalOpException));</b>
+<i>194</i>&nbsp;            }
+<i>195</i>&nbsp;        }
+<i>196</i>&nbsp;
+<b class="nc"><i>197</i>&nbsp;        if (ledgers.put(ledgerId, ledgerData) == null) {</b>
+<b class="nc"><i>198</i>&nbsp;            ledgersCount.incrementAndGet();</b>
+<i>199</i>&nbsp;        }
+<i>200</i>&nbsp;
+<b class="nc"><i>201</i>&nbsp;        pendingLedgersUpdates.add(new SimpleEntry&lt;Long, LedgerData&gt;(ledgerId, ledgerData));</b>
+<b class="nc"><i>202</i>&nbsp;        pendingDeletedLedgers.remove(ledgerId);</b>
+<b class="nc"><i>203</i>&nbsp;    }</b>
+<i>204</i>&nbsp;
+<i>205</i>&nbsp;    /**
+<i>206</i>&nbsp;     * Flushes all pending changes.
+<i>207</i>&nbsp;     */
+<i>208</i>&nbsp;    public void flush() throws IOException {
+<b class="nc"><i>209</i>&nbsp;        LongWrapper key = LongWrapper.get();</b>
+<i>210</i>&nbsp;
+<b class="nc"><i>211</i>&nbsp;        int updatedLedgers = 0;</b>
+<b class="nc"><i>212</i>&nbsp;        while (!pendingLedgersUpdates.isEmpty()) {</b>
+<b class="nc"><i>213</i>&nbsp;            Entry&lt;Long, LedgerData&gt; entry = pendingLedgersUpdates.poll();</b>
+<b class="nc"><i>214</i>&nbsp;            key.set(entry.getKey());</b>
+<b class="nc"><i>215</i>&nbsp;            byte[] value = entry.getValue().toByteArray();</b>
+<b class="nc"><i>216</i>&nbsp;            ledgersDb.put(key.array, value);</b>
+<b class="nc"><i>217</i>&nbsp;            ++updatedLedgers;</b>
+<b class="nc"><i>218</i>&nbsp;        }</b>
+<i>219</i>&nbsp;
+<b class="nc"><i>220</i>&nbsp;        if (log.isDebugEnabled()) {</b>
+<b class="nc"><i>221</i>&nbsp;            log.debug(&quot;Persisting updates to {} ledgers&quot;, updatedLedgers);</b>
+<i>222</i>&nbsp;        }
+<i>223</i>&nbsp;
+<b class="nc"><i>224</i>&nbsp;        ledgersDb.sync();</b>
+<b class="nc"><i>225</i>&nbsp;        key.recycle();</b>
+<b class="nc"><i>226</i>&nbsp;    }</b>
+<i>227</i>&nbsp;
+<i>228</i>&nbsp;    public void removeDeletedLedgers() throws IOException {
+<b class="nc"><i>229</i>&nbsp;        LongWrapper key = LongWrapper.get();</b>
+<i>230</i>&nbsp;
+<b class="nc"><i>231</i>&nbsp;        int deletedLedgers = 0;</b>
+<b class="nc"><i>232</i>&nbsp;        while (!pendingDeletedLedgers.isEmpty()) {</b>
+<b class="nc"><i>233</i>&nbsp;            long ledgerId = pendingDeletedLedgers.poll();</b>
+<b class="nc"><i>234</i>&nbsp;            key.set(ledgerId);</b>
+<b class="nc"><i>235</i>&nbsp;            ledgersDb.delete(key.array);</b>
+<b class="nc"><i>236</i>&nbsp;            deletedLedgers++;</b>
+<b class="nc"><i>237</i>&nbsp;        }</b>
+<i>238</i>&nbsp;
+<b class="nc"><i>239</i>&nbsp;        if (log.isDebugEnabled()) {</b>
+<b class="nc"><i>240</i>&nbsp;            log.debug(&quot;Persisting deletes of ledgers {}&quot;, deletedLedgers);</b>
+<i>241</i>&nbsp;        }
+<i>242</i>&nbsp;
+<b class="nc"><i>243</i>&nbsp;        ledgersDb.sync();</b>
+<b class="nc"><i>244</i>&nbsp;        key.recycle();</b>
+<b class="nc"><i>245</i>&nbsp;    }</b>
+<i>246</i>&nbsp;
+<b class="nc"><i>247</i>&nbsp;    private static final Logger log = LoggerFactory.getLogger(LedgerMetadataIndex.class);</b>
+<i>248</i>&nbsp;}
+</div>
+</div>
+
+<div class="footer">
+    
+    <div style="float:right;">generated on 2021-06-29 13:53</div>
+</div>
+</body>
+</html>

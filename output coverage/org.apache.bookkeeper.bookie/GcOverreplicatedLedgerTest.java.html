@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>GcOverreplicatedLedgerTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$myBookieFenceLedgerTest.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.bookie</a> &gt; <span class="el_source">GcOverreplicatedLedgerTest.java</span></div><h1>GcOverreplicatedLedgerTest.java</h1><pre class="source lang-java linenums">/**
+  *
+  * Licensed to the Apache Software Foundation (ASF) under one
+  * or more contributor license agreements.  See the NOTICE file
+  * distributed with this work for additional information
+  * regarding copyright ownership.  The ASF licenses this file
+  * to you under the Apache License, Version 2.0 (the
+  * &quot;License&quot;); you may not use this file except in compliance
+  * with the License.  You may obtain a copy of the License at
+  *
+  *   http://www.apache.org/licenses/LICENSE-2.0
+  *
+  * Unless required by applicable law or agreed to in writing,
+  * software distributed under the License is distributed on an
+  * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+  * KIND, either express or implied.  See the License for the
+  * specific language governing permissions and limitations
+  * under the License.
+  *
+  */
+
+package org.apache.bookkeeper.bookie;
+
+import com.google.common.collect.Lists;
+
+import java.io.IOException;
+import java.net.UnknownHostException;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
+import java.util.SortedMap;
+import java.util.concurrent.TimeUnit;
+import org.apache.bookkeeper.bookie.GarbageCollector.GarbageCleaner;
+import org.apache.bookkeeper.client.BookKeeper.DigestType;
+import org.apache.bookkeeper.client.LedgerHandle;
+import org.apache.bookkeeper.client.api.LedgerMetadata;
+import org.apache.bookkeeper.conf.ServerConfiguration;
+import org.apache.bookkeeper.meta.HierarchicalLedgerManagerFactory;
+import org.apache.bookkeeper.meta.LedgerManagerFactory;
+import org.apache.bookkeeper.meta.LedgerManagerTestCase;
+import org.apache.bookkeeper.meta.ZkLedgerUnderreplicationManager;
+import org.apache.bookkeeper.meta.zk.ZKMetadataDriverBase;
+import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.proto.BookieServer;
+import org.apache.bookkeeper.stats.NullStatsLogger;
+import org.apache.bookkeeper.util.SnapshotMap;
+import org.apache.zookeeper.ZooDefs;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameters;
+
+/**
+ * Test GC-overreplicated ledger.
+ */
+@RunWith(Parameterized.class)
+public class GcOverreplicatedLedgerTest extends LedgerManagerTestCase {
+
+    @Before
+    @Override
+    public void setUp() throws Exception {
+<span class="nc" id="L64">        super.setUp();</span>
+<span class="nc" id="L65">        ledgerManager = ledgerManagerFactory.newLedgerManager();</span>
+<span class="nc" id="L66">        activeLedgers = new SnapshotMap&lt;Long, Boolean&gt;();</span>
+<span class="nc" id="L67">    }</span>
+
+    public GcOverreplicatedLedgerTest(Class&lt;? extends LedgerManagerFactory&gt; lmFactoryCls) {
+<span class="nc" id="L70">        super(lmFactoryCls, 3);</span>
+<span class="nc" id="L71">    }</span>
+
+    @Parameters
+    public static Collection&lt;Object[]&gt; configs() {
+<span class="nc" id="L75">        return Arrays.asList(new Object[][] { { HierarchicalLedgerManagerFactory.class } });</span>
+    }
+
+    @Test
+    public void testGcOverreplicatedLedger() throws Exception {
+<span class="nc" id="L80">        LedgerHandle lh = bkc.createLedger(2, 2, DigestType.MAC, &quot;&quot;.getBytes());</span>
+<span class="nc" id="L81">        activeLedgers.put(lh.getId(), true);</span>
+
+<span class="nc" id="L83">        LedgerMetadata newLedgerMetadata = ledgerManager.readLedgerMetadata(lh.getId()).get().getValue();</span>
+
+<span class="nc" id="L85">        BookieSocketAddress bookieNotInEnsemble = getBookieNotInEnsemble(newLedgerMetadata);</span>
+<span class="nc" id="L86">        ServerConfiguration bkConf = getBkConf(bookieNotInEnsemble);</span>
+<span class="nc" id="L87">        bkConf.setGcOverreplicatedLedgerWaitTime(10, TimeUnit.MILLISECONDS);</span>
+
+<span class="nc" id="L89">        lh.close();</span>
+
+<span class="nc" id="L91">        final CompactableLedgerStorage mockLedgerStorage = new MockLedgerStorage();</span>
+<span class="nc" id="L92">        final GarbageCollector garbageCollector = new ScanAndCompareGarbageCollector(ledgerManager, mockLedgerStorage,</span>
+                bkConf, NullStatsLogger.INSTANCE);
+<span class="nc" id="L94">        Thread.sleep(bkConf.getGcOverreplicatedLedgerWaitTimeMillis() + 1);</span>
+<span class="nc" id="L95">        garbageCollector.gc(new GarbageCleaner() {</span>
+
+            @Override
+            public void clean(long ledgerId) {
+                try {
+<span class="nc" id="L100">                    mockLedgerStorage.deleteLedger(ledgerId);</span>
+<span class="nc" id="L101">                } catch (IOException e) {</span>
+<span class="nc" id="L102">                    e.printStackTrace();</span>
+<span class="nc" id="L103">                    return;</span>
+<span class="nc" id="L104">                }</span>
+<span class="nc" id="L105">            }</span>
+        });
+
+<span class="nc" id="L108">        Assert.assertFalse(activeLedgers.containsKey(lh.getId()));</span>
+<span class="nc" id="L109">    }</span>
+
+    @Test
+    public void testNoGcOfLedger() throws Exception {
+<span class="nc" id="L113">        LedgerHandle lh = bkc.createLedger(2, 2, DigestType.MAC, &quot;&quot;.getBytes());</span>
+<span class="nc" id="L114">        activeLedgers.put(lh.getId(), true);</span>
+
+<span class="nc" id="L116">        LedgerMetadata newLedgerMetadata = ledgerManager.readLedgerMetadata(lh.getId()).get().getValue();</span>
+<span class="nc" id="L117">        BookieSocketAddress address = null;</span>
+<span class="nc" id="L118">        SortedMap&lt;Long, ? extends List&lt;BookieSocketAddress&gt;&gt; ensembleMap = newLedgerMetadata.getAllEnsembles();</span>
+<span class="nc bnc" id="L119" title="All 2 branches missed.">        for (List&lt;BookieSocketAddress&gt; ensemble : ensembleMap.values()) {</span>
+<span class="nc" id="L120">            address = ensemble.get(0);</span>
+<span class="nc" id="L121">        }</span>
+<span class="nc" id="L122">        ServerConfiguration bkConf = getBkConf(address);</span>
+<span class="nc" id="L123">        bkConf.setGcOverreplicatedLedgerWaitTime(10, TimeUnit.MILLISECONDS);</span>
+
+<span class="nc" id="L125">        lh.close();</span>
+
+<span class="nc" id="L127">        final CompactableLedgerStorage mockLedgerStorage = new MockLedgerStorage();</span>
+<span class="nc" id="L128">        final GarbageCollector garbageCollector = new ScanAndCompareGarbageCollector(ledgerManager, mockLedgerStorage,</span>
+                bkConf, NullStatsLogger.INSTANCE);
+<span class="nc" id="L130">        Thread.sleep(bkConf.getGcOverreplicatedLedgerWaitTimeMillis() + 1);</span>
+<span class="nc" id="L131">        garbageCollector.gc(new GarbageCleaner() {</span>
+
+            @Override
+            public void clean(long ledgerId) {
+                try {
+<span class="nc" id="L136">                    mockLedgerStorage.deleteLedger(ledgerId);</span>
+<span class="nc" id="L137">                } catch (IOException e) {</span>
+<span class="nc" id="L138">                    e.printStackTrace();</span>
+<span class="nc" id="L139">                    return;</span>
+<span class="nc" id="L140">                }</span>
+<span class="nc" id="L141">            }</span>
+        });
+
+<span class="nc" id="L144">        Assert.assertTrue(activeLedgers.containsKey(lh.getId()));</span>
+<span class="nc" id="L145">    }</span>
+
+    @Test
+    public void testNoGcIfLedgerBeingReplicated() throws Exception {
+<span class="nc" id="L149">        LedgerHandle lh = bkc.createLedger(2, 2, DigestType.MAC, &quot;&quot;.getBytes());</span>
+<span class="nc" id="L150">        activeLedgers.put(lh.getId(), true);</span>
+
+<span class="nc" id="L152">        LedgerMetadata newLedgerMetadata = ledgerManager.readLedgerMetadata(lh.getId()).get().getValue();</span>
+<span class="nc" id="L153">        BookieSocketAddress bookieNotInEnsemble = getBookieNotInEnsemble(newLedgerMetadata);</span>
+<span class="nc" id="L154">        ServerConfiguration bkConf = getBkConf(bookieNotInEnsemble);</span>
+<span class="nc" id="L155">        bkConf.setGcOverreplicatedLedgerWaitTime(10, TimeUnit.MILLISECONDS);</span>
+
+<span class="nc" id="L157">        lh.close();</span>
+
+<span class="nc" id="L159">        ZkLedgerUnderreplicationManager.acquireUnderreplicatedLedgerLock(</span>
+            zkc,
+<span class="nc" id="L161">            ZKMetadataDriverBase.resolveZkLedgersRootPath(baseConf),</span>
+<span class="nc" id="L162">            lh.getId(),</span>
+            ZooDefs.Ids.OPEN_ACL_UNSAFE);
+
+<span class="nc" id="L165">        final CompactableLedgerStorage mockLedgerStorage = new MockLedgerStorage();</span>
+<span class="nc" id="L166">        final GarbageCollector garbageCollector = new ScanAndCompareGarbageCollector(ledgerManager, mockLedgerStorage,</span>
+                bkConf, NullStatsLogger.INSTANCE);
+<span class="nc" id="L168">        Thread.sleep(bkConf.getGcOverreplicatedLedgerWaitTimeMillis() + 1);</span>
+<span class="nc" id="L169">        garbageCollector.gc(new GarbageCleaner() {</span>
+
+            @Override
+            public void clean(long ledgerId) {
+                try {
+<span class="nc" id="L174">                    mockLedgerStorage.deleteLedger(ledgerId);</span>
+<span class="nc" id="L175">                } catch (IOException e) {</span>
+<span class="nc" id="L176">                    e.printStackTrace();</span>
+<span class="nc" id="L177">                    return;</span>
+<span class="nc" id="L178">                }</span>
+<span class="nc" id="L179">            }</span>
+        });
+
+<span class="nc" id="L182">        Assert.assertTrue(activeLedgers.containsKey(lh.getId()));</span>
+<span class="nc" id="L183">    }</span>
+
+    private BookieSocketAddress getBookieNotInEnsemble(LedgerMetadata ledgerMetadata) throws UnknownHostException {
+<span class="nc" id="L186">        List&lt;BookieSocketAddress&gt; allAddresses = Lists.newArrayList();</span>
+<span class="nc bnc" id="L187" title="All 2 branches missed.">        for (BookieServer bk : bs) {</span>
+<span class="nc" id="L188">            allAddresses.add(bk.getLocalAddress());</span>
+<span class="nc" id="L189">        }</span>
+<span class="nc" id="L190">        SortedMap&lt;Long, ? extends List&lt;BookieSocketAddress&gt;&gt; ensembles = ledgerMetadata.getAllEnsembles();</span>
+<span class="nc bnc" id="L191" title="All 2 branches missed.">        for (List&lt;BookieSocketAddress&gt; fragmentEnsembles : ensembles.values()) {</span>
+<span class="nc" id="L192">            allAddresses.removeAll(fragmentEnsembles);</span>
+<span class="nc" id="L193">        }</span>
+<span class="nc" id="L194">        Assert.assertEquals(allAddresses.size(), 1);</span>
+<span class="nc" id="L195">        return allAddresses.get(0);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

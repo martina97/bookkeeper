@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>AdvertisedAddressTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$myBookieFenceLedgerTest.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.bookie</a> &gt; <span class="el_source">AdvertisedAddressTest.java</span></div><h1>AdvertisedAddressTest.java</h1><pre class="source lang-java linenums">/*
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+
+package org.apache.bookkeeper.bookie;
+
+import static org.junit.Assert.assertEquals;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.Collection;
+
+import org.apache.bookkeeper.client.BookKeeperAdmin;
+import org.apache.bookkeeper.conf.ServerConfiguration;
+import org.apache.bookkeeper.conf.TestBKConfiguration;
+import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.apache.bookkeeper.util.IOUtils;
+import org.apache.bookkeeper.util.PortManager;
+import org.junit.Test;
+
+/**
+ * Tests for when the setAdvertisedAddress is specified.
+ */
+public class AdvertisedAddressTest extends BookKeeperClusterTestCase {
+<span class="nc" id="L43">    final int bookiePort = PortManager.nextFreePort();</span>
+
+    public AdvertisedAddressTest() {
+<span class="nc" id="L46">        super(0);</span>
+<span class="nc" id="L47">    }</span>
+
+    private String newDirectory(boolean createCurDir) throws IOException {
+<span class="nc" id="L50">        File d = IOUtils.createTempDir(&quot;cookie&quot;, &quot;tmpdir&quot;);</span>
+<span class="nc bnc" id="L51" title="All 2 branches missed.">        if (createCurDir) {</span>
+<span class="nc" id="L52">            new File(d, &quot;current&quot;).mkdirs();</span>
+        }
+<span class="nc" id="L54">        tmpDirs.add(d);</span>
+<span class="nc" id="L55">        return d.getPath();</span>
+    }
+
+    /**
+     * Test starting bookie with clean state.
+     */
+    @Test
+    public void testSetAdvertisedAddress() throws Exception {
+<span class="nc" id="L63">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L64">        conf.setJournalDirName(newDirectory(false))</span>
+<span class="nc" id="L65">            .setLedgerDirNames(new String[] { newDirectory(false) })</span>
+<span class="nc" id="L66">            .setBookiePort(bookiePort)</span>
+<span class="nc" id="L67">            .setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+
+<span class="nc" id="L69">        conf.setAdvertisedAddress(&quot;10.0.0.1&quot;);</span>
+<span class="nc" id="L70">        assertEquals(&quot;10.0.0.1&quot;, conf.getAdvertisedAddress());</span>
+
+<span class="nc" id="L72">        BookieSocketAddress bkAddress = new BookieSocketAddress(&quot;10.0.0.1&quot;, bookiePort);</span>
+<span class="nc" id="L73">        assertEquals(bkAddress, Bookie.getBookieAddress(conf));</span>
+
+<span class="nc" id="L75">        Bookie b = new Bookie(conf);</span>
+<span class="nc" id="L76">        b.start();</span>
+
+<span class="nc" id="L78">        BookKeeperAdmin bka = new BookKeeperAdmin(baseClientConf);</span>
+<span class="nc" id="L79">        Collection&lt;BookieSocketAddress&gt; bookies = bka.getAvailableBookies();</span>
+
+<span class="nc" id="L81">        assertEquals(1, bookies.size());</span>
+<span class="nc" id="L82">        BookieSocketAddress address = bookies.iterator().next();</span>
+<span class="nc" id="L83">        assertEquals(bkAddress, address);</span>
+
+<span class="nc" id="L85">        b.shutdown();</span>
+<span class="nc" id="L86">        bka.close();</span>
+<span class="nc" id="L87">    }</span>
+
+    /**
+     * When advertised address is specified, it should override the use.
+     */
+    @Test
+    public void testBothUseHostnameAndAdvertisedAddress() throws Exception {
+<span class="nc" id="L94">        ServerConfiguration conf = new ServerConfiguration().setBookiePort(bookiePort);</span>
+
+<span class="nc" id="L96">        conf.setAdvertisedAddress(&quot;10.0.0.1&quot;);</span>
+<span class="nc" id="L97">        conf.setUseHostNameAsBookieID(true);</span>
+
+<span class="nc" id="L99">        assertEquals(&quot;10.0.0.1&quot;, conf.getAdvertisedAddress());</span>
+
+<span class="nc" id="L101">        BookieSocketAddress bkAddress = new BookieSocketAddress(&quot;10.0.0.1&quot;, bookiePort);</span>
+<span class="nc" id="L102">        assertEquals(bkAddress, Bookie.getBookieAddress(conf));</span>
+<span class="nc" id="L103">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

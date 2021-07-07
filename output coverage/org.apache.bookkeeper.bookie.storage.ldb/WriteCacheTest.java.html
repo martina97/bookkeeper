@@ -1,0 +1,290 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>WriteCacheTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$myBookieFenceLedgerTest.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.bookie.storage.ldb</a> &gt; <span class="el_source">WriteCacheTest.java</span></div><h1>WriteCacheTest.java</h1><pre class="source lang-java linenums">/**
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.bookie.storage.ldb;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.ByteBufUtil;
+import io.netty.buffer.Unpooled;
+import io.netty.buffer.UnpooledByteBufAllocator;
+
+import java.nio.charset.Charset;
+import java.util.concurrent.BrokenBarrierException;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+
+import org.junit.Test;
+
+/**
+ * Unit test for {@link WriteCache}.
+ */
+<span class="nc" id="L48">public class WriteCacheTest {</span>
+
+<span class="nc" id="L50">    private static final ByteBufAllocator allocator = UnpooledByteBufAllocator.DEFAULT;</span>
+
+    @Test
+    public void simple() throws Exception {
+<span class="nc" id="L54">        WriteCache cache = new WriteCache(allocator, 10 * 1024);</span>
+
+<span class="nc" id="L56">        ByteBuf entry1 = allocator.buffer(1024);</span>
+<span class="nc" id="L57">        ByteBufUtil.writeUtf8(entry1, &quot;entry-1&quot;);</span>
+<span class="nc" id="L58">        entry1.writerIndex(entry1.capacity());</span>
+
+<span class="nc" id="L60">        assertTrue(cache.isEmpty());</span>
+<span class="nc" id="L61">        assertEquals(0, cache.count());</span>
+<span class="nc" id="L62">        assertEquals(0, cache.size());</span>
+
+<span class="nc" id="L64">        cache.put(1, 1, entry1);</span>
+
+<span class="nc" id="L66">        assertFalse(cache.isEmpty());</span>
+<span class="nc" id="L67">        assertEquals(1, cache.count());</span>
+<span class="nc" id="L68">        assertEquals(entry1.readableBytes(), cache.size());</span>
+
+<span class="nc" id="L70">        assertEquals(entry1, cache.get(1, 1));</span>
+<span class="nc" id="L71">        assertNull(cache.get(1, 2));</span>
+<span class="nc" id="L72">        assertNull(cache.get(2, 1));</span>
+
+<span class="nc" id="L74">        assertEquals(entry1, cache.getLastEntry(1));</span>
+<span class="nc" id="L75">        assertEquals(null, cache.getLastEntry(2));</span>
+
+<span class="nc" id="L77">        cache.clear();</span>
+
+<span class="nc" id="L79">        assertTrue(cache.isEmpty());</span>
+<span class="nc" id="L80">        assertEquals(0, cache.count());</span>
+<span class="nc" id="L81">        assertEquals(0, cache.size());</span>
+
+<span class="nc" id="L83">        entry1.release();</span>
+<span class="nc" id="L84">        cache.close();</span>
+<span class="nc" id="L85">    }</span>
+
+    @Test
+    public void cacheFull() throws Exception {
+<span class="nc" id="L89">        int cacheSize = 10 * 1024;</span>
+<span class="nc" id="L90">        int entrySize = 1024;</span>
+<span class="nc" id="L91">        int entriesCount = cacheSize / entrySize;</span>
+
+<span class="nc" id="L93">        WriteCache cache = new WriteCache(allocator, cacheSize);</span>
+
+<span class="nc" id="L95">        ByteBuf entry = allocator.buffer(entrySize);</span>
+<span class="nc" id="L96">        entry.writerIndex(entry.capacity());</span>
+
+<span class="nc bnc" id="L98" title="All 2 branches missed.">        for (int i = 0; i &lt; entriesCount; i++) {</span>
+<span class="nc" id="L99">            assertTrue(cache.put(1, i, entry));</span>
+        }
+
+<span class="nc" id="L102">        assertFalse(cache.put(1, 11, entry));</span>
+
+<span class="nc" id="L104">        assertFalse(cache.isEmpty());</span>
+<span class="nc" id="L105">        assertEquals(entriesCount, cache.count());</span>
+<span class="nc" id="L106">        assertEquals(cacheSize, cache.size());</span>
+
+<span class="nc" id="L108">        AtomicInteger findCount = new AtomicInteger(0);</span>
+<span class="nc" id="L109">        cache.forEach((ledgerId, entryId, data) -&gt; {</span>
+<span class="nc" id="L110">            findCount.incrementAndGet();</span>
+<span class="nc" id="L111">        });</span>
+
+<span class="nc" id="L113">        assertEquals(entriesCount, findCount.get());</span>
+
+<span class="nc" id="L115">        cache.deleteLedger(1);</span>
+
+<span class="nc" id="L117">        findCount.set(0);</span>
+<span class="nc" id="L118">        cache.forEach((ledgerId, entryId, data) -&gt; {</span>
+<span class="nc" id="L119">            findCount.incrementAndGet();</span>
+<span class="nc" id="L120">        });</span>
+
+<span class="nc" id="L122">        assertEquals(0, findCount.get());</span>
+
+<span class="nc" id="L124">        entry.release();</span>
+<span class="nc" id="L125">        cache.close();</span>
+<span class="nc" id="L126">    }</span>
+
+    @Test
+    public void testMultipleSegments() {
+        // Create cache with max size 1Mb and each segment is 16Kb
+<span class="nc" id="L131">        WriteCache cache = new WriteCache(allocator, 1024 * 1024, 16 * 1024);</span>
+
+<span class="nc" id="L133">        ByteBuf entry = Unpooled.buffer(1024);</span>
+<span class="nc" id="L134">        entry.writerIndex(entry.capacity());</span>
+
+<span class="nc bnc" id="L136" title="All 2 branches missed.">        for (int i = 0; i &lt; 48; i++) {</span>
+<span class="nc" id="L137">            cache.put(1, i, entry);</span>
+        }
+
+<span class="nc" id="L140">        assertEquals(48, cache.count());</span>
+<span class="nc" id="L141">        assertEquals(48 * 1024, cache.size());</span>
+
+<span class="nc" id="L143">        cache.close();</span>
+<span class="nc" id="L144">    }</span>
+
+    @Test
+    public void testEmptyCache() {
+<span class="nc" id="L148">        WriteCache cache = new WriteCache(allocator, 1024 * 1024, 16 * 1024);</span>
+
+<span class="nc" id="L150">        assertEquals(0, cache.count());</span>
+<span class="nc" id="L151">        assertEquals(0, cache.size());</span>
+<span class="nc" id="L152">        assertTrue(cache.isEmpty());</span>
+
+<span class="nc" id="L154">        AtomicLong foundEntries = new AtomicLong();</span>
+<span class="nc" id="L155">        cache.forEach((ledgerId, entryId, entry) -&gt; {</span>
+<span class="nc" id="L156">            foundEntries.incrementAndGet();</span>
+<span class="nc" id="L157">        });</span>
+
+<span class="nc" id="L159">        assertEquals(0, foundEntries.get());</span>
+<span class="nc" id="L160">        cache.close();</span>
+<span class="nc" id="L161">    }</span>
+
+    @Test
+    public void testMultipleWriters() throws Exception {
+        // Create cache with max size 1Mb and each segment is 16Kb
+<span class="nc" id="L166">        WriteCache cache = new WriteCache(allocator, 10 * 1024 * 1024, 16 * 1024);</span>
+
+<span class="nc" id="L168">        ExecutorService executor = Executors.newCachedThreadPool();</span>
+
+<span class="nc" id="L170">        int numThreads = 10;</span>
+<span class="nc" id="L171">        int entriesPerThread = 10 * 1024 / numThreads;</span>
+
+<span class="nc" id="L173">        CyclicBarrier barrier = new CyclicBarrier(numThreads);</span>
+<span class="nc" id="L174">        CountDownLatch latch = new CountDownLatch(numThreads);</span>
+
+<span class="nc bnc" id="L176" title="All 2 branches missed.">        for (int i = 0; i &lt; numThreads; i++) {</span>
+<span class="nc" id="L177">            int ledgerId = i;</span>
+
+<span class="nc" id="L179">            executor.submit(() -&gt; {</span>
+                try {
+<span class="nc" id="L181">                    barrier.await();</span>
+<span class="nc" id="L182">                } catch (InterruptedException ie) {</span>
+<span class="nc" id="L183">                    Thread.currentThread().interrupt();</span>
+<span class="nc" id="L184">                    throw new RuntimeException(ie);</span>
+<span class="nc" id="L185">                } catch (BrokenBarrierException e) {</span>
+<span class="nc" id="L186">                    throw new RuntimeException(e);</span>
+<span class="nc" id="L187">                }</span>
+
+<span class="nc" id="L189">                ByteBuf entry = Unpooled.buffer(1024);</span>
+<span class="nc" id="L190">                entry.writerIndex(entry.capacity());</span>
+
+<span class="nc bnc" id="L192" title="All 2 branches missed.">                for (int entryId = 0; entryId &lt; entriesPerThread; entryId++) {</span>
+<span class="nc" id="L193">                    assertTrue(cache.put(ledgerId, entryId, entry));</span>
+                }
+
+<span class="nc" id="L196">                latch.countDown();</span>
+<span class="nc" id="L197">            });</span>
+        }
+
+        // Wait for all tasks to be completed
+<span class="nc" id="L201">        latch.await();</span>
+
+        // assertEquals(numThreads * entriesPerThread, cache.count());
+<span class="nc" id="L204">        assertEquals(cache.count() * 1024, cache.size());</span>
+
+        // Verify entries by iterating over write cache
+<span class="nc" id="L207">        AtomicLong currentLedgerId = new AtomicLong(0);</span>
+<span class="nc" id="L208">        AtomicLong currentEntryId = new AtomicLong(0);</span>
+
+<span class="nc" id="L210">        cache.forEach((ledgerId, entryId, entry) -&gt; {</span>
+<span class="nc" id="L211">            assertEquals(currentLedgerId.get(), ledgerId);</span>
+<span class="nc" id="L212">            assertEquals(currentEntryId.get(), entryId);</span>
+
+<span class="nc bnc" id="L214" title="All 2 branches missed.">            if (currentEntryId.incrementAndGet() == entriesPerThread) {</span>
+<span class="nc" id="L215">                currentLedgerId.incrementAndGet();</span>
+<span class="nc" id="L216">                currentEntryId.set(0);</span>
+            }
+<span class="nc" id="L218">        });</span>
+
+<span class="nc" id="L220">        cache.close();</span>
+<span class="nc" id="L221">        executor.shutdown();</span>
+<span class="nc" id="L222">    }</span>
+
+    @Test
+    public void testLedgerDeletion() {
+<span class="nc" id="L226">        WriteCache cache = new WriteCache(allocator, 1024 * 1024, 16 * 1024);</span>
+
+<span class="nc" id="L228">        ByteBuf entry = Unpooled.buffer(1024);</span>
+<span class="nc" id="L229">        entry.writerIndex(entry.capacity());</span>
+
+<span class="nc bnc" id="L231" title="All 2 branches missed.">        for (long ledgerId = 0; ledgerId &lt; 10; ledgerId++) {</span>
+<span class="nc bnc" id="L232" title="All 2 branches missed.">            for (int entryId = 0; entryId &lt; 10; entryId++) {</span>
+<span class="nc" id="L233">                cache.put(ledgerId, entryId, entry);</span>
+            }
+        }
+
+<span class="nc" id="L237">        assertEquals(100, cache.count());</span>
+<span class="nc" id="L238">        assertEquals(100 * 1024, cache.size());</span>
+
+<span class="nc" id="L240">        cache.deleteLedger(5);</span>
+
+        // Entries are not immediately deleted, just ignored on scan
+<span class="nc" id="L243">        assertEquals(100, cache.count());</span>
+<span class="nc" id="L244">        assertEquals(100 * 1024, cache.size());</span>
+
+        // Verify entries by iterating over write cache
+<span class="nc" id="L247">        AtomicLong currentLedgerId = new AtomicLong(0);</span>
+<span class="nc" id="L248">        AtomicLong currentEntryId = new AtomicLong(0);</span>
+
+<span class="nc" id="L250">        cache.forEach((ledgerId, entryId, e) -&gt; {</span>
+<span class="nc" id="L251">            assertEquals(currentLedgerId.get(), ledgerId);</span>
+<span class="nc" id="L252">            assertEquals(currentEntryId.get(), entryId);</span>
+
+<span class="nc bnc" id="L254" title="All 2 branches missed.">            if (currentEntryId.incrementAndGet() == 10) {</span>
+<span class="nc" id="L255">                currentLedgerId.incrementAndGet();</span>
+<span class="nc" id="L256">                currentEntryId.set(0);</span>
+
+<span class="nc bnc" id="L258" title="All 2 branches missed.">                if (currentLedgerId.get() == 5) {</span>
+                    // Ledger 5 was deleted
+<span class="nc" id="L260">                    currentLedgerId.incrementAndGet();</span>
+                }
+            }
+<span class="nc" id="L263">        });</span>
+
+<span class="nc" id="L265">        cache.close();</span>
+<span class="nc" id="L266">    }</span>
+
+    @Test
+    public void testWriteReadsInMultipleSegments() {
+        // Create cache with max size 4 KB and each segment is 128 bytes
+<span class="nc" id="L271">        WriteCache cache = new WriteCache(allocator, 4 * 1024, 128);</span>
+
+<span class="nc bnc" id="L273" title="All 2 branches missed.">        for (int i = 0; i &lt; 48; i++) {</span>
+<span class="nc" id="L274">            boolean inserted = cache.put(1, i, Unpooled.wrappedBuffer((&quot;test-&quot; + i).getBytes()));</span>
+<span class="nc" id="L275">            assertTrue(inserted);</span>
+        }
+
+<span class="nc" id="L278">        assertEquals(48, cache.count());</span>
+
+<span class="nc bnc" id="L280" title="All 2 branches missed.">        for (int i = 0; i &lt; 48; i++) {</span>
+<span class="nc" id="L281">            ByteBuf b = cache.get(1, i);</span>
+
+<span class="nc" id="L283">            assertEquals(&quot;test-&quot; + i, b.toString(Charset.forName(&quot;UTF-8&quot;)));</span>
+        }
+
+<span class="nc" id="L286">        cache.close();</span>
+<span class="nc" id="L287">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

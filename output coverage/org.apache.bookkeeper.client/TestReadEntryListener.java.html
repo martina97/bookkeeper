@@ -1,0 +1,309 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TestReadEntryListener.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">TestReadEntryListener.java</span></div><h1>TestReadEntryListener.java</h1><pre class="source lang-java linenums">/*
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.client;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import org.apache.bookkeeper.client.BookKeeper.DigestType;
+import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.proto.BookkeeperInternalCallbacks.ReadEntryListener;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Unit tests for {@link org.apache.bookkeeper.proto.BookkeeperInternalCallbacks.ReadEntryListener}.
+ */
+public class TestReadEntryListener extends BookKeeperClusterTestCase {
+
+<span class="nc" id="L44">    private static final Logger LOG = LoggerFactory.getLogger(TestReadEntryListener.class);</span>
+
+    final DigestType digestType;
+<span class="nc" id="L47">    final byte[] passwd = &quot;read-entry-listener&quot;.getBytes();</span>
+
+    public TestReadEntryListener() {
+<span class="nc" id="L50">        super(6);</span>
+<span class="nc" id="L51">        this.digestType = DigestType.CRC32;</span>
+<span class="nc" id="L52">    }</span>
+
+    long getLedgerToRead(int ensemble, int writeQuorum, int ackQuorum, int numEntries)
+            throws Exception {
+<span class="nc" id="L56">        LedgerHandle lh = bkc.createLedger(ensemble, writeQuorum, ackQuorum, digestType, passwd);</span>
+<span class="nc bnc" id="L57" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L58">            lh.addEntry((&quot;&quot; + i).getBytes());</span>
+        }
+<span class="nc" id="L60">        lh.close();</span>
+<span class="nc" id="L61">        return lh.getId();</span>
+    }
+
+    static class EntryWithRC {
+        final LedgerEntry entry;
+        final int rc;
+
+<span class="nc" id="L68">        EntryWithRC(int rc, LedgerEntry entry) {</span>
+<span class="nc" id="L69">            this.rc = rc;</span>
+<span class="nc" id="L70">            this.entry = entry;</span>
+<span class="nc" id="L71">        }</span>
+    }
+
+    static class LatchListener implements ReadEntryListener {
+
+        final CountDownLatch l;
+        final Map&lt;Long, EntryWithRC&gt; resultCodes;
+<span class="nc" id="L78">        boolean inOrder = true;</span>
+        long nextEntryId;
+
+<span class="nc" id="L81">        LatchListener(long startEntryId, int numEntries) {</span>
+<span class="nc" id="L82">            l = new CountDownLatch(numEntries);</span>
+<span class="nc" id="L83">            resultCodes = new HashMap&lt;Long, EntryWithRC&gt;();</span>
+<span class="nc" id="L84">            this.nextEntryId = startEntryId;</span>
+<span class="nc" id="L85">        }</span>
+
+        @Override
+        public void onEntryComplete(int rc, LedgerHandle lh, LedgerEntry entry, Object ctx) {
+            long entryId;
+<span class="nc bnc" id="L90" title="All 2 branches missed.">            if (BKException.Code.OK == rc) {</span>
+<span class="nc bnc" id="L91" title="All 2 branches missed.">                if (nextEntryId != entry.getEntryId()) {</span>
+<span class="nc" id="L92">                    inOrder = false;</span>
+                }
+<span class="nc" id="L94">                entryId = entry.getEntryId();</span>
+            } else {
+<span class="nc" id="L96">                entryId = nextEntryId;</span>
+            }
+<span class="nc" id="L98">            resultCodes.put(entryId, new EntryWithRC(rc, entry));</span>
+<span class="nc" id="L99">            ++nextEntryId;</span>
+<span class="nc" id="L100">            l.countDown();</span>
+<span class="nc" id="L101">        }</span>
+
+        void expectComplete() throws Exception {
+<span class="nc" id="L104">            l.await();</span>
+<span class="nc" id="L105">        }</span>
+
+        boolean isInOrder() {
+<span class="nc" id="L108">            return inOrder;</span>
+        }
+    }
+
+    ListenerBasedPendingReadOp createReadOp(LedgerHandle lh, long from, long to, ReadEntryListener listener) {
+<span class="nc" id="L113">        return new ListenerBasedPendingReadOp(lh, bkc.getClientCtx(), from, to, listener, null, false);</span>
+    }
+
+    void basicReadTest(boolean parallelRead) throws Exception {
+<span class="nc" id="L117">        int numEntries = 10;</span>
+
+<span class="nc" id="L119">        long id = getLedgerToRead(5, 2, 2, numEntries);</span>
+<span class="nc" id="L120">        LedgerHandle lh = bkc.openLedger(id, digestType, passwd);</span>
+
+        // read single entry
+<span class="nc bnc" id="L123" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L124">            LatchListener listener = new LatchListener(i, 1);</span>
+<span class="nc" id="L125">            ListenerBasedPendingReadOp readOp = createReadOp(lh, i, i, listener);</span>
+<span class="nc" id="L126">            readOp.parallelRead(parallelRead).submit();</span>
+<span class="nc" id="L127">            listener.expectComplete();</span>
+<span class="nc" id="L128">            assertEquals(1, listener.resultCodes.size());</span>
+<span class="nc" id="L129">            EntryWithRC entry = listener.resultCodes.get((long) i);</span>
+<span class="nc" id="L130">            assertNotNull(entry);</span>
+<span class="nc" id="L131">            assertEquals(BKException.Code.OK, entry.rc);</span>
+<span class="nc" id="L132">            assertEquals(i, Integer.parseInt(new String(entry.entry.getEntry())));</span>
+<span class="nc" id="L133">            assertTrue(listener.isInOrder());</span>
+        }
+
+        // read multiple entries
+<span class="nc" id="L137">        LatchListener listener = new LatchListener(0L, numEntries);</span>
+<span class="nc" id="L138">        ListenerBasedPendingReadOp readOp = createReadOp(lh, 0, numEntries - 1, listener);</span>
+<span class="nc" id="L139">        readOp.parallelRead(parallelRead).submit();</span>
+<span class="nc" id="L140">        listener.expectComplete();</span>
+<span class="nc" id="L141">        assertEquals(numEntries, listener.resultCodes.size());</span>
+<span class="nc bnc" id="L142" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L143">            EntryWithRC entry = listener.resultCodes.get((long) i);</span>
+<span class="nc" id="L144">            assertNotNull(entry);</span>
+<span class="nc" id="L145">            assertEquals(BKException.Code.OK, entry.rc);</span>
+<span class="nc" id="L146">            assertEquals(i, Integer.parseInt(new String(entry.entry.getEntry())));</span>
+        }
+<span class="nc" id="L148">        assertTrue(listener.isInOrder());</span>
+
+<span class="nc" id="L150">        lh.close();</span>
+<span class="nc" id="L151">    }</span>
+
+    @Test
+    public void testBasicEnableParallelRead() throws Exception {
+<span class="nc" id="L155">        basicReadTest(true);</span>
+<span class="nc" id="L156">    }</span>
+
+    @Test
+    public void testBasicDisableParallelRead() throws Exception {
+<span class="nc" id="L160">        basicReadTest(false);</span>
+<span class="nc" id="L161">    }</span>
+
+    private void readMissingEntriesTest(boolean parallelRead) throws Exception {
+<span class="nc" id="L164">        int numEntries = 10;</span>
+
+<span class="nc" id="L166">        long id = getLedgerToRead(5, 2, 2, numEntries);</span>
+<span class="nc" id="L167">        LedgerHandle lh = bkc.openLedger(id, digestType, passwd);</span>
+
+        // read single entry
+<span class="nc" id="L170">        LatchListener listener = new LatchListener(11L, 1);</span>
+<span class="nc" id="L171">        ListenerBasedPendingReadOp readOp = createReadOp(lh, 11, 11, listener);</span>
+<span class="nc" id="L172">        readOp.parallelRead(parallelRead).submit();</span>
+<span class="nc" id="L173">        listener.expectComplete();</span>
+<span class="nc" id="L174">        assertEquals(1, listener.resultCodes.size());</span>
+<span class="nc" id="L175">        EntryWithRC entry = listener.resultCodes.get(11L);</span>
+<span class="nc" id="L176">        assertNotNull(entry);</span>
+<span class="nc" id="L177">        assertEquals(BKException.Code.NoSuchEntryException, entry.rc);</span>
+<span class="nc" id="L178">        assertTrue(listener.isInOrder());</span>
+
+        // read multiple missing entries
+<span class="nc" id="L181">        listener = new LatchListener(11L, 3);</span>
+<span class="nc" id="L182">        readOp = createReadOp(lh, 11, 13, listener);</span>
+<span class="nc" id="L183">        readOp.parallelRead(parallelRead).submit();</span>
+<span class="nc" id="L184">        listener.expectComplete();</span>
+<span class="nc" id="L185">        assertEquals(3, listener.resultCodes.size());</span>
+<span class="nc" id="L186">        assertTrue(listener.isInOrder());</span>
+
+<span class="nc bnc" id="L188" title="All 2 branches missed.">        for (int i = 11; i &lt;= 13; i++) {</span>
+<span class="nc" id="L189">            entry = listener.resultCodes.get((long) i);</span>
+<span class="nc" id="L190">            assertNotNull(entry);</span>
+<span class="nc" id="L191">            assertEquals(BKException.Code.NoSuchEntryException, entry.rc);</span>
+        }
+
+        // read multiple entries with missing entries
+<span class="nc" id="L195">        listener = new LatchListener(5L, 10);</span>
+<span class="nc" id="L196">        readOp = createReadOp(lh, 5L, 14L, listener);</span>
+<span class="nc" id="L197">        readOp.parallelRead(parallelRead).submit();</span>
+<span class="nc" id="L198">        listener.expectComplete();</span>
+<span class="nc" id="L199">        assertEquals(10, listener.resultCodes.size());</span>
+<span class="nc" id="L200">        assertTrue(listener.isInOrder());</span>
+
+<span class="nc bnc" id="L202" title="All 2 branches missed.">        for (long i = 5L; i &lt;= 14L; i++) {</span>
+<span class="nc" id="L203">            entry = listener.resultCodes.get(i);</span>
+<span class="nc" id="L204">            assertNotNull(entry);</span>
+<span class="nc bnc" id="L205" title="All 2 branches missed.">            if (i &lt; 10L) {</span>
+<span class="nc" id="L206">                assertEquals(BKException.Code.OK, entry.rc);</span>
+<span class="nc" id="L207">                assertEquals(i, Integer.parseInt(new String(entry.entry.getEntry())));</span>
+            } else {
+<span class="nc" id="L209">                assertEquals(BKException.Code.NoSuchEntryException, entry.rc);</span>
+            }
+        }
+
+<span class="nc" id="L213">        lh.close();</span>
+<span class="nc" id="L214">    }</span>
+
+    @Test
+    public void testReadMissingEntriesEnableParallelRead() throws Exception {
+<span class="nc" id="L218">        readMissingEntriesTest(true);</span>
+<span class="nc" id="L219">    }</span>
+
+    @Test
+    public void testReadMissingEntriesDisableParallelRead() throws Exception {
+<span class="nc" id="L223">        readMissingEntriesTest(false);</span>
+<span class="nc" id="L224">    }</span>
+
+    private void readWithFailedBookiesTest(boolean parallelRead) throws Exception {
+<span class="nc" id="L227">        int numEntries = 10;</span>
+
+<span class="nc" id="L229">        long id = getLedgerToRead(5, 3, 3, numEntries);</span>
+
+<span class="nc" id="L231">        LedgerHandle lh = bkc.openLedger(id, digestType, passwd);</span>
+
+<span class="nc" id="L233">        List&lt;BookieSocketAddress&gt; ensemble =</span>
+<span class="nc" id="L234">                lh.getLedgerMetadata().getEnsembleAt(5);</span>
+        // kill two bookies
+<span class="nc" id="L236">        killBookie(ensemble.get(0));</span>
+<span class="nc" id="L237">        killBookie(ensemble.get(1));</span>
+
+        // read multiple entries
+<span class="nc" id="L240">        LatchListener listener = new LatchListener(0L, numEntries);</span>
+<span class="nc" id="L241">        ListenerBasedPendingReadOp readOp = createReadOp(lh, 0, numEntries - 1, listener);</span>
+<span class="nc" id="L242">        readOp.parallelRead(parallelRead).submit();</span>
+<span class="nc" id="L243">        listener.expectComplete();</span>
+<span class="nc" id="L244">        assertEquals(numEntries, listener.resultCodes.size());</span>
+<span class="nc bnc" id="L245" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L246">            EntryWithRC entry = listener.resultCodes.get((long) i);</span>
+<span class="nc" id="L247">            assertNotNull(entry);</span>
+<span class="nc" id="L248">            assertEquals(BKException.Code.OK, entry.rc);</span>
+<span class="nc" id="L249">            assertEquals(i, Integer.parseInt(new String(entry.entry.getEntry())));</span>
+        }
+
+<span class="nc" id="L252">        lh.close();</span>
+<span class="nc" id="L253">    }</span>
+
+    @Test
+    public void testReadWithFailedBookiesEnableParallelRead() throws Exception {
+<span class="nc" id="L257">        readWithFailedBookiesTest(true);</span>
+<span class="nc" id="L258">    }</span>
+
+    @Test
+    public void testReadWithFailedBookiesDisableParallelRead() throws Exception {
+<span class="nc" id="L262">        readWithFailedBookiesTest(false);</span>
+<span class="nc" id="L263">    }</span>
+
+    private void readFailureWithFailedBookiesTest(boolean parallelRead) throws Exception {
+<span class="nc" id="L266">        int numEntries = 10;</span>
+
+<span class="nc" id="L268">        long id = getLedgerToRead(5, 3, 3, numEntries);</span>
+
+<span class="nc" id="L270">        LedgerHandle lh = bkc.openLedger(id, digestType, passwd);</span>
+
+<span class="nc" id="L272">        List&lt;BookieSocketAddress&gt; ensemble =</span>
+<span class="nc" id="L273">            lh.getLedgerMetadata().getEnsembleAt(5);</span>
+        // kill bookies
+<span class="nc" id="L275">        killBookie(ensemble.get(0));</span>
+<span class="nc" id="L276">        killBookie(ensemble.get(1));</span>
+<span class="nc" id="L277">        killBookie(ensemble.get(2));</span>
+
+        // read multiple entries
+<span class="nc" id="L280">        LatchListener listener = new LatchListener(0L, numEntries);</span>
+<span class="nc" id="L281">        ListenerBasedPendingReadOp readOp = createReadOp(lh, 0, numEntries - 1, listener);</span>
+<span class="nc" id="L282">        readOp.parallelRead(parallelRead).submit();</span>
+<span class="nc" id="L283">        listener.expectComplete();</span>
+<span class="nc" id="L284">        assertEquals(numEntries, listener.resultCodes.size());</span>
+<span class="nc bnc" id="L285" title="All 2 branches missed.">        for (int i = 0; i &lt; numEntries; i++) {</span>
+<span class="nc" id="L286">            EntryWithRC entry = listener.resultCodes.get((long) i);</span>
+<span class="nc" id="L287">            assertNotNull(entry);</span>
+<span class="nc bnc" id="L288" title="All 2 branches missed.">            if (i % 5 == 0) {</span>
+<span class="nc" id="L289">                assertEquals(BKException.Code.BookieHandleNotAvailableException, entry.rc);</span>
+            } else {
+<span class="nc" id="L291">                assertEquals(BKException.Code.OK, entry.rc);</span>
+<span class="nc" id="L292">                assertEquals(i, Integer.parseInt(new String(entry.entry.getEntry())));</span>
+            }
+        }
+
+<span class="nc" id="L296">        lh.close();</span>
+<span class="nc" id="L297">    }</span>
+
+    @Test
+    public void testReadFailureWithFailedBookiesEnableParallelRead() throws Exception {
+<span class="nc" id="L301">        readFailureWithFailedBookiesTest(true);</span>
+<span class="nc" id="L302">    }</span>
+
+    @Test
+    public void testReadFailureWithFailedBookiesDisableParallelRead() throws Exception {
+<span class="nc" id="L306">        readFailureWithFailedBookiesTest(false);</span>
+<span class="nc" id="L307">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

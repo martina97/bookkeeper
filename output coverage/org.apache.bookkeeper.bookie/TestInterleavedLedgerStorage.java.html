@@ -1,0 +1,454 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TestInterleavedLedgerStorage.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$myBookieFenceLedgerTest.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.bookie</a> &gt; <span class="el_source">TestInterleavedLedgerStorage.java</span></div><h1>TestInterleavedLedgerStorage.java</h1><pre class="source lang-java linenums">/**
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.bookie;
+
+import static org.apache.bookkeeper.bookie.BookKeeperServerStats.BOOKIE_SCOPE;
+import static org.apache.bookkeeper.bookie.BookKeeperServerStats.STORAGE_SCRUB_PAGE_RETRIES;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import io.netty.buffer.UnpooledByteBufAllocator;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Optional;
+import java.util.PrimitiveIterator.OfLong;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.IntStream;
+
+import org.apache.bookkeeper.bookie.CheckpointSource.Checkpoint;
+import org.apache.bookkeeper.conf.ServerConfiguration;
+import org.apache.bookkeeper.conf.TestBKConfiguration;
+import org.apache.bookkeeper.stats.NullStatsLogger;
+import org.apache.bookkeeper.stats.StatsLogger;
+import org.apache.bookkeeper.test.TestStatsProvider;
+import org.apache.bookkeeper.util.DiskChecker;
+import org.apache.bookkeeper.util.EntryFormatter;
+import org.apache.bookkeeper.util.LedgerIdFormatter;
+import org.apache.commons.lang.mutable.MutableInt;
+import org.apache.commons.lang.mutable.MutableLong;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Test for InterleavedLedgerStorage.
+ */
+@RunWith(Parameterized.class)
+public class TestInterleavedLedgerStorage {
+<span class="nc" id="L72">    private static final Logger LOG = LoggerFactory.getLogger(TestInterleavedLedgerStorage.class);</span>
+
+    @Parameterized.Parameters
+    public static Iterable&lt;Boolean&gt; elplSetting() {
+<span class="nc" id="L76">        return Arrays.asList(true, false);</span>
+    }
+
+<span class="nc" id="L79">    public TestInterleavedLedgerStorage(boolean elplSetting) {</span>
+<span class="nc" id="L80">        conf.setEntryLogSizeLimit(2048);</span>
+<span class="nc" id="L81">        conf.setEntryLogPerLedgerEnabled(elplSetting);</span>
+<span class="nc" id="L82">    }</span>
+
+<span class="nc" id="L84">    CheckpointSource checkpointSource = new CheckpointSource() {</span>
+        @Override
+        public Checkpoint newCheckpoint() {
+<span class="nc" id="L87">            return Checkpoint.MAX;</span>
+        }
+
+        @Override
+        public void checkpointComplete(Checkpoint checkpoint, boolean compact) throws IOException {
+<span class="nc" id="L92">        }</span>
+    };
+
+<span class="nc" id="L95">    Checkpointer checkpointer = new Checkpointer() {</span>
+        @Override
+        public void startCheckpoint(Checkpoint checkpoint) {
+            // No-op
+<span class="nc" id="L99">        }</span>
+
+        @Override
+        public void start() {
+            // no-op
+<span class="nc" id="L104">        }</span>
+    };
+
+    static class TestableEntryLogger extends EntryLogger {
+        public interface CheckEntryListener {
+            void accept(long ledgerId,
+                        long entryId,
+                        long entryLogId,
+                        long pos);
+        }
+        volatile CheckEntryListener testPoint;
+
+        public TestableEntryLogger(
+                ServerConfiguration conf,
+                LedgerDirsManager ledgerDirsManager,
+                EntryLogListener listener,
+                StatsLogger statsLogger) throws IOException {
+<span class="nc" id="L121">            super(conf, ledgerDirsManager, listener, statsLogger, UnpooledByteBufAllocator.DEFAULT);</span>
+<span class="nc" id="L122">        }</span>
+
+        void setCheckEntryTestPoint(CheckEntryListener testPoint) throws InterruptedException {
+<span class="nc" id="L125">            this.testPoint = testPoint;</span>
+<span class="nc" id="L126">        }</span>
+
+        @Override
+        void checkEntry(long ledgerId, long entryId, long location) throws EntryLookupException, IOException {
+<span class="nc" id="L130">            CheckEntryListener runBefore = testPoint;</span>
+<span class="nc bnc" id="L131" title="All 2 branches missed.">            if (runBefore != null) {</span>
+<span class="nc" id="L132">                runBefore.accept(ledgerId, entryId, logIdForOffset(location), posForOffset(location));</span>
+            }
+<span class="nc" id="L134">            super.checkEntry(ledgerId, entryId, location);</span>
+<span class="nc" id="L135">        }</span>
+    }
+
+<span class="nc" id="L138">    TestStatsProvider statsProvider = new TestStatsProvider();</span>
+<span class="nc" id="L139">    ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+    LedgerDirsManager ledgerDirsManager;
+    TestableEntryLogger entryLogger;
+<span class="nc" id="L142">    InterleavedLedgerStorage interleavedStorage = new InterleavedLedgerStorage();</span>
+<span class="nc" id="L143">    final long numWrites = 2000;</span>
+<span class="nc" id="L144">    final long moreNumOfWrites = 3000;</span>
+<span class="nc" id="L145">    final long entriesPerWrite = 2;</span>
+<span class="nc" id="L146">    final long numOfLedgers = 5;</span>
+
+    @Before
+    public void setUp() throws Exception {
+<span class="nc" id="L150">        File tmpDir = File.createTempFile(&quot;bkTest&quot;, &quot;.dir&quot;);</span>
+<span class="nc" id="L151">        tmpDir.delete();</span>
+<span class="nc" id="L152">        tmpDir.mkdir();</span>
+<span class="nc" id="L153">        File curDir = Bookie.getCurrentDirectory(tmpDir);</span>
+<span class="nc" id="L154">        Bookie.checkDirectoryStructure(curDir);</span>
+
+<span class="nc" id="L156">        conf.setLedgerDirNames(new String[]{tmpDir.toString()});</span>
+<span class="nc" id="L157">        ledgerDirsManager = new LedgerDirsManager(conf, conf.getLedgerDirs(),</span>
+<span class="nc" id="L158">                new DiskChecker(conf.getDiskUsageThreshold(), conf.getDiskUsageWarnThreshold()));</span>
+
+<span class="nc" id="L160">        entryLogger = new TestableEntryLogger(</span>
+                conf, ledgerDirsManager, null, NullStatsLogger.INSTANCE);
+<span class="nc" id="L162">        interleavedStorage.initializeWithEntryLogger(</span>
+                conf, null, ledgerDirsManager, ledgerDirsManager,
+                null, checkpointSource, checkpointer, entryLogger,
+<span class="nc" id="L165">                statsProvider.getStatsLogger(BOOKIE_SCOPE));</span>
+
+        // Insert some ledger &amp; entries in the interleaved storage
+<span class="nc bnc" id="L168" title="All 2 branches missed.">        for (long entryId = 0; entryId &lt; numWrites; entryId++) {</span>
+<span class="nc bnc" id="L169" title="All 2 branches missed.">            for (long ledgerId = 0; ledgerId &lt; numOfLedgers; ledgerId++) {</span>
+<span class="nc bnc" id="L170" title="All 2 branches missed.">                if (entryId == 0) {</span>
+<span class="nc" id="L171">                    interleavedStorage.setMasterKey(ledgerId, (&quot;ledger-&quot; + ledgerId).getBytes());</span>
+<span class="nc" id="L172">                    interleavedStorage.setFenced(ledgerId);</span>
+                }
+<span class="nc" id="L174">                ByteBuf entry = Unpooled.buffer(128);</span>
+<span class="nc" id="L175">                entry.writeLong(ledgerId);</span>
+<span class="nc" id="L176">                entry.writeLong(entryId * entriesPerWrite);</span>
+<span class="nc" id="L177">                entry.writeBytes((&quot;entry-&quot; + entryId).getBytes());</span>
+
+<span class="nc" id="L179">                interleavedStorage.addEntry(entry);</span>
+            }
+        }
+<span class="nc" id="L182">    }</span>
+
+    @Test
+    public void testIndexEntryIterator() throws Exception {
+<span class="nc" id="L186">        try (LedgerCache.PageEntriesIterable pages = interleavedStorage.getIndexEntries(0)) {</span>
+<span class="nc" id="L187">            MutableLong curEntry = new MutableLong(0);</span>
+<span class="nc bnc" id="L188" title="All 2 branches missed.">            for (LedgerCache.PageEntries page : pages) {</span>
+<span class="nc" id="L189">                try (LedgerEntryPage lep = page.getLEP()) {</span>
+<span class="nc" id="L190">                    lep.getEntries((entry, offset) -&gt; {</span>
+<span class="nc" id="L191">                        Assert.assertEquals(curEntry.longValue(), entry);</span>
+<span class="nc" id="L192">                        Assert.assertNotEquals(0, offset);</span>
+<span class="nc" id="L193">                        curEntry.setValue(entriesPerWrite + entry);</span>
+<span class="nc" id="L194">                        return true;</span>
+                    });
+                }
+<span class="nc" id="L197">            }</span>
+<span class="nc" id="L198">            Assert.assertEquals(entriesPerWrite * numWrites, curEntry.longValue());</span>
+        }
+<span class="nc" id="L200">    }</span>
+
+    @Test
+    public void testGetListOfEntriesOfLedger() throws IOException {
+<span class="nc bnc" id="L204" title="All 2 branches missed.">        for (long ledgerId = 0; ledgerId &lt; numOfLedgers; ledgerId++) {</span>
+<span class="nc" id="L205">            OfLong entriesOfLedger = interleavedStorage.getListOfEntriesOfLedger(ledgerId);</span>
+<span class="nc" id="L206">            ArrayList&lt;Long&gt; arrayList = new ArrayList&lt;Long&gt;();</span>
+<span class="nc" id="L207">            Consumer&lt;Long&gt; addMethod = arrayList::add;</span>
+<span class="nc" id="L208">            entriesOfLedger.forEachRemaining(addMethod);</span>
+<span class="nc" id="L209">            assertEquals(&quot;Number of entries&quot;, numWrites, arrayList.size());</span>
+<span class="nc" id="L210">            assertTrue(&quot;Entries of Ledger&quot;, IntStream.range(0, arrayList.size()).allMatch(i -&gt; {</span>
+<span class="nc bnc" id="L211" title="All 2 branches missed.">                return arrayList.get(i).longValue() == (i * entriesPerWrite);</span>
+            }));
+        }
+
+<span class="nc" id="L215">        long nonExistingLedger = 456789L;</span>
+<span class="nc" id="L216">        OfLong entriesOfLedger = interleavedStorage.getListOfEntriesOfLedger(nonExistingLedger);</span>
+<span class="nc" id="L217">        assertFalse(&quot;There shouldn't be any entry&quot;, entriesOfLedger.hasNext());</span>
+<span class="nc" id="L218">    }</span>
+
+    @Test
+    public void testGetListOfEntriesOfLedgerAfterFlush() throws IOException {
+<span class="nc" id="L222">        interleavedStorage.flush();</span>
+
+        // Insert some more ledger &amp; entries in the interleaved storage
+<span class="nc bnc" id="L225" title="All 2 branches missed.">        for (long entryId = numWrites; entryId &lt; moreNumOfWrites; entryId++) {</span>
+<span class="nc bnc" id="L226" title="All 2 branches missed.">            for (long ledgerId = 0; ledgerId &lt; numOfLedgers; ledgerId++) {</span>
+<span class="nc" id="L227">                ByteBuf entry = Unpooled.buffer(128);</span>
+<span class="nc" id="L228">                entry.writeLong(ledgerId);</span>
+<span class="nc" id="L229">                entry.writeLong(entryId * entriesPerWrite);</span>
+<span class="nc" id="L230">                entry.writeBytes((&quot;entry-&quot; + entryId).getBytes());</span>
+
+<span class="nc" id="L232">                interleavedStorage.addEntry(entry);</span>
+            }
+        }
+
+<span class="nc bnc" id="L236" title="All 2 branches missed.">        for (long ledgerId = 0; ledgerId &lt; numOfLedgers; ledgerId++) {</span>
+<span class="nc" id="L237">            OfLong entriesOfLedger = interleavedStorage.getListOfEntriesOfLedger(ledgerId);</span>
+<span class="nc" id="L238">            ArrayList&lt;Long&gt; arrayList = new ArrayList&lt;Long&gt;();</span>
+<span class="nc" id="L239">            Consumer&lt;Long&gt; addMethod = arrayList::add;</span>
+<span class="nc" id="L240">            entriesOfLedger.forEachRemaining(addMethod);</span>
+<span class="nc" id="L241">            assertEquals(&quot;Number of entries&quot;, moreNumOfWrites, arrayList.size());</span>
+<span class="nc" id="L242">            assertTrue(&quot;Entries of Ledger&quot;, IntStream.range(0, arrayList.size()).allMatch(i -&gt; {</span>
+<span class="nc bnc" id="L243" title="All 2 branches missed.">                return arrayList.get(i).longValue() == (i * entriesPerWrite);</span>
+            }));
+        }
+<span class="nc" id="L246">    }</span>
+
+    @Test
+    public void testConsistencyCheckConcurrentGC() throws Exception {
+<span class="nc" id="L250">        final long signalDone = -1;</span>
+<span class="nc" id="L251">        final List&lt;Exception&gt; asyncErrors = new ArrayList&lt;&gt;();</span>
+<span class="nc" id="L252">        final LinkedBlockingQueue&lt;Long&gt; toCompact = new LinkedBlockingQueue&lt;&gt;();</span>
+<span class="nc" id="L253">        final Semaphore awaitingCompaction = new Semaphore(0);</span>
+
+<span class="nc" id="L255">        interleavedStorage.flush();</span>
+<span class="nc" id="L256">        final long lastLogId = entryLogger.getLeastUnflushedLogId();</span>
+
+<span class="nc" id="L258">        final MutableInt counter = new MutableInt(0);</span>
+<span class="nc" id="L259">        entryLogger.setCheckEntryTestPoint((ledgerId, entryId, entryLogId, pos) -&gt; {</span>
+<span class="nc bnc" id="L260" title="All 2 branches missed.">            if (entryLogId &lt; lastLogId) {</span>
+<span class="nc bnc" id="L261" title="All 2 branches missed.">                if (counter.intValue() % 100 == 0) {</span>
+                    try {
+<span class="nc" id="L263">                        toCompact.put(entryLogId);</span>
+<span class="nc" id="L264">                        awaitingCompaction.acquire();</span>
+<span class="nc" id="L265">                    } catch (InterruptedException e) {</span>
+<span class="nc" id="L266">                        asyncErrors.add(e);</span>
+<span class="nc" id="L267">                    }</span>
+                }
+<span class="nc" id="L269">                counter.increment();</span>
+            }
+<span class="nc" id="L271">        });</span>
+
+<span class="nc" id="L273">        Thread mutator = new Thread(() -&gt; {</span>
+<span class="nc" id="L274">            EntryLogCompactor compactor = new EntryLogCompactor(</span>
+                    conf,
+                    entryLogger,
+                    interleavedStorage,
+                    entryLogger::removeEntryLog);
+            while (true) {
+<span class="nc" id="L280">                Long next = null;</span>
+                try {
+<span class="nc" id="L282">                    next = toCompact.take();</span>
+<span class="nc bnc" id="L283" title="All 4 branches missed.">                    if (next == null || next == signalDone) {</span>
+                        break;
+                    }
+<span class="nc" id="L286">                    compactor.compact(entryLogger.getEntryLogMetadata(next));</span>
+<span class="nc" id="L287">                } catch (BufferedChannelBase.BufferedChannelClosedException e) {</span>
+                    // next was already removed, ignore
+<span class="nc" id="L289">                } catch (Exception e) {</span>
+<span class="nc" id="L290">                    asyncErrors.add(e);</span>
+                    break;
+                } finally {
+<span class="nc bnc" id="L293" title="All 2 branches missed.">                    if (next != null) {</span>
+<span class="nc" id="L294">                        awaitingCompaction.release();</span>
+                    }
+                }
+<span class="nc" id="L297">            }</span>
+<span class="nc" id="L298">        });</span>
+<span class="nc" id="L299">        mutator.start();</span>
+
+<span class="nc" id="L301">        List&lt;LedgerStorage.DetectedInconsistency&gt; inconsistencies = interleavedStorage.localConsistencyCheck(</span>
+<span class="nc" id="L302">                Optional.empty());</span>
+<span class="nc bnc" id="L303" title="All 2 branches missed.">        for (LedgerStorage.DetectedInconsistency e: inconsistencies) {</span>
+<span class="nc" id="L304">            LOG.error(&quot;Found: {}&quot;, e);</span>
+<span class="nc" id="L305">        }</span>
+<span class="nc" id="L306">        Assert.assertEquals(0, inconsistencies.size());</span>
+
+<span class="nc" id="L308">        toCompact.offer(signalDone);</span>
+<span class="nc" id="L309">        mutator.join();</span>
+<span class="nc bnc" id="L310" title="All 2 branches missed.">        for (Exception e: asyncErrors) {</span>
+<span class="nc" id="L311">            throw e;</span>
+        }
+
+<span class="nc bnc" id="L314" title="All 2 branches missed.">        if (!conf.isEntryLogPerLedgerEnabled()) {</span>
+<span class="nc" id="L315">            Assert.assertNotEquals(</span>
+                    0,
+<span class="nc" id="L317">                    statsProvider.getCounter(BOOKIE_SCOPE + &quot;.&quot; + STORAGE_SCRUB_PAGE_RETRIES).get().longValue());</span>
+        }
+<span class="nc" id="L319">    }</span>
+
+    @Test
+    public void testConsistencyMissingEntry() throws Exception {
+        // set 1, 1 to nonsense
+<span class="nc" id="L324">        interleavedStorage.ledgerCache.putEntryOffset(1, 1, 0xFFFFFFFFFFFFFFFFL);</span>
+
+<span class="nc" id="L326">        List&lt;LedgerStorage.DetectedInconsistency&gt; errors = interleavedStorage.localConsistencyCheck(Optional.empty());</span>
+<span class="nc" id="L327">        Assert.assertEquals(1, errors.size());</span>
+<span class="nc" id="L328">        LedgerStorage.DetectedInconsistency inconsistency = errors.remove(0);</span>
+<span class="nc" id="L329">        Assert.assertEquals(1, inconsistency.getEntryId());</span>
+<span class="nc" id="L330">        Assert.assertEquals(1, inconsistency.getLedgerId());</span>
+<span class="nc" id="L331">    }</span>
+
+    @Test
+    public void testWrongEntry() throws Exception {
+        // set 1, 1 to nonsense
+<span class="nc" id="L336">        interleavedStorage.ledgerCache.putEntryOffset(</span>
+                1,
+                1,
+<span class="nc" id="L339">                interleavedStorage.ledgerCache.getEntryOffset(0, 0));</span>
+
+<span class="nc" id="L341">        List&lt;LedgerStorage.DetectedInconsistency&gt; errors = interleavedStorage.localConsistencyCheck(Optional.empty());</span>
+<span class="nc" id="L342">        Assert.assertEquals(1, errors.size());</span>
+<span class="nc" id="L343">        LedgerStorage.DetectedInconsistency inconsistency = errors.remove(0);</span>
+<span class="nc" id="L344">        Assert.assertEquals(1, inconsistency.getEntryId());</span>
+<span class="nc" id="L345">        Assert.assertEquals(1, inconsistency.getLedgerId());</span>
+<span class="nc" id="L346">    }</span>
+
+    @Test
+    public void testShellCommands() throws Exception {
+<span class="nc" id="L350">        interleavedStorage.flush();</span>
+<span class="nc" id="L351">        interleavedStorage.shutdown();</span>
+<span class="nc" id="L352">        final Pattern entryPattern = Pattern.compile(</span>
+                &quot;entry (?&lt;entry&gt;\\d+)\t:\t((?&lt;na&gt;N/A)|\\(log:(?&lt;logid&gt;\\d+), pos: (?&lt;pos&gt;\\d+)\\))&quot;);
+
+<span class="nc" id="L355">        class Metadata {</span>
+<span class="nc" id="L356">            final Pattern keyPattern = Pattern.compile(&quot;master key +: ([0-9a-f])&quot;);</span>
+<span class="nc" id="L357">            final Pattern sizePattern = Pattern.compile(&quot;size +: (\\d+)&quot;);</span>
+<span class="nc" id="L358">            final Pattern entriesPattern = Pattern.compile(&quot;entries +: (\\d+)&quot;);</span>
+<span class="nc" id="L359">            final Pattern isFencedPattern = Pattern.compile(&quot;isFenced +: (\\w+)&quot;);</span>
+
+            public String masterKey;
+<span class="nc" id="L362">            public long size = -1;</span>
+<span class="nc" id="L363">            public long entries = -1;</span>
+<span class="nc" id="L364">            public boolean foundFenced = false;</span>
+
+            void check(String s) {
+<span class="nc" id="L367">                Matcher keyMatcher = keyPattern.matcher(s);</span>
+<span class="nc bnc" id="L368" title="All 2 branches missed.">                if (keyMatcher.matches()) {</span>
+<span class="nc" id="L369">                    masterKey = keyMatcher.group(1);</span>
+<span class="nc" id="L370">                    return;</span>
+                }
+
+<span class="nc" id="L373">                Matcher sizeMatcher = sizePattern.matcher(s);</span>
+<span class="nc bnc" id="L374" title="All 2 branches missed.">                if (sizeMatcher.matches()) {</span>
+<span class="nc" id="L375">                    size = Long.valueOf(sizeMatcher.group(1));</span>
+<span class="nc" id="L376">                    return;</span>
+                }
+
+<span class="nc" id="L379">                Matcher entriesMatcher = entriesPattern.matcher(s);</span>
+<span class="nc bnc" id="L380" title="All 2 branches missed.">                if (entriesMatcher.matches()) {</span>
+<span class="nc" id="L381">                    entries = Long.valueOf(entriesMatcher.group(1));</span>
+<span class="nc" id="L382">                    return;</span>
+                }
+
+<span class="nc" id="L385">                Matcher isFencedMatcher = isFencedPattern.matcher(s);</span>
+<span class="nc bnc" id="L386" title="All 2 branches missed.">                if (isFencedMatcher.matches()) {</span>
+<span class="nc" id="L387">                    Assert.assertEquals(&quot;true&quot;, isFencedMatcher.group(1));</span>
+<span class="nc" id="L388">                    foundFenced = true;</span>
+<span class="nc" id="L389">                    return;</span>
+                }
+<span class="nc" id="L391">            }</span>
+
+            void validate(long foundEntries) {
+<span class="nc bnc" id="L394" title="All 2 branches missed.">                Assert.assertTrue(entries &gt;= numWrites * entriesPerWrite);</span>
+<span class="nc" id="L395">                Assert.assertEquals(entries, foundEntries);</span>
+<span class="nc" id="L396">                Assert.assertTrue(foundFenced);</span>
+<span class="nc" id="L397">                Assert.assertNotEquals(-1, size);</span>
+<span class="nc" id="L398">            }</span>
+        }
+<span class="nc" id="L400">        final Metadata foundMetadata = new Metadata();</span>
+
+<span class="nc" id="L402">        AtomicLong curEntry = new AtomicLong(0);</span>
+<span class="nc" id="L403">        AtomicLong someEntryLogger = new AtomicLong(-1);</span>
+<span class="nc" id="L404">        BookieShell shell = new BookieShell(</span>
+<span class="nc" id="L405">                LedgerIdFormatter.LONG_LEDGERID_FORMATTER, EntryFormatter.STRING_FORMATTER) {</span>
+            @Override
+            void printInfoLine(String s) {
+<span class="nc" id="L408">                Matcher matcher = entryPattern.matcher(s);</span>
+<span class="nc" id="L409">                System.out.println(s);</span>
+<span class="nc bnc" id="L410" title="All 2 branches missed.">                if (matcher.matches()) {</span>
+<span class="nc" id="L411">                    assertEquals(Long.toString(curEntry.get()), matcher.group(&quot;entry&quot;));</span>
+
+<span class="nc bnc" id="L413" title="All 2 branches missed.">                    if (matcher.group(&quot;na&quot;) == null) {</span>
+<span class="nc" id="L414">                        String logId = matcher.group(&quot;logid&quot;);</span>
+<span class="nc" id="L415">                        Assert.assertNotEquals(matcher.group(&quot;logid&quot;), null);</span>
+<span class="nc" id="L416">                        Assert.assertNotEquals(matcher.group(&quot;pos&quot;), null);</span>
+<span class="nc bnc" id="L417" title="All 2 branches missed.">                        Assert.assertTrue((curEntry.get() % entriesPerWrite) == 0);</span>
+<span class="nc bnc" id="L418" title="All 2 branches missed.">                        Assert.assertTrue(curEntry.get() &lt;= numWrites * entriesPerWrite);</span>
+<span class="nc bnc" id="L419" title="All 2 branches missed.">                        if (someEntryLogger.get() == -1) {</span>
+<span class="nc" id="L420">                            someEntryLogger.set(Long.valueOf(logId));</span>
+                        }
+<span class="nc" id="L422">                    } else {</span>
+<span class="nc" id="L423">                        Assert.assertEquals(matcher.group(&quot;logid&quot;), null);</span>
+<span class="nc" id="L424">                        Assert.assertEquals(matcher.group(&quot;pos&quot;), null);</span>
+<span class="nc bnc" id="L425" title="All 2 branches missed.">                        Assert.assertTrue(((curEntry.get() % entriesPerWrite) != 0)</span>
+<span class="nc bnc" id="L426" title="All 2 branches missed.">                                || ((curEntry.get() &gt;= (entriesPerWrite * numWrites))));</span>
+                    }
+<span class="nc" id="L428">                    curEntry.incrementAndGet();</span>
+                } else {
+<span class="nc" id="L430">                    foundMetadata.check(s);</span>
+                }
+<span class="nc" id="L432">            }</span>
+        };
+<span class="nc" id="L434">        shell.setConf(conf);</span>
+<span class="nc" id="L435">        int res = shell.run(new String[] { &quot;ledger&quot;, &quot;-m&quot;, &quot;0&quot; });</span>
+<span class="nc" id="L436">        Assert.assertEquals(0, res);</span>
+<span class="nc bnc" id="L437" title="All 2 branches missed.">        Assert.assertTrue(curEntry.get() &gt;= numWrites * entriesPerWrite);</span>
+<span class="nc" id="L438">        foundMetadata.validate(curEntry.get());</span>
+
+        // Should pass consistency checker
+<span class="nc" id="L441">        res = shell.run(new String[] { &quot;localconsistencycheck&quot; });</span>
+<span class="nc" id="L442">        Assert.assertEquals(0, res);</span>
+
+
+        // Remove a logger
+<span class="nc" id="L446">        EntryLogger entryLogger = new EntryLogger(conf);</span>
+<span class="nc" id="L447">        entryLogger.removeEntryLog(someEntryLogger.get());</span>
+
+        // Should fail consistency checker
+<span class="nc" id="L450">        res = shell.run(new String[] { &quot;localconsistencycheck&quot; });</span>
+<span class="nc" id="L451">        Assert.assertEquals(1, res);</span>
+<span class="nc" id="L452">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

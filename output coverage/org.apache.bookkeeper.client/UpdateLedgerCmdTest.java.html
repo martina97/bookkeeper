@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>UpdateLedgerCmdTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">UpdateLedgerCmdTest.java</span></div><h1>UpdateLedgerCmdTest.java</h1><pre class="source lang-java linenums">/**
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.client;
+
+import static org.junit.Assert.assertEquals;
+
+import java.io.IOException;
+import java.net.UnknownHostException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import org.apache.bookkeeper.bookie.Bookie;
+import org.apache.bookkeeper.bookie.BookieShell;
+import org.apache.bookkeeper.client.AsyncCallback.AddCallback;
+import org.apache.bookkeeper.client.BookKeeper.DigestType;
+import org.apache.bookkeeper.conf.ServerConfiguration;
+import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.apache.zookeeper.KeeperException;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Test an update command on a ledger.
+ */
+public class UpdateLedgerCmdTest extends BookKeeperClusterTestCase {
+
+<span class="nc" id="L50">    private static final Logger LOG = LoggerFactory.getLogger(UpdateLedgerCmdTest.class);</span>
+<span class="nc" id="L51">    private DigestType digestType = DigestType.CRC32;</span>
+    private static final String PASSWORD = &quot;testPasswd&quot;;
+
+    public UpdateLedgerCmdTest() {
+<span class="nc" id="L55">        super(3);</span>
+<span class="nc" id="L56">        baseConf.setGcWaitTime(100000);</span>
+<span class="nc" id="L57">    }</span>
+
+    /**
+     * updateledgers to hostname.
+     */
+    @Test
+    public void testUpdateLedgersToHostname() throws Exception {
+<span class="nc" id="L64">        BookKeeper bk = new BookKeeper(baseClientConf, zkc);</span>
+<span class="nc" id="L65">        LOG.info(&quot;Create ledger and add entries to it&quot;);</span>
+<span class="nc" id="L66">        List&lt;LedgerHandle&gt; ledgers = new ArrayList&lt;LedgerHandle&gt;();</span>
+<span class="nc" id="L67">        LedgerHandle lh1 = createLedgerWithEntries(bk, 0);</span>
+<span class="nc" id="L68">        ledgers.add(lh1);</span>
+<span class="nc bnc" id="L69" title="All 2 branches missed.">        for (int i = 1; i &lt; 40; i++) {</span>
+<span class="nc" id="L70">            ledgers.add(createLedgerWithEntries(bk, 0));</span>
+        }
+
+<span class="nc" id="L73">        String[] argv = new String[] { &quot;updateledgers&quot;, &quot;-b&quot;, &quot;hostname&quot;, &quot;-v&quot;, &quot;true&quot;, &quot;-p&quot;, &quot;2&quot; };</span>
+<span class="nc" id="L74">        final ServerConfiguration conf = bsConfs.get(0);</span>
+<span class="nc" id="L75">        conf.setUseHostNameAsBookieID(true);</span>
+<span class="nc" id="L76">        BookieSocketAddress toBookieId = Bookie.getBookieAddress(conf);</span>
+<span class="nc" id="L77">        BookieSocketAddress toBookieAddr = new BookieSocketAddress(toBookieId.getHostName() + &quot;:&quot;</span>
+<span class="nc" id="L78">                + conf.getBookiePort());</span>
+
+<span class="nc" id="L80">        updateLedgerCmd(argv, 0, conf);</span>
+
+<span class="nc" id="L82">        int updatedLedgersCount = getUpdatedLedgersCount(bk, ledgers, toBookieAddr);</span>
+<span class="nc" id="L83">        assertEquals(&quot;Failed to update the ledger metadata to use bookie host name&quot;, 40, updatedLedgersCount);</span>
+<span class="nc" id="L84">    }</span>
+
+    /**
+     * replace bookie address in ledger.
+     */
+    @Test
+    public void testUpdateBookieInLedger() throws Exception {
+<span class="nc" id="L91">        BookKeeper bk = new BookKeeper(baseClientConf, zkc);</span>
+<span class="nc" id="L92">        LOG.info(&quot;Create ledger and add entries to it&quot;);</span>
+<span class="nc" id="L93">        List&lt;LedgerHandle&gt; ledgers = new ArrayList&lt;LedgerHandle&gt;();</span>
+<span class="nc" id="L94">        LedgerHandle lh1 = createLedgerWithEntries(bk, 0);</span>
+<span class="nc" id="L95">        ledgers.add(lh1);</span>
+<span class="nc bnc" id="L96" title="All 2 branches missed.">        for (int i = 1; i &lt; 40; i++) {</span>
+<span class="nc" id="L97">            ledgers.add(createLedgerWithEntries(bk, 0));</span>
+        }
+<span class="nc" id="L99">        BookieSocketAddress srcBookie = bs.get(0).getLocalAddress();</span>
+<span class="nc" id="L100">        BookieSocketAddress destBookie = new BookieSocketAddress(&quot;1.1.1.1&quot;, 2181);</span>
+<span class="nc" id="L101">        String[] argv = new String[] { &quot;updateBookieInLedger&quot;, &quot;-sb&quot;, srcBookie.toString(), &quot;-db&quot;,</span>
+<span class="nc" id="L102">                destBookie.toString(), &quot;-v&quot;, &quot;true&quot;, &quot;-p&quot;, &quot;2&quot; };</span>
+<span class="nc" id="L103">        final ServerConfiguration conf = bsConfs.get(0);</span>
+<span class="nc" id="L104">        bs.get(0).shutdown();</span>
+<span class="nc" id="L105">        updateLedgerCmd(argv, 0, conf);</span>
+<span class="nc" id="L106">        int updatedLedgersCount = getUpdatedLedgersCount(bk, ledgers, srcBookie);</span>
+<span class="nc" id="L107">        assertEquals(&quot;Failed to update the ledger metadata with new bookie-address&quot;, 0, updatedLedgersCount);</span>
+<span class="nc" id="L108">        updatedLedgersCount = getUpdatedLedgersCount(bk, ledgers, destBookie);</span>
+<span class="nc" id="L109">        assertEquals(&quot;Failed to update the ledger metadata with new bookie-address&quot;, 40, updatedLedgersCount);</span>
+<span class="nc" id="L110">    }</span>
+
+    private void updateLedgerCmd(String[] argv, int exitCode, ServerConfiguration conf) throws KeeperException,
+            InterruptedException, IOException, UnknownHostException, Exception {
+<span class="nc" id="L114">        LOG.info(&quot;Perform updateledgers command&quot;);</span>
+<span class="nc" id="L115">        BookieShell bkShell = new BookieShell();</span>
+<span class="nc" id="L116">        bkShell.setConf(conf);</span>
+
+<span class="nc" id="L118">        assertEquals(&quot;Failed to return exit code!&quot;, exitCode, bkShell.run(argv));</span>
+<span class="nc" id="L119">    }</span>
+
+    private int getUpdatedLedgersCount(BookKeeper bk, List&lt;LedgerHandle&gt; ledgers, BookieSocketAddress toBookieAddr)
+            throws InterruptedException, BKException {
+        List&lt;BookieSocketAddress&gt; ensemble;
+<span class="nc" id="L124">        int updatedLedgersCount = 0;</span>
+<span class="nc bnc" id="L125" title="All 2 branches missed.">        for (LedgerHandle lh : ledgers) {</span>
+<span class="nc" id="L126">            lh.close();</span>
+<span class="nc" id="L127">            LedgerHandle openLedger = bk.openLedger(lh.getId(), digestType, PASSWORD.getBytes());</span>
+<span class="nc" id="L128">            ensemble = openLedger.getLedgerMetadata().getEnsembleAt(0);</span>
+<span class="nc bnc" id="L129" title="All 2 branches missed.">            if (ensemble.contains(toBookieAddr)) {</span>
+<span class="nc" id="L130">                updatedLedgersCount++;</span>
+            }
+<span class="nc" id="L132">        }</span>
+<span class="nc" id="L133">        return updatedLedgersCount;</span>
+    }
+
+    private LedgerHandle createLedgerWithEntries(BookKeeper bk, int numOfEntries) throws Exception {
+<span class="nc" id="L137">        LedgerHandle lh = bk.createLedger(3, 3, digestType, PASSWORD.getBytes());</span>
+<span class="nc" id="L138">        final AtomicInteger rc = new AtomicInteger(BKException.Code.OK);</span>
+<span class="nc" id="L139">        final CountDownLatch latch = new CountDownLatch(numOfEntries);</span>
+
+<span class="nc" id="L141">        final AddCallback cb = new AddCallback() {</span>
+            public void addComplete(int rccb, LedgerHandle lh, long entryId, Object ctx) {
+<span class="nc" id="L143">                rc.compareAndSet(BKException.Code.OK, rccb);</span>
+<span class="nc" id="L144">                latch.countDown();</span>
+<span class="nc" id="L145">            }</span>
+        };
+<span class="nc bnc" id="L147" title="All 2 branches missed.">        for (int i = 0; i &lt; numOfEntries; i++) {</span>
+<span class="nc" id="L148">            lh.asyncAddEntry((&quot;foobar&quot; + i).getBytes(), cb, null);</span>
+        }
+<span class="nc bnc" id="L150" title="All 2 branches missed.">        if (!latch.await(30, TimeUnit.SECONDS)) {</span>
+<span class="nc" id="L151">            throw new Exception(&quot;Entries took too long to add&quot;);</span>
+        }
+<span class="nc bnc" id="L153" title="All 2 branches missed.">        if (rc.get() != BKException.Code.OK) {</span>
+<span class="nc" id="L154">            throw BKException.create(rc.get());</span>
+        }
+<span class="nc" id="L156">        return lh;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

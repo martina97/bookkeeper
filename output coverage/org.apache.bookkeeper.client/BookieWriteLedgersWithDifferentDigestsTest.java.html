@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>BookieWriteLedgersWithDifferentDigestsTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">BookieWriteLedgersWithDifferentDigestsTest.java</span></div><h1>BookieWriteLedgersWithDifferentDigestsTest.java</h1><pre class="source lang-java linenums">/**
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.client;
+
+import static org.apache.bookkeeper.bookie.BookieException.Code.OK;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Enumeration;
+import java.util.Random;
+
+import org.apache.bookkeeper.client.BookKeeper.DigestType;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Verify reads from ledgers with different digest types.
+ * This can happen as result of clients using different settings
+ * yet reading each other data or configuration change roll out.
+ */
+@RunWith(Parameterized.class)
+public class BookieWriteLedgersWithDifferentDigestsTest extends
+    BookKeeperClusterTestCase implements AsyncCallback.AddCallbackWithLatency {
+
+<span class="nc" id="L53">    private static final Logger LOG = LoggerFactory</span>
+<span class="nc" id="L54">            .getLogger(BookieWriteLedgersWithDifferentDigestsTest.class);</span>
+
+<span class="nc" id="L56">    byte[] ledgerPassword = &quot;aaa&quot;.getBytes();</span>
+    LedgerHandle lh;
+    Enumeration&lt;LedgerEntry&gt; ls;
+
+    // test related variables
+<span class="nc" id="L61">    final int numEntriesToWrite = 20;</span>
+<span class="nc" id="L62">    int maxInt = Integer.MAX_VALUE;</span>
+    Random rng;
+    ArrayList&lt;byte[]&gt; entries1; // generated entries
+    ArrayList&lt;byte[]&gt; entries2; // generated entries
+
+    private final DigestType digestType;
+    private final DigestType otherDigestType;
+
+    private static class SyncObj {
+        volatile int counter;
+        volatile int rc;
+
+<span class="nc" id="L74">        public SyncObj() {</span>
+<span class="nc" id="L75">            counter = 0;</span>
+<span class="nc" id="L76">        }</span>
+    }
+
+    @Parameterized.Parameters
+    public static Collection&lt;Object[]&gt; configs() {
+<span class="nc" id="L81">        return Arrays.asList(new Object[][] { {DigestType.MAC }, {DigestType.CRC32}, {DigestType.CRC32C} });</span>
+    }
+
+    @Override
+    @Before
+    public void setUp() throws Exception {
+<span class="nc" id="L87">        super.setUp();</span>
+<span class="nc" id="L88">        rng = new Random(System.currentTimeMillis()); // Initialize the Random</span>
+        // Number Generator
+<span class="nc" id="L90">        entries1 = new ArrayList&lt;byte[]&gt;(); // initialize the entries list</span>
+<span class="nc" id="L91">        entries2 = new ArrayList&lt;byte[]&gt;(); // initialize the entries list</span>
+<span class="nc" id="L92">    }</span>
+
+    public BookieWriteLedgersWithDifferentDigestsTest(DigestType digestType) {
+<span class="nc" id="L95">        super(3);</span>
+<span class="nc" id="L96">        this.digestType = digestType;</span>
+<span class="nc bnc" id="L97" title="All 2 branches missed.">        this.otherDigestType = digestType == DigestType.CRC32 ? DigestType.MAC : DigestType.CRC32;</span>
+<span class="nc" id="L98">        String ledgerManagerFactory = &quot;org.apache.bookkeeper.meta.HierarchicalLedgerManagerFactory&quot;;</span>
+        // set ledger manager
+<span class="nc" id="L100">        baseConf.setLedgerManagerFactoryClassName(ledgerManagerFactory);</span>
+<span class="nc" id="L101">        baseClientConf.setLedgerManagerFactoryClassName(ledgerManagerFactory);</span>
+<span class="nc" id="L102">    }</span>
+
+    @Test
+    public void testLedgersWithDifferentDigestTypesNoAutodetection() throws Exception {
+<span class="nc" id="L106">        bkc.conf.setEnableDigestTypeAutodetection(false);</span>
+        // Create ledgers
+<span class="nc" id="L108">        lh = bkc.createLedgerAdv(3, 2, 2, digestType, ledgerPassword);</span>
+
+<span class="nc" id="L110">        final long id = lh.ledgerId;</span>
+
+<span class="nc" id="L112">        LOG.info(&quot;Ledger ID: {}, digestType: {}&quot;, lh.getId(), digestType);</span>
+<span class="nc" id="L113">        SyncObj syncObj1 = new SyncObj();</span>
+<span class="nc bnc" id="L114" title="All 2 branches missed.">        for (int i = numEntriesToWrite - 1; i &gt;= 0; i--) {</span>
+<span class="nc" id="L115">            ByteBuffer entry = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L116">            entry.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L117">            entry.position(0);</span>
+<span class="nc" id="L118">            entries1.add(0, entry.array());</span>
+<span class="nc" id="L119">            lh.asyncAddEntry(i, entry.array(), 0, entry.capacity(), this, syncObj1);</span>
+        }
+
+        // Wait for all entries to be acknowledged
+<span class="nc" id="L123">        waitForEntriesAddition(syncObj1, numEntriesToWrite);</span>
+
+        // Reads here work ok because ledger uses digest type set during create
+<span class="nc" id="L126">        readEntries(lh, entries1);</span>
+<span class="nc" id="L127">        lh.close();</span>
+
+        try {
+<span class="nc" id="L130">            bkc.openLedgerNoRecovery(id, otherDigestType, ledgerPassword).close();</span>
+<span class="nc" id="L131">            fail(&quot;digest mismatch error is expected&quot;);</span>
+<span class="nc" id="L132">        } catch (BKException bke) {</span>
+            // expected
+<span class="nc" id="L134">        }</span>
+<span class="nc" id="L135">    }</span>
+
+    @Test
+    public void testLedgersWithDifferentDigestTypesWithAutodetection() throws Exception {
+<span class="nc" id="L139">        bkc.conf.setEnableDigestTypeAutodetection(true);</span>
+        // Create ledgers
+<span class="nc" id="L141">        lh = bkc.createLedgerAdv(3, 2, 2, digestType, ledgerPassword);</span>
+
+<span class="nc" id="L143">        final long id = lh.ledgerId;</span>
+
+<span class="nc" id="L145">        LOG.info(&quot;Ledger ID-1: &quot; + lh.getId());</span>
+<span class="nc" id="L146">        SyncObj syncObj1 = new SyncObj();</span>
+<span class="nc bnc" id="L147" title="All 2 branches missed.">        for (int i = numEntriesToWrite - 1; i &gt;= 0; i--) {</span>
+<span class="nc" id="L148">            ByteBuffer entry = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L149">            entry.putInt(rng.nextInt(maxInt));</span>
+<span class="nc" id="L150">            entry.position(0);</span>
+<span class="nc" id="L151">            entries1.add(0, entry.array());</span>
+<span class="nc" id="L152">            lh.asyncAddEntry(i, entry.array(), 0, entry.capacity(), this, syncObj1);</span>
+        }
+
+        // Wait for all entries to be acknowledged
+<span class="nc" id="L156">        waitForEntriesAddition(syncObj1, numEntriesToWrite);</span>
+
+        // Reads here work ok because ledger uses digest type set during create
+<span class="nc" id="L159">        readEntries(lh, entries1);</span>
+<span class="nc" id="L160">        lh.close();</span>
+
+        // open here would fail if provided digest type is used
+        // it passes because ledger just uses digest type from its metadata/autodetects it
+<span class="nc" id="L164">        lh = bkc.openLedgerNoRecovery(id, otherDigestType, ledgerPassword);</span>
+<span class="nc" id="L165">        readEntries(lh, entries1);</span>
+<span class="nc" id="L166">        lh.close();</span>
+<span class="nc" id="L167">    }</span>
+
+    private void waitForEntriesAddition(SyncObj syncObj, int numEntriesToWrite) throws InterruptedException {
+<span class="nc" id="L170">        synchronized (syncObj) {</span>
+<span class="nc bnc" id="L171" title="All 2 branches missed.">            while (syncObj.counter &lt; numEntriesToWrite) {</span>
+<span class="nc" id="L172">                syncObj.wait();</span>
+            }
+<span class="nc" id="L174">            assertEquals(BKException.Code.OK, syncObj.rc);</span>
+<span class="nc" id="L175">        }</span>
+<span class="nc" id="L176">    }</span>
+
+    private void readEntries(LedgerHandle lh, ArrayList&lt;byte[]&gt; entries) throws InterruptedException, BKException {
+<span class="nc" id="L179">        ls = lh.readEntries(0, numEntriesToWrite - 1);</span>
+<span class="nc" id="L180">        int index = 0;</span>
+<span class="nc bnc" id="L181" title="All 2 branches missed.">        while (ls.hasMoreElements()) {</span>
+<span class="nc" id="L182">            ByteBuffer origbb = ByteBuffer.wrap(entries.get(index++));</span>
+<span class="nc" id="L183">            Integer origEntry = origbb.getInt();</span>
+<span class="nc" id="L184">            ByteBuffer result = ByteBuffer.wrap(ls.nextElement().getEntry());</span>
+<span class="nc" id="L185">            LOG.debug(&quot;Length of result: &quot; + result.capacity());</span>
+<span class="nc" id="L186">            LOG.debug(&quot;Original entry: &quot; + origEntry);</span>
+<span class="nc" id="L187">            Integer retrEntry = result.getInt();</span>
+<span class="nc" id="L188">            LOG.debug(&quot;Retrieved entry: &quot; + retrEntry);</span>
+<span class="nc" id="L189">            assertTrue(&quot;Checking entry &quot; + index + &quot; for equality&quot;, origEntry</span>
+<span class="nc" id="L190">                    .equals(retrEntry));</span>
+<span class="nc" id="L191">        }</span>
+<span class="nc" id="L192">    }</span>
+
+    @Override
+    public void addCompleteWithLatency(int rc, LedgerHandle lh, long entryId, long qwcLatency, Object ctx) {
+<span class="nc" id="L196">        SyncObj x = (SyncObj) ctx;</span>
+<span class="nc" id="L197">        captureThrowable(() -&gt; {</span>
+<span class="nc bnc" id="L198" title="All 4 branches missed.">            assertTrue(&quot;Successful write should have non-zero latency&quot;, rc != OK || qwcLatency &gt; 0);</span>
+<span class="nc" id="L199">        });</span>
+<span class="nc" id="L200">        synchronized (x) {</span>
+<span class="nc" id="L201">            x.rc = rc;</span>
+<span class="nc" id="L202">            x.counter++;</span>
+<span class="nc" id="L203">            x.notify();</span>
+<span class="nc" id="L204">        }</span>
+<span class="nc" id="L205">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

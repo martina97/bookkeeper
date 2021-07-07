@@ -1,0 +1,754 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CookieTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$myBookieFenceLedgerTest.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.bookie</a> &gt; <span class="el_source">CookieTest.java</span></div><h1>CookieTest.java</h1><pre class="source lang-java linenums">/*
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+
+package org.apache.bookkeeper.bookie;
+
+import static org.apache.bookkeeper.bookie.UpgradeTest.newV1JournalDirectory;
+import static org.apache.bookkeeper.bookie.UpgradeTest.newV1LedgerDirectory;
+import static org.apache.bookkeeper.bookie.UpgradeTest.newV2JournalDirectory;
+import static org.apache.bookkeeper.bookie.UpgradeTest.newV2LedgerDirectory;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import com.google.common.collect.Sets;
+import java.io.File;
+import java.io.IOException;
+import java.net.URI;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import org.apache.bookkeeper.bookie.BookieException.InvalidCookieException;
+import org.apache.bookkeeper.client.BookKeeperAdmin;
+import org.apache.bookkeeper.conf.ServerConfiguration;
+import org.apache.bookkeeper.conf.TestBKConfiguration;
+import org.apache.bookkeeper.discover.RegistrationManager;
+import org.apache.bookkeeper.meta.MetadataBookieDriver;
+import org.apache.bookkeeper.meta.MetadataDrivers;
+import org.apache.bookkeeper.stats.NullStatsLogger;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.apache.bookkeeper.util.BookKeeperConstants;
+import org.apache.bookkeeper.util.IOUtils;
+import org.apache.bookkeeper.util.PortManager;
+import org.apache.bookkeeper.versioning.LongVersion;
+import org.apache.bookkeeper.versioning.Version;
+import org.apache.bookkeeper.versioning.Versioned;
+import org.apache.commons.io.FileUtils;
+import org.junit.Test;
+
+/**
+ * Test cookies.
+ */
+public class CookieTest extends BookKeeperClusterTestCase {
+<span class="nc" id="L61">    final int bookiePort = PortManager.nextFreePort();</span>
+
+    public CookieTest() {
+<span class="nc" id="L64">        super(0);</span>
+<span class="nc" id="L65">    }</span>
+
+    private String newDirectory() throws IOException {
+<span class="nc" id="L68">        return newDirectory(true);</span>
+    }
+
+    private String newDirectory(boolean createCurDir) throws IOException {
+<span class="nc" id="L72">        File d = IOUtils.createTempDir(&quot;cookie&quot;, &quot;tmpdir&quot;);</span>
+<span class="nc bnc" id="L73" title="All 2 branches missed.">        if (createCurDir) {</span>
+<span class="nc" id="L74">            new File(d, &quot;current&quot;).mkdirs();</span>
+        }
+<span class="nc" id="L76">        tmpDirs.add(d);</span>
+<span class="nc" id="L77">        return d.getPath();</span>
+    }
+
+    MetadataBookieDriver metadataBookieDriver;
+    RegistrationManager rm;
+
+    @Override
+    public void setUp() throws Exception {
+<span class="nc" id="L85">        super.setUp();</span>
+<span class="nc" id="L86">        baseConf.setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+<span class="nc" id="L87">        this.metadataBookieDriver = MetadataDrivers.getBookieDriver(</span>
+<span class="nc" id="L88">            URI.create(baseConf.getMetadataServiceUri()));</span>
+<span class="nc" id="L89">        this.metadataBookieDriver.initialize(baseConf, () -&gt; {}, NullStatsLogger.INSTANCE);</span>
+<span class="nc" id="L90">        this.rm = metadataBookieDriver.getRegistrationManager();</span>
+<span class="nc" id="L91">    }</span>
+
+    @Override
+    public void tearDown() throws Exception {
+<span class="nc" id="L95">        super.tearDown();</span>
+<span class="nc bnc" id="L96" title="All 2 branches missed.">        if (metadataBookieDriver != null) {</span>
+<span class="nc" id="L97">            metadataBookieDriver.close();</span>
+        }
+<span class="nc" id="L99">    }</span>
+
+    /**
+     * Test starting bookie with clean state.
+     */
+    @Test
+    public void testCleanStart() throws Exception {
+<span class="nc" id="L106">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L107">        conf.setJournalDirName(newDirectory(false))</span>
+<span class="nc" id="L108">            .setLedgerDirNames(new String[] { newDirectory(false) })</span>
+<span class="nc" id="L109">            .setBookiePort(bookiePort)</span>
+<span class="nc" id="L110">            .setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+        try {
+<span class="nc" id="L112">            Bookie b = new Bookie(conf);</span>
+<span class="nc" id="L113">        } catch (Exception e) {</span>
+<span class="nc" id="L114">            fail(&quot;Should not reach here.&quot;);</span>
+<span class="nc" id="L115">        }</span>
+<span class="nc" id="L116">    }</span>
+
+    /**
+     * Test that if a zookeeper cookie
+     * is different to a local cookie, the bookie
+     * will fail to start.
+     */
+    @Test
+    public void testBadJournalCookie() throws Exception {
+<span class="nc" id="L125">        ServerConfiguration conf1 = TestBKConfiguration.newServerConfiguration()</span>
+<span class="nc" id="L126">            .setJournalDirName(newDirectory())</span>
+<span class="nc" id="L127">            .setLedgerDirNames(new String[] { newDirectory() })</span>
+<span class="nc" id="L128">            .setBookiePort(bookiePort);</span>
+<span class="nc" id="L129">        Cookie.Builder cookieBuilder = Cookie.generateCookie(conf1);</span>
+<span class="nc" id="L130">        Cookie c = cookieBuilder.build();</span>
+<span class="nc" id="L131">        c.writeToRegistrationManager(rm, conf1, Version.NEW);</span>
+
+<span class="nc" id="L133">        String journalDir = newDirectory();</span>
+<span class="nc" id="L134">        String ledgerDir = newDirectory();</span>
+<span class="nc" id="L135">        ServerConfiguration conf2 = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L136">        conf2.setJournalDirName(journalDir)</span>
+<span class="nc" id="L137">            .setLedgerDirNames(new String[] { ledgerDir })</span>
+<span class="nc" id="L138">            .setBookiePort(bookiePort)</span>
+<span class="nc" id="L139">            .setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+<span class="nc" id="L140">        Cookie.Builder cookieBuilder2 = Cookie.generateCookie(conf2);</span>
+<span class="nc" id="L141">        Cookie c2 = cookieBuilder2.build();</span>
+<span class="nc" id="L142">        c2.writeToDirectory(new File(journalDir, &quot;current&quot;));</span>
+<span class="nc" id="L143">        c2.writeToDirectory(new File(ledgerDir, &quot;current&quot;));</span>
+
+        try {
+<span class="nc" id="L146">            Bookie b = new Bookie(conf2);</span>
+<span class="nc" id="L147">            fail(&quot;Shouldn't have been able to start&quot;);</span>
+<span class="nc" id="L148">        } catch (BookieException.InvalidCookieException ice) {</span>
+            // correct behaviour
+<span class="nc" id="L150">        }</span>
+<span class="nc" id="L151">    }</span>
+
+    /**
+     * Test that if a directory is removed from
+     * the configuration, the bookie will fail to
+     * start.
+     */
+    @Test
+    public void testDirectoryMissing() throws Exception {
+<span class="nc" id="L160">        String[] ledgerDirs = new String[] {</span>
+<span class="nc" id="L161">            newDirectory(), newDirectory(), newDirectory() };</span>
+<span class="nc" id="L162">        String journalDir = newDirectory();</span>
+<span class="nc" id="L163">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L164">        conf.setJournalDirName(journalDir)</span>
+<span class="nc" id="L165">            .setLedgerDirNames(ledgerDirs)</span>
+<span class="nc" id="L166">            .setBookiePort(bookiePort)</span>
+<span class="nc" id="L167">            .setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+
+<span class="nc" id="L169">        Bookie b = new Bookie(conf); // should work fine</span>
+<span class="nc" id="L170">        b.start();</span>
+<span class="nc" id="L171">        b.shutdown();</span>
+
+<span class="nc" id="L173">        conf.setLedgerDirNames(new String[] { ledgerDirs[0], ledgerDirs[1] });</span>
+        try {
+<span class="nc" id="L175">            Bookie b2 = new Bookie(conf);</span>
+<span class="nc" id="L176">            fail(&quot;Shouldn't have been able to start&quot;);</span>
+<span class="nc" id="L177">        } catch (BookieException.InvalidCookieException ice) {</span>
+            // correct behaviour
+<span class="nc" id="L179">        }</span>
+
+<span class="nc" id="L181">        conf.setJournalDirName(newDirectory()).setLedgerDirNames(ledgerDirs);</span>
+        try {
+<span class="nc" id="L183">            Bookie b2 = new Bookie(conf);</span>
+<span class="nc" id="L184">            fail(&quot;Shouldn't have been able to start&quot;);</span>
+<span class="nc" id="L185">        } catch (BookieException.InvalidCookieException ice) {</span>
+            // correct behaviour
+<span class="nc" id="L187">        }</span>
+
+<span class="nc" id="L189">        conf.setJournalDirName(journalDir);</span>
+<span class="nc" id="L190">        b = new Bookie(conf);</span>
+<span class="nc" id="L191">        b.start();</span>
+<span class="nc" id="L192">        b.shutdown();</span>
+<span class="nc" id="L193">    }</span>
+
+    /**
+     * Test that if a cookie is missing from a journal directory
+     * the bookie will fail to start.
+     */
+    @Test
+    public void testCookieMissingOnJournalDir() throws Exception {
+<span class="nc" id="L201">        String[] ledgerDirs = new String[] {</span>
+<span class="nc" id="L202">            newDirectory(), newDirectory(), newDirectory() };</span>
+<span class="nc" id="L203">        String journalDir = newDirectory();</span>
+<span class="nc" id="L204">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L205">        conf.setJournalDirName(journalDir)</span>
+<span class="nc" id="L206">            .setLedgerDirNames(ledgerDirs)</span>
+<span class="nc" id="L207">            .setBookiePort(bookiePort)</span>
+<span class="nc" id="L208">            .setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+
+<span class="nc" id="L210">        Bookie b = new Bookie(conf); // should work fine</span>
+<span class="nc" id="L211">        b.start();</span>
+<span class="nc" id="L212">        b.shutdown();</span>
+
+<span class="nc" id="L214">        File cookieFile =</span>
+<span class="nc" id="L215">            new File(Bookie.getCurrentDirectory(new File(journalDir)), BookKeeperConstants.VERSION_FILENAME);</span>
+<span class="nc" id="L216">        assertTrue(cookieFile.delete());</span>
+        try {
+<span class="nc" id="L218">            new Bookie(conf);</span>
+<span class="nc" id="L219">            fail(&quot;Shouldn't have been able to start&quot;);</span>
+<span class="nc" id="L220">        } catch (BookieException.InvalidCookieException ice) {</span>
+            // correct behaviour
+<span class="nc" id="L222">        }</span>
+<span class="nc" id="L223">    }</span>
+
+    /**
+     * Test that if a cookie is missing from a journal directory
+     * the bookie will fail to start.
+     */
+    @Test
+    public void testCookieMissingOnLedgerDir() throws Exception {
+<span class="nc" id="L231">        String[] ledgerDirs = new String[] {</span>
+<span class="nc" id="L232">            newDirectory(), newDirectory(), newDirectory() };</span>
+<span class="nc" id="L233">        String journalDir = newDirectory();</span>
+<span class="nc" id="L234">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L235">        conf.setJournalDirName(journalDir)</span>
+<span class="nc" id="L236">            .setLedgerDirNames(ledgerDirs)</span>
+<span class="nc" id="L237">            .setBookiePort(bookiePort)</span>
+<span class="nc" id="L238">            .setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+
+<span class="nc" id="L240">        Bookie b = new Bookie(conf); // should work fine</span>
+<span class="nc" id="L241">        b.start();</span>
+<span class="nc" id="L242">        b.shutdown();</span>
+
+<span class="nc" id="L244">        File cookieFile =</span>
+<span class="nc" id="L245">            new File(Bookie.getCurrentDirectory(new File(ledgerDirs[0])), BookKeeperConstants.VERSION_FILENAME);</span>
+<span class="nc" id="L246">        assertTrue(cookieFile.delete());</span>
+        try {
+<span class="nc" id="L248">            new Bookie(conf);</span>
+<span class="nc" id="L249">            fail(&quot;Shouldn't have been able to start&quot;);</span>
+<span class="nc" id="L250">        } catch (BookieException.InvalidCookieException ice) {</span>
+            // correct behaviour
+<span class="nc" id="L252">        }</span>
+<span class="nc" id="L253">    }</span>
+
+    /**
+     * Test that if a directory is added to a
+     * preexisting bookie, the bookie will fail
+     * to start.
+     */
+    @Test
+    public void testDirectoryAdded() throws Exception {
+<span class="nc" id="L262">        String ledgerDir0 = newDirectory();</span>
+<span class="nc" id="L263">        String journalDir = newDirectory();</span>
+<span class="nc" id="L264">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L265">        conf.setJournalDirName(journalDir)</span>
+<span class="nc" id="L266">            .setLedgerDirNames(new String[] { ledgerDir0 })</span>
+<span class="nc" id="L267">            .setBookiePort(bookiePort)</span>
+<span class="nc" id="L268">            .setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+
+<span class="nc" id="L270">        Bookie b = new Bookie(conf); // should work fine</span>
+<span class="nc" id="L271">        b.start();</span>
+<span class="nc" id="L272">        b.shutdown();</span>
+
+<span class="nc" id="L274">        conf.setLedgerDirNames(new String[] { ledgerDir0, newDirectory() });</span>
+        try {
+<span class="nc" id="L276">            Bookie b2 = new Bookie(conf);</span>
+<span class="nc" id="L277">            fail(&quot;Shouldn't have been able to start&quot;);</span>
+<span class="nc" id="L278">        } catch (BookieException.InvalidCookieException ice) {</span>
+            // correct behaviour
+<span class="nc" id="L280">        }</span>
+
+<span class="nc" id="L282">        conf.setLedgerDirNames(new String[] { ledgerDir0 });</span>
+<span class="nc" id="L283">        b = new Bookie(conf);</span>
+<span class="nc" id="L284">        b.start();</span>
+<span class="nc" id="L285">        b.shutdown();</span>
+<span class="nc" id="L286">    }</span>
+
+    /**
+     * Test that if a directory is added to an existing bookie, and
+     * allowStorageExpansion option is true, the bookie should come online.
+     */
+    @Test
+    public void testStorageExpansionOption() throws Exception {
+<span class="nc" id="L294">        String ledgerDir0 = newDirectory();</span>
+<span class="nc" id="L295">        String indexDir0 = newDirectory();</span>
+<span class="nc" id="L296">        String journalDir = newDirectory();</span>
+<span class="nc" id="L297">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L298">        conf.setJournalDirName(journalDir)</span>
+<span class="nc" id="L299">            .setLedgerDirNames(new String[] { ledgerDir0 })</span>
+<span class="nc" id="L300">            .setIndexDirName(new String[] { indexDir0 })</span>
+<span class="nc" id="L301">            .setBookiePort(bookiePort)</span>
+<span class="nc" id="L302">            .setAllowStorageExpansion(true)</span>
+<span class="nc" id="L303">            .setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+
+<span class="nc" id="L305">        Bookie b = new Bookie(conf); // should work fine</span>
+<span class="nc" id="L306">        b.start();</span>
+<span class="nc" id="L307">        b.shutdown();</span>
+<span class="nc" id="L308">        b = null;</span>
+
+        // add a few additional ledger dirs
+<span class="nc" id="L311">        String[] lPaths = new String[] {ledgerDir0, newDirectory(), newDirectory()};</span>
+<span class="nc" id="L312">        Set&lt;String&gt; configuredLedgerDirs =  Sets.newHashSet(lPaths);</span>
+<span class="nc" id="L313">        conf.setLedgerDirNames(lPaths);</span>
+
+        // add an extra index dir
+<span class="nc" id="L316">        String[] iPaths = new String[] {indexDir0, newDirectory()};</span>
+<span class="nc" id="L317">        Set&lt;String&gt; configuredIndexDirs =  Sets.newHashSet(iPaths);</span>
+<span class="nc" id="L318">        conf.setIndexDirName(iPaths);</span>
+
+        try {
+<span class="nc" id="L321">            b = new Bookie(conf);</span>
+<span class="nc" id="L322">        } catch (BookieException.InvalidCookieException ice) {</span>
+<span class="nc" id="L323">            fail(&quot;Should have been able to start the bookie&quot;);</span>
+<span class="nc" id="L324">        }</span>
+
+<span class="nc" id="L326">        List&lt;File&gt; l = b.getLedgerDirsManager().getAllLedgerDirs();</span>
+<span class="nc" id="L327">        HashSet&lt;String&gt; bookieLedgerDirs = Sets.newHashSet();</span>
+<span class="nc bnc" id="L328" title="All 2 branches missed.">        for (File f : l) {</span>
+            // Using the parent path because the bookie creates a 'current'
+            // dir under the ledger dir user provides
+<span class="nc" id="L331">            bookieLedgerDirs.add(f.getParent());</span>
+<span class="nc" id="L332">        }</span>
+<span class="nc" id="L333">        assertTrue(&quot;Configured ledger dirs: &quot; + configuredLedgerDirs + &quot; doesn't match bookie's ledger dirs: &quot;</span>
+                   + bookieLedgerDirs,
+<span class="nc" id="L335">                   configuredLedgerDirs.equals(bookieLedgerDirs));</span>
+
+<span class="nc" id="L337">        l = b.getIndexDirsManager().getAllLedgerDirs();</span>
+<span class="nc" id="L338">        HashSet&lt;String&gt; bookieIndexDirs = Sets.newHashSet();</span>
+<span class="nc bnc" id="L339" title="All 2 branches missed.">        for (File f : l) {</span>
+<span class="nc" id="L340">            bookieIndexDirs.add(f.getParent());</span>
+<span class="nc" id="L341">        }</span>
+<span class="nc" id="L342">        assertTrue(&quot;Configured Index dirs: &quot; + configuredIndexDirs + &quot; doesn't match bookie's index dirs: &quot;</span>
+                   + bookieIndexDirs,
+<span class="nc" id="L344">                   configuredIndexDirs.equals(bookieIndexDirs));</span>
+
+<span class="nc" id="L346">        b.shutdown();</span>
+
+        // Make sure that substituting an older ledger directory
+        // is not allowed.
+<span class="nc" id="L350">        String[] lPaths2 = new String[] { lPaths[0], lPaths[1], newDirectory() };</span>
+<span class="nc" id="L351">        conf.setLedgerDirNames(lPaths2);</span>
+        try {
+<span class="nc" id="L353">            b = new Bookie(conf);</span>
+<span class="nc" id="L354">            fail(&quot;Should not have been able to start the bookie&quot;);</span>
+<span class="nc" id="L355">        } catch (BookieException.InvalidCookieException ice) {</span>
+            // correct behavior
+<span class="nc" id="L357">        }</span>
+
+        // Finally make sure that not including the older ledger directories
+        // is not allowed. Remove one of the older ledger dirs
+<span class="nc" id="L361">        lPaths2 = new String[] { lPaths[0], lPaths[1] };</span>
+<span class="nc" id="L362">        conf.setLedgerDirNames(lPaths2);</span>
+        try {
+<span class="nc" id="L364">            b = new Bookie(conf);</span>
+<span class="nc" id="L365">            fail(&quot;Should not have been able to start the bookie&quot;);</span>
+<span class="nc" id="L366">        } catch (BookieException.InvalidCookieException ice) {</span>
+            // correct behavior
+<span class="nc" id="L368">        }</span>
+<span class="nc" id="L369">    }</span>
+
+    /**
+     * Test that adding of a non-empty directory is not allowed
+     * even when allowStorageExpansion option is true.
+     */
+    @Test
+    public void testNonEmptyDirAddWithStorageExpansionOption() throws Exception {
+<span class="nc" id="L377">        String ledgerDir0 = newDirectory();</span>
+<span class="nc" id="L378">        String indexDir0 = newDirectory();</span>
+<span class="nc" id="L379">        String journalDir = newDirectory();</span>
+<span class="nc" id="L380">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L381">        conf.setJournalDirName(journalDir)</span>
+<span class="nc" id="L382">            .setLedgerDirNames(new String[] { ledgerDir0 })</span>
+<span class="nc" id="L383">            .setIndexDirName(new String[] { indexDir0 })</span>
+<span class="nc" id="L384">            .setBookiePort(bookiePort)</span>
+<span class="nc" id="L385">            .setAllowStorageExpansion(true)</span>
+<span class="nc" id="L386">            .setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+
+<span class="nc" id="L388">        Bookie b = new Bookie(conf); // should work fine</span>
+<span class="nc" id="L389">        b.start();</span>
+<span class="nc" id="L390">        b.shutdown();</span>
+<span class="nc" id="L391">        b = null;</span>
+
+        // add an additional ledger dir
+<span class="nc" id="L394">        String[] lPaths = new String[] {ledgerDir0, newDirectory()};</span>
+<span class="nc" id="L395">        conf.setLedgerDirNames(lPaths);</span>
+
+        // create a file to make the dir non-empty
+<span class="nc" id="L398">        File currentDir = Bookie.getCurrentDirectory(new File(lPaths[1]));</span>
+<span class="nc" id="L399">        new File(currentDir, &quot;foo&quot;).createNewFile();</span>
+<span class="nc bnc" id="L400" title="All 2 branches missed.">        assertTrue(currentDir.list().length == 1);</span>
+
+        try {
+<span class="nc" id="L403">            b = new Bookie(conf);</span>
+<span class="nc" id="L404">            fail(&quot;Shouldn't have been able to start&quot;);</span>
+<span class="nc" id="L405">        } catch (BookieException.InvalidCookieException ice) {</span>
+            // correct behavior
+<span class="nc" id="L407">        }</span>
+
+        // Now test with a non-empty index dir
+<span class="nc" id="L410">        String[] iPaths = new String[] {indexDir0, newDirectory()};</span>
+<span class="nc" id="L411">        conf.setIndexDirName(iPaths);</span>
+
+        // create a dir to make it non-empty
+<span class="nc" id="L414">        currentDir = Bookie.getCurrentDirectory(new File(iPaths[1]));</span>
+<span class="nc" id="L415">        new File(currentDir, &quot;bar&quot;).mkdirs();</span>
+<span class="nc bnc" id="L416" title="All 2 branches missed.">        assertTrue(currentDir.list().length == 1);</span>
+
+        try {
+<span class="nc" id="L419">            b = new Bookie(conf);</span>
+<span class="nc" id="L420">            fail(&quot;Shouldn't have been able to start&quot;);</span>
+<span class="nc" id="L421">        } catch (BookieException.InvalidCookieException ice) {</span>
+            // correct behavior
+<span class="nc" id="L423">        }</span>
+<span class="nc" id="L424">    }</span>
+
+    /**
+     * Test that if a directory's contents
+     * are emptied, the bookie will fail to start.
+     */
+    @Test
+    public void testDirectoryCleared() throws Exception {
+<span class="nc" id="L432">        String ledgerDir0 = newDirectory();</span>
+<span class="nc" id="L433">        String journalDir = newDirectory();</span>
+<span class="nc" id="L434">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L435">        conf.setJournalDirName(journalDir)</span>
+<span class="nc" id="L436">            .setLedgerDirNames(new String[] { ledgerDir0 , newDirectory() })</span>
+<span class="nc" id="L437">            .setBookiePort(bookiePort)</span>
+<span class="nc" id="L438">            .setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+
+<span class="nc" id="L440">        Bookie b = new Bookie(conf); // should work fine</span>
+<span class="nc" id="L441">        b.start();</span>
+<span class="nc" id="L442">        b.shutdown();</span>
+
+<span class="nc" id="L444">        FileUtils.deleteDirectory(new File(ledgerDir0));</span>
+        try {
+<span class="nc" id="L446">            Bookie b2 = new Bookie(conf);</span>
+<span class="nc" id="L447">            fail(&quot;Shouldn't have been able to start&quot;);</span>
+<span class="nc" id="L448">        } catch (BookieException.InvalidCookieException ice) {</span>
+            // correct behaviour
+<span class="nc" id="L450">        }</span>
+<span class="nc" id="L451">    }</span>
+
+    /**
+     * Test that if a bookie's port is changed
+     * the bookie will fail to start.
+     */
+    @Test
+    public void testBookiePortChanged() throws Exception {
+<span class="nc" id="L459">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L460">        conf.setJournalDirName(newDirectory())</span>
+<span class="nc" id="L461">            .setLedgerDirNames(new String[] { newDirectory() , newDirectory() })</span>
+<span class="nc" id="L462">            .setBookiePort(bookiePort)</span>
+<span class="nc" id="L463">            .setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+<span class="nc" id="L464">        Bookie b = new Bookie(conf); // should work fine</span>
+<span class="nc" id="L465">        b.start();</span>
+<span class="nc" id="L466">        b.shutdown();</span>
+
+<span class="nc" id="L468">        conf.setBookiePort(3182);</span>
+        try {
+<span class="nc" id="L470">            b = new Bookie(conf);</span>
+<span class="nc" id="L471">            fail(&quot;Shouldn't have been able to start&quot;);</span>
+<span class="nc" id="L472">        } catch (BookieException.InvalidCookieException ice) {</span>
+            // correct behaviour
+<span class="nc" id="L474">        }</span>
+<span class="nc" id="L475">    }</span>
+
+    /**
+     * Test that if a bookie tries to start
+     * with the address of a bookie which has already
+     * existed in the system, then the bookie will fail
+     * to start.
+     */
+    @Test
+    public void testNewBookieStartingWithAnotherBookiesPort() throws Exception {
+<span class="nc" id="L485">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L486">        conf.setJournalDirName(newDirectory())</span>
+<span class="nc" id="L487">            .setLedgerDirNames(new String[] { newDirectory() , newDirectory() })</span>
+<span class="nc" id="L488">            .setBookiePort(bookiePort)</span>
+<span class="nc" id="L489">            .setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+<span class="nc" id="L490">        Bookie b = new Bookie(conf); // should work fine</span>
+<span class="nc" id="L491">        b.start();</span>
+<span class="nc" id="L492">        b.shutdown();</span>
+
+<span class="nc" id="L494">        conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L495">        conf.setJournalDirName(newDirectory())</span>
+<span class="nc" id="L496">            .setLedgerDirNames(new String[] { newDirectory() , newDirectory() })</span>
+<span class="nc" id="L497">            .setBookiePort(bookiePort)</span>
+<span class="nc" id="L498">            .setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+        try {
+<span class="nc" id="L500">            b = new Bookie(conf);</span>
+<span class="nc" id="L501">            fail(&quot;Shouldn't have been able to start&quot;);</span>
+<span class="nc" id="L502">        } catch (BookieException.InvalidCookieException ice) {</span>
+            // correct behaviour
+<span class="nc" id="L504">        }</span>
+<span class="nc" id="L505">    }</span>
+
+    /**
+     * Test Cookie verification with format.
+     */
+    @Test
+    public void testVerifyCookieWithFormat() throws Exception {
+<span class="nc" id="L512">        ServerConfiguration adminConf = new ServerConfiguration();</span>
+<span class="nc" id="L513">        adminConf.setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+
+<span class="nc" id="L515">        adminConf.setProperty(&quot;bookkeeper.format&quot;, true);</span>
+        // Format the BK Metadata and generate INSTANCEID
+<span class="nc" id="L517">        BookKeeperAdmin.format(adminConf, false, true);</span>
+
+<span class="nc" id="L519">        ServerConfiguration bookieConf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L520">        bookieConf.setJournalDirName(newDirectory(false))</span>
+<span class="nc" id="L521">            .setLedgerDirNames(new String[] { newDirectory(false) })</span>
+<span class="nc" id="L522">            .setBookiePort(bookiePort)</span>
+<span class="nc" id="L523">            .setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+        // Bookie should start successfully for fresh env.
+<span class="nc" id="L525">        new Bookie(bookieConf);</span>
+
+        // Format metadata one more time.
+<span class="nc" id="L528">        BookKeeperAdmin.format(adminConf, false, true);</span>
+        try {
+<span class="nc" id="L530">            new Bookie(bookieConf);</span>
+<span class="nc" id="L531">            fail(&quot;Bookie should not start with previous instance id.&quot;);</span>
+<span class="nc" id="L532">        } catch (BookieException.InvalidCookieException e) {</span>
+<span class="nc" id="L533">            assertTrue(</span>
+                    &quot;Bookie startup should fail because of invalid instance id&quot;,
+<span class="nc" id="L535">                    e.getMessage().contains(&quot;instanceId&quot;));</span>
+<span class="nc" id="L536">        }</span>
+
+        // Now format the Bookie and restart.
+<span class="nc" id="L539">        Bookie.format(bookieConf, false, true);</span>
+        // After bookie format bookie should be able to start again.
+<span class="nc" id="L541">        new Bookie(bookieConf);</span>
+<span class="nc" id="L542">    }</span>
+
+    /**
+     * Test that if a bookie is started with directories with
+     * version 2 data, that it will fail to start (it needs upgrade).
+     */
+    @Test
+    public void testV2data() throws Exception {
+<span class="nc" id="L550">        File journalDir = newV2JournalDirectory();</span>
+<span class="nc" id="L551">        tmpDirs.add(journalDir);</span>
+<span class="nc" id="L552">        File ledgerDir = newV2LedgerDirectory();</span>
+<span class="nc" id="L553">        tmpDirs.add(ledgerDir);</span>
+
+<span class="nc" id="L555">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L556">        conf.setJournalDirName(journalDir.getPath())</span>
+<span class="nc" id="L557">            .setLedgerDirNames(new String[] { ledgerDir.getPath() })</span>
+<span class="nc" id="L558">            .setBookiePort(bookiePort)</span>
+<span class="nc" id="L559">            .setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+        try {
+<span class="nc" id="L561">            Bookie b = new Bookie(conf);</span>
+<span class="nc" id="L562">            fail(&quot;Shouldn't have been able to start&quot;);</span>
+<span class="nc" id="L563">        } catch (BookieException.InvalidCookieException ice) {</span>
+            // correct behaviour
+<span class="nc" id="L565">            assertTrue(&quot;wrong exception&quot;, ice.getCause().getMessage().contains(&quot;upgrade needed&quot;));</span>
+<span class="nc" id="L566">        }</span>
+<span class="nc" id="L567">    }</span>
+
+    /**
+     * Test that if a bookie is started with directories with
+     * version 1 data, that it will fail to start (it needs upgrade).
+     */
+    @Test
+    public void testV1data() throws Exception {
+<span class="nc" id="L575">        File journalDir = newV1JournalDirectory();</span>
+<span class="nc" id="L576">        tmpDirs.add(journalDir);</span>
+<span class="nc" id="L577">        File ledgerDir = newV1LedgerDirectory();</span>
+<span class="nc" id="L578">        tmpDirs.add(ledgerDir);</span>
+
+<span class="nc" id="L580">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L581">        conf.setJournalDirName(journalDir.getPath())</span>
+<span class="nc" id="L582">            .setLedgerDirNames(new String[]{ledgerDir.getPath()})</span>
+<span class="nc" id="L583">            .setBookiePort(bookiePort)</span>
+<span class="nc" id="L584">            .setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+        try {
+<span class="nc" id="L586">            Bookie b = new Bookie(conf);</span>
+<span class="nc" id="L587">            fail(&quot;Shouldn't have been able to start&quot;);</span>
+<span class="nc" id="L588">        } catch (BookieException.InvalidCookieException ice) {</span>
+            // correct behaviour
+<span class="nc" id="L590">            assertTrue(&quot;wrong exception&quot;, ice.getCause().getMessage().contains(&quot;upgrade needed&quot;));</span>
+<span class="nc" id="L591">        }</span>
+<span class="nc" id="L592">    }</span>
+
+    /**
+     * Test restart bookie with useHostNameAsBookieID=true, which had cookie generated
+     * with ipaddress.
+     */
+    @Test
+    public void testRestartWithHostNameAsBookieID() throws Exception {
+<span class="nc" id="L600">        String[] ledgerDirs = new String[] { newDirectory(), newDirectory(),</span>
+<span class="nc" id="L601">                newDirectory() };</span>
+<span class="nc" id="L602">        String journalDir = newDirectory();</span>
+<span class="nc" id="L603">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L604">        conf.setJournalDirName(journalDir)</span>
+<span class="nc" id="L605">            .setLedgerDirNames(ledgerDirs)</span>
+<span class="nc" id="L606">            .setBookiePort(bookiePort)</span>
+<span class="nc" id="L607">            .setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+<span class="nc" id="L608">        Bookie b = new Bookie(conf); // should work fine</span>
+<span class="nc" id="L609">        b.start();</span>
+<span class="nc" id="L610">        b.shutdown();</span>
+
+<span class="nc" id="L612">        conf.setUseHostNameAsBookieID(true);</span>
+        try {
+<span class="nc" id="L614">            new Bookie(conf);</span>
+<span class="nc" id="L615">            fail(&quot;Should not start a bookie with hostname if the bookie has been started with an ip&quot;);</span>
+<span class="nc" id="L616">        } catch (InvalidCookieException e) {</span>
+            // expected
+<span class="nc" id="L618">        }</span>
+<span class="nc" id="L619">    }</span>
+
+    /**
+     * Test restart bookie with new advertisedAddress, which had cookie generated with ip.
+     */
+    @Test
+    public void testRestartWithAdvertisedAddressAsBookieID() throws Exception {
+<span class="nc" id="L626">        String[] ledgerDirs = new String[] { newDirectory(), newDirectory(),</span>
+<span class="nc" id="L627">                newDirectory() };</span>
+<span class="nc" id="L628">        String journalDir = newDirectory();</span>
+<span class="nc" id="L629">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L630">        conf.setJournalDirName(journalDir)</span>
+<span class="nc" id="L631">            .setLedgerDirNames(ledgerDirs)</span>
+<span class="nc" id="L632">            .setBookiePort(bookiePort)</span>
+<span class="nc" id="L633">            .setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+<span class="nc" id="L634">        conf.setUseHostNameAsBookieID(false);</span>
+<span class="nc" id="L635">        Bookie b = new Bookie(conf); // should work fine</span>
+<span class="nc" id="L636">        b.start();</span>
+<span class="nc" id="L637">        b.shutdown();</span>
+
+<span class="nc" id="L639">        conf.setAdvertisedAddress(&quot;unknown&quot;);</span>
+        try {
+<span class="nc" id="L641">            new Bookie(conf);</span>
+<span class="nc" id="L642">            fail(&quot;Should not start a bookie with ip if the bookie has been started with an ip&quot;);</span>
+<span class="nc" id="L643">        } catch (InvalidCookieException e) {</span>
+            // expected
+<span class="nc" id="L645">        }</span>
+<span class="nc" id="L646">    }</span>
+
+    /**
+     * Test restart bookie with useHostNameAsBookieID=false, which had cookie generated
+     * with hostname.
+     */
+    @Test
+    public void testRestartWithIpAddressAsBookieID() throws Exception {
+<span class="nc" id="L654">        String[] ledgerDirs = new String[] { newDirectory(), newDirectory(),</span>
+<span class="nc" id="L655">                newDirectory() };</span>
+<span class="nc" id="L656">        String journalDir = newDirectory();</span>
+<span class="nc" id="L657">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L658">        conf.setJournalDirName(journalDir).setLedgerDirNames(ledgerDirs)</span>
+<span class="nc" id="L659">            .setBookiePort(bookiePort)</span>
+<span class="nc" id="L660">            .setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+<span class="nc" id="L661">        conf.setUseHostNameAsBookieID(true);</span>
+<span class="nc" id="L662">        Bookie b = new Bookie(conf); // should work fine</span>
+<span class="nc" id="L663">        b.start();</span>
+<span class="nc" id="L664">        b.shutdown();</span>
+
+<span class="nc" id="L666">        conf.setUseHostNameAsBookieID(false);</span>
+        try {
+<span class="nc" id="L668">            new Bookie(conf);</span>
+<span class="nc" id="L669">            fail(&quot;Should not start a bookie with ip if the bookie has been started with an ip&quot;);</span>
+<span class="nc" id="L670">        } catch (InvalidCookieException e) {</span>
+            // expected
+<span class="nc" id="L672">        }</span>
+<span class="nc" id="L673">    }</span>
+
+    /**
+     * Test old version bookie starts with the cookies generated by new version
+     * (with useHostNameAsBookieID=true).
+     */
+    @Test
+    public void testV2dataWithHostNameAsBookieID() throws Exception {
+<span class="nc" id="L681">        File journalDir = newV2JournalDirectory();</span>
+<span class="nc" id="L682">        tmpDirs.add(journalDir);</span>
+<span class="nc" id="L683">        File ledgerDir = newV2LedgerDirectory();</span>
+<span class="nc" id="L684">        tmpDirs.add(ledgerDir);</span>
+
+<span class="nc" id="L686">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L687">        conf.setJournalDirName(journalDir.getPath())</span>
+<span class="nc" id="L688">            .setLedgerDirNames(new String[] { ledgerDir.getPath() })</span>
+<span class="nc" id="L689">            .setBookiePort(bookiePort)</span>
+<span class="nc" id="L690">            .setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+        try {
+<span class="nc" id="L692">            conf.setUseHostNameAsBookieID(true);</span>
+<span class="nc" id="L693">            new Bookie(conf);</span>
+<span class="nc" id="L694">            fail(&quot;Shouldn't have been able to start&quot;);</span>
+<span class="nc" id="L695">        } catch (BookieException.InvalidCookieException ice) {</span>
+            // correct behaviour
+<span class="nc" id="L697">            assertTrue(&quot;wrong exception&quot;,</span>
+<span class="nc" id="L698">                    ice.getCause().getMessage().contains(&quot;upgrade needed&quot;));</span>
+<span class="nc" id="L699">        }</span>
+<span class="nc" id="L700">    }</span>
+
+    /**
+     * Test write cookie multiple times.
+     */
+    @Test
+    public void testWriteToZooKeeper() throws Exception {
+<span class="nc" id="L707">        String[] ledgerDirs = new String[] { newDirectory(), newDirectory(), newDirectory() };</span>
+<span class="nc" id="L708">        String journalDir = newDirectory();</span>
+<span class="nc" id="L709">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L710">        conf.setJournalDirName(journalDir)</span>
+<span class="nc" id="L711">            .setLedgerDirNames(ledgerDirs)</span>
+<span class="nc" id="L712">            .setBookiePort(bookiePort)</span>
+<span class="nc" id="L713">            .setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+<span class="nc" id="L714">        Bookie b = new Bookie(conf); // should work fine</span>
+<span class="nc" id="L715">        b.start();</span>
+<span class="nc" id="L716">        b.shutdown();</span>
+<span class="nc" id="L717">        Versioned&lt;Cookie&gt; zkCookie = Cookie.readFromRegistrationManager(rm, conf);</span>
+<span class="nc" id="L718">        Version version1 = zkCookie.getVersion();</span>
+<span class="nc" id="L719">        assertTrue(&quot;Invalid type expected ZkVersion type&quot;,</span>
+            version1 instanceof LongVersion);
+<span class="nc" id="L721">        LongVersion zkVersion1 = (LongVersion) version1;</span>
+<span class="nc" id="L722">        Cookie cookie = zkCookie.getValue();</span>
+<span class="nc" id="L723">        cookie.writeToRegistrationManager(rm, conf, version1);</span>
+
+<span class="nc" id="L725">        zkCookie = Cookie.readFromRegistrationManager(rm, conf);</span>
+<span class="nc" id="L726">        Version version2 = zkCookie.getVersion();</span>
+<span class="nc" id="L727">        assertTrue(&quot;Invalid type expected ZkVersion type&quot;,</span>
+            version2 instanceof LongVersion);
+<span class="nc" id="L729">        LongVersion zkVersion2 = (LongVersion) version2;</span>
+<span class="nc" id="L730">        assertEquals(&quot;Version mismatches!&quot;,</span>
+<span class="nc" id="L731">            zkVersion1.getLongVersion() + 1, zkVersion2.getLongVersion());</span>
+<span class="nc" id="L732">    }</span>
+
+    /**
+     * Test delete cookie.
+     */
+    @Test
+    public void testDeleteFromZooKeeper() throws Exception {
+<span class="nc" id="L739">        String[] ledgerDirs = new String[] { newDirectory(), newDirectory(), newDirectory() };</span>
+<span class="nc" id="L740">        String journalDir = newDirectory();</span>
+<span class="nc" id="L741">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L742">        conf.setJournalDirName(journalDir)</span>
+<span class="nc" id="L743">            .setLedgerDirNames(ledgerDirs)</span>
+<span class="nc" id="L744">            .setBookiePort(bookiePort)</span>
+<span class="nc" id="L745">            .setMetadataServiceUri(zkUtil.getMetadataServiceUri());</span>
+<span class="nc" id="L746">        Bookie b = new Bookie(conf); // should work fine</span>
+<span class="nc" id="L747">        b.start();</span>
+<span class="nc" id="L748">        b.shutdown();</span>
+<span class="nc" id="L749">        Versioned&lt;Cookie&gt; zkCookie = Cookie.readFromRegistrationManager(rm, conf);</span>
+<span class="nc" id="L750">        Cookie cookie = zkCookie.getValue();</span>
+<span class="nc" id="L751">        cookie.deleteFromRegistrationManager(rm, conf, zkCookie.getVersion());</span>
+<span class="nc" id="L752">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

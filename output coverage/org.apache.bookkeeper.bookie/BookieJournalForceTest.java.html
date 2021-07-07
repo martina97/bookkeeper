@@ -1,0 +1,383 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>BookieJournalForceTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$myBookieFenceLedgerTest.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.bookie</a> &gt; <span class="el_source">BookieJournalForceTest.java</span></div><h1>BookieJournalForceTest.java</h1><pre class="source lang-java linenums">/*
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.bookie;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.powermock.api.mockito.PowerMockito.whenNew;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import java.io.File;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.bookkeeper.bookie.Journal.ForceWriteRequest;
+import org.apache.bookkeeper.bookie.Journal.LastLogMark;
+import org.apache.bookkeeper.bookie.stats.JournalStats;
+import org.apache.bookkeeper.conf.ServerConfiguration;
+import org.apache.bookkeeper.conf.TestBKConfiguration;
+import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.proto.BookkeeperInternalCallbacks.WriteCallback;
+import org.apache.bookkeeper.stats.Counter;
+import org.apache.bookkeeper.test.TestStatsProvider;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
+import org.junit.runner.RunWith;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
+import org.powermock.core.classloader.annotations.PrepareForTest;
+import org.powermock.modules.junit4.PowerMockRunner;
+import org.powermock.reflect.Whitebox;
+
+/**
+ * Test the bookie journal.
+ */
+@RunWith(PowerMockRunner.class)
+@PrepareForTest({JournalChannel.class, Journal.class})
+<span class="nc" id="L67">@Slf4j</span>
+<span class="nc" id="L68">public class BookieJournalForceTest {</span>
+
+<span class="nc" id="L70">    private static final ByteBuf DATA = Unpooled.wrappedBuffer(new byte[]{});</span>
+
+<span class="nc" id="L72">    @Rule</span>
+    public TemporaryFolder tempDir = new TemporaryFolder();
+
+    @Test
+    public void testAckAfterSync() throws Exception {
+<span class="nc" id="L77">        File journalDir = tempDir.newFolder();</span>
+<span class="nc" id="L78">        Bookie.checkDirectoryStructure(Bookie.getCurrentDirectory(journalDir));</span>
+
+<span class="nc" id="L80">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration()</span>
+<span class="nc" id="L81">            .setJournalDirName(journalDir.getPath())</span>
+<span class="nc" id="L82">            .setMetadataServiceUri(null)</span>
+<span class="nc" id="L83">            .setJournalAdaptiveGroupWrites(false);</span>
+
+<span class="nc" id="L85">        JournalChannel jc = spy(new JournalChannel(journalDir, 1));</span>
+<span class="nc" id="L86">        whenNew(JournalChannel.class).withAnyArguments().thenReturn(jc);</span>
+
+<span class="nc" id="L88">        LedgerDirsManager ledgerDirsManager = mock(LedgerDirsManager.class);</span>
+<span class="nc" id="L89">        Journal journal = new Journal(0, journalDir, conf, ledgerDirsManager);</span>
+
+        // machinery to suspend ForceWriteThread
+<span class="nc" id="L92">        CountDownLatch forceWriteThreadSuspendedLatch = new CountDownLatch(1);</span>
+<span class="nc" id="L93">        LinkedBlockingQueue&lt;ForceWriteRequest&gt; supportQueue =</span>
+<span class="nc" id="L94">                enableForceWriteThreadSuspension(forceWriteThreadSuspendedLatch, journal);</span>
+
+<span class="nc" id="L96">        journal.start();</span>
+
+<span class="nc" id="L98">        LogMark lastLogMarkBeforeWrite = journal.getLastLogMark().markLog().getCurMark();</span>
+<span class="nc" id="L99">        CountDownLatch latch = new CountDownLatch(1);</span>
+<span class="nc" id="L100">        long ledgerId = 1;</span>
+<span class="nc" id="L101">        long entryId = 0;</span>
+<span class="nc" id="L102">        journal.logAddEntry(ledgerId, entryId, DATA, false /* ackBeforeSync */, new WriteCallback() {</span>
+            @Override
+            public void writeComplete(int rc, long ledgerId, long entryId, BookieSocketAddress addr, Object ctx) {
+<span class="nc" id="L105">                latch.countDown();</span>
+<span class="nc" id="L106">            }</span>
+        }, null);
+
+        // logAddEntry should not complete even if ForceWriteThread is suspended
+        // wait that an entry is written to the ForceWriteThread queue
+<span class="nc bnc" id="L111" title="All 2 branches missed.">        while (supportQueue.isEmpty()) {</span>
+<span class="nc" id="L112">            Thread.sleep(100);</span>
+        }
+<span class="nc" id="L114">        assertEquals(1, latch.getCount());</span>
+<span class="nc" id="L115">        assertEquals(1, supportQueue.size());</span>
+
+        // in constructor of JournalChannel we are calling forceWrite(true) but it is not tracked by PowerMock
+        // because the 'spy' is applied only on return from the constructor
+<span class="nc" id="L119">        verify(jc, times(0)).forceWrite(true);</span>
+
+        // let ForceWriteThread work
+<span class="nc" id="L122">        forceWriteThreadSuspendedLatch.countDown();</span>
+
+        // callback should complete now
+<span class="nc" id="L125">        assertTrue(latch.await(20, TimeUnit.SECONDS));</span>
+
+<span class="nc" id="L127">        verify(jc, atLeast(1)).forceWrite(false);</span>
+
+<span class="nc" id="L129">        assertEquals(0, supportQueue.size());</span>
+
+        // verify that log marker advanced
+<span class="nc" id="L132">        LastLogMark lastLogMarkAfterForceWrite = journal.getLastLogMark();</span>
+<span class="nc bnc" id="L133" title="All 2 branches missed.">        assertTrue(lastLogMarkAfterForceWrite.getCurMark().compare(lastLogMarkBeforeWrite) &gt; 0);</span>
+
+<span class="nc" id="L135">        journal.shutdown();</span>
+<span class="nc" id="L136">    }</span>
+
+    @Test
+    public void testAckBeforeSync() throws Exception {
+<span class="nc" id="L140">        File journalDir = tempDir.newFolder();</span>
+<span class="nc" id="L141">        Bookie.checkDirectoryStructure(Bookie.getCurrentDirectory(journalDir));</span>
+
+<span class="nc" id="L143">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L144">        conf.setJournalDirName(journalDir.getPath())</span>
+<span class="nc" id="L145">            .setMetadataServiceUri(null)</span>
+<span class="nc" id="L146">            .setJournalAdaptiveGroupWrites(false);</span>
+
+<span class="nc" id="L148">        JournalChannel jc = spy(new JournalChannel(journalDir, 1));</span>
+<span class="nc" id="L149">        whenNew(JournalChannel.class).withAnyArguments().thenReturn(jc);</span>
+
+<span class="nc" id="L151">        LedgerDirsManager ledgerDirsManager = mock(LedgerDirsManager.class);</span>
+<span class="nc" id="L152">        Journal journal = new Journal(0, journalDir, conf, ledgerDirsManager);</span>
+
+        // machinery to suspend ForceWriteThread
+<span class="nc" id="L155">        CountDownLatch forceWriteThreadSuspendedLatch = new CountDownLatch(1);</span>
+<span class="nc" id="L156">        enableForceWriteThreadSuspension(forceWriteThreadSuspendedLatch, journal);</span>
+<span class="nc" id="L157">        journal.start();</span>
+
+<span class="nc" id="L159">        LogMark lastLogMarkBeforeWrite = journal.getLastLogMark().markLog().getCurMark();</span>
+<span class="nc" id="L160">        CountDownLatch latch = new CountDownLatch(1);</span>
+<span class="nc" id="L161">        long ledgerId = 1;</span>
+<span class="nc" id="L162">        long entryId = 0;</span>
+<span class="nc" id="L163">        journal.logAddEntry(ledgerId, entryId, DATA, true /* ackBeforeSync */, new WriteCallback() {</span>
+            @Override
+            public void writeComplete(int rc, long ledgerId, long entryId, BookieSocketAddress addr, Object ctx) {
+<span class="nc" id="L166">                latch.countDown();</span>
+<span class="nc" id="L167">            }</span>
+        }, null);
+        // logAddEntry should complete even if ForceWriteThread is suspended
+<span class="nc" id="L170">        latch.await(20, TimeUnit.SECONDS);</span>
+
+        // in constructor of JournalChannel we are calling forceWrite(true) but it is not tracked by PowerMock
+        // because the 'spy' is applied only on return from the constructor
+<span class="nc" id="L174">        verify(jc, times(0)).forceWrite(true);</span>
+
+        // we are never calling forceWrite
+<span class="nc" id="L177">        verify(jc, times(0)).forceWrite(false);</span>
+
+        // verify that log marker did not advance
+<span class="nc" id="L180">        LastLogMark lastLogMarkAfterForceWrite = journal.getLastLogMark();</span>
+<span class="nc" id="L181">        assertEquals(0, lastLogMarkAfterForceWrite.getCurMark().compare(lastLogMarkBeforeWrite));</span>
+
+        // let the forceWriteThread exit
+<span class="nc" id="L184">        forceWriteThreadSuspendedLatch.countDown();</span>
+
+<span class="nc" id="L186">        journal.shutdown();</span>
+<span class="nc" id="L187">    }</span>
+
+    @Test
+    public void testAckBeforeSyncWithJournalBufferedEntriesThreshold() throws Exception {
+<span class="nc" id="L191">        File journalDir = tempDir.newFolder();</span>
+<span class="nc" id="L192">        Bookie.checkDirectoryStructure(Bookie.getCurrentDirectory(journalDir));</span>
+
+<span class="nc" id="L194">        final int journalBufferedEntriesThreshold = 10;</span>
+        // sending a burst of entries, more than journalBufferedEntriesThreshold
+<span class="nc" id="L196">        final int numEntries = journalBufferedEntriesThreshold + 50;</span>
+
+<span class="nc" id="L198">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L199">        conf.setJournalDirName(journalDir.getPath())</span>
+<span class="nc" id="L200">            .setJournalBufferedEntriesThreshold(journalBufferedEntriesThreshold)</span>
+<span class="nc" id="L201">            .setMetadataServiceUri(null)</span>
+<span class="nc" id="L202">            .setJournalAdaptiveGroupWrites(false);</span>
+
+<span class="nc" id="L204">        JournalChannel jc = spy(new JournalChannel(journalDir, 1));</span>
+<span class="nc" id="L205">        whenNew(JournalChannel.class).withAnyArguments().thenReturn(jc);</span>
+
+<span class="nc" id="L207">        LedgerDirsManager ledgerDirsManager = mock(LedgerDirsManager.class);</span>
+<span class="nc" id="L208">        Journal journal = new Journal(0, journalDir, conf, ledgerDirsManager);</span>
+
+        // machinery to suspend ForceWriteThread
+<span class="nc" id="L211">        CountDownLatch forceWriteThreadSuspendedLatch = new CountDownLatch(1);</span>
+<span class="nc" id="L212">        enableForceWriteThreadSuspension(forceWriteThreadSuspendedLatch, journal);</span>
+
+<span class="nc" id="L214">        JournalStats journalStats = journal.getJournalStats();</span>
+<span class="nc" id="L215">        TestStatsProvider testStatsProvider = new TestStatsProvider();</span>
+<span class="nc" id="L216">        Counter flushMaxOutstandingBytesCounter = testStatsProvider.getStatsLogger(&quot;test&quot;)</span>
+<span class="nc" id="L217">                                                        .getCounter(&quot;flushMaxOutstandingBytesCounter&quot;);</span>
+<span class="nc" id="L218">        Whitebox.setInternalState(journalStats, &quot;flushMaxOutstandingBytesCounter&quot;, flushMaxOutstandingBytesCounter);</span>
+
+<span class="nc" id="L220">        journal.start();</span>
+
+<span class="nc" id="L222">        LogMark lastLogMarkBeforeWrite = journal.getLastLogMark().markLog().getCurMark();</span>
+<span class="nc" id="L223">        CountDownLatch latch = new CountDownLatch(numEntries);</span>
+<span class="nc" id="L224">        long ledgerId = 1;</span>
+<span class="nc bnc" id="L225" title="All 2 branches missed.">        for (long entryId = 0; entryId &lt; numEntries; entryId++) {</span>
+<span class="nc" id="L226">            journal.logAddEntry(ledgerId, entryId, DATA, true /* ackBeforeSync */, new WriteCallback() {</span>
+                @Override
+                public void writeComplete(int rc, long ledgerId, long entryId, BookieSocketAddress addr, Object ctx) {
+<span class="nc" id="L229">                    latch.countDown();</span>
+<span class="nc" id="L230">                }</span>
+            }, null);
+        }
+
+        // logAddEntry should complete even if ForceWriteThread is suspended
+<span class="nc" id="L235">        latch.await(20, TimeUnit.SECONDS);</span>
+
+        // in constructor of JournalChannel we are calling forceWrite(true) but it is not tracked by PowerMock
+        // because the 'spy' is applied only on return from the constructor
+<span class="nc" id="L239">        verify(jc, times(0)).forceWrite(true);</span>
+
+        // anyway we are never calling forceWrite
+<span class="nc" id="L242">        verify(jc, times(0)).forceWrite(false);</span>
+
+        // verify that log marker did not advance
+<span class="nc" id="L245">        LastLogMark lastLogMarkAfterForceWrite = journal.getLastLogMark();</span>
+<span class="nc" id="L246">        assertEquals(0, lastLogMarkAfterForceWrite.getCurMark().compare(lastLogMarkBeforeWrite));</span>
+
+        // let the forceWriteThread exit
+<span class="nc" id="L249">        forceWriteThreadSuspendedLatch.countDown();</span>
+
+<span class="nc bnc" id="L251" title="All 2 branches missed.">        assertTrue(flushMaxOutstandingBytesCounter.get() &gt; 1);</span>
+<span class="nc" id="L252">        journal.shutdown();</span>
+<span class="nc" id="L253">    }</span>
+
+    @Test
+    public void testInterleavedRequests() throws Exception {
+<span class="nc" id="L257">        File journalDir = tempDir.newFolder();</span>
+<span class="nc" id="L258">        Bookie.checkDirectoryStructure(Bookie.getCurrentDirectory(journalDir));</span>
+
+<span class="nc" id="L260">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L261">        conf.setJournalDirName(journalDir.getPath())</span>
+<span class="nc" id="L262">            .setMetadataServiceUri(null);</span>
+
+<span class="nc" id="L264">        JournalChannel jc = spy(new JournalChannel(journalDir, 1));</span>
+<span class="nc" id="L265">        whenNew(JournalChannel.class).withAnyArguments().thenReturn(jc);</span>
+
+<span class="nc" id="L267">        LedgerDirsManager ledgerDirsManager = mock(LedgerDirsManager.class);</span>
+<span class="nc" id="L268">        Journal journal = new Journal(0, journalDir, conf, ledgerDirsManager);</span>
+<span class="nc" id="L269">        journal.start();</span>
+
+<span class="nc" id="L271">        final int numEntries = 100;</span>
+<span class="nc" id="L272">        CountDownLatch latchAckBeforeSynch = new CountDownLatch(numEntries);</span>
+<span class="nc" id="L273">        CountDownLatch latchAckAfterSynch = new CountDownLatch(numEntries);</span>
+
+<span class="nc" id="L275">        long ledgerIdAckBeforeSync = 1;</span>
+<span class="nc" id="L276">        long ledgerIdAckAfterSync = 2;</span>
+<span class="nc bnc" id="L277" title="All 2 branches missed.">        for (long entryId = 0; entryId &lt; numEntries; entryId++) {</span>
+<span class="nc" id="L278">            journal.logAddEntry(ledgerIdAckBeforeSync, entryId, DATA, true, new WriteCallback() {</span>
+                @Override
+                public void writeComplete(int rc, long ledgerId, long entryId, BookieSocketAddress addr, Object ctx) {
+<span class="nc" id="L281">                    latchAckBeforeSynch.countDown();</span>
+<span class="nc" id="L282">                }</span>
+            }, null);
+<span class="nc" id="L284">            journal.logAddEntry(ledgerIdAckAfterSync, entryId, DATA, false, new WriteCallback() {</span>
+                @Override
+                public void writeComplete(int rc, long ledgerId, long entryId, BookieSocketAddress addr, Object ctx) {
+<span class="nc" id="L287">                    latchAckAfterSynch.countDown();</span>
+<span class="nc" id="L288">                }</span>
+            }, null);
+        }
+<span class="nc" id="L291">        assertTrue(latchAckBeforeSynch.await(20, TimeUnit.SECONDS));</span>
+<span class="nc" id="L292">        assertTrue(latchAckAfterSynch.await(20, TimeUnit.SECONDS));</span>
+
+        // in constructor of JournalChannel we are calling forceWrite(true) but it is not tracked by PowerMock
+        // because the 'spy' is applied only on return from the constructor
+<span class="nc" id="L296">        verify(jc, times(0)).forceWrite(true);</span>
+
+<span class="nc" id="L298">        verify(jc, atLeast(1)).forceWrite(false);</span>
+
+<span class="nc" id="L300">        journal.shutdown();</span>
+<span class="nc" id="L301">    }</span>
+
+    @SuppressWarnings(&quot;unchecked&quot;)
+    private LinkedBlockingQueue&lt;ForceWriteRequest&gt; enableForceWriteThreadSuspension(
+        CountDownLatch forceWriteThreadSuspendedLatch,
+        Journal journal) throws InterruptedException {
+<span class="nc" id="L307">        LinkedBlockingQueue&lt;ForceWriteRequest&gt; supportQueue = new LinkedBlockingQueue&lt;&gt;();</span>
+<span class="nc" id="L308">        BlockingQueue&lt;ForceWriteRequest&gt; forceWriteRequests = mock(BlockingQueue.class);</span>
+<span class="nc" id="L309">        doAnswer((Answer) (InvocationOnMock iom) -&gt; {</span>
+<span class="nc" id="L310">            supportQueue.put(iom.getArgument(0));</span>
+<span class="nc" id="L311">            return null;</span>
+<span class="nc" id="L312">        }).when(forceWriteRequests).put(any(ForceWriteRequest.class));</span>
+<span class="nc" id="L313">        when(forceWriteRequests.take()).thenAnswer(i -&gt; {</span>
+            // suspend the force write thread
+<span class="nc" id="L315">            forceWriteThreadSuspendedLatch.await();</span>
+<span class="nc" id="L316">            return supportQueue.take();</span>
+        });
+<span class="nc" id="L318">        Whitebox.setInternalState(journal, &quot;forceWriteRequests&quot;, forceWriteRequests);</span>
+<span class="nc" id="L319">        return supportQueue;</span>
+    }
+
+    @Test
+    public void testForceLedger() throws Exception {
+<span class="nc" id="L324">        File journalDir = tempDir.newFolder();</span>
+<span class="nc" id="L325">        Bookie.checkDirectoryStructure(Bookie.getCurrentDirectory(journalDir));</span>
+
+<span class="nc" id="L327">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L328">        conf.setJournalDirName(journalDir.getPath());</span>
+<span class="nc" id="L329">        conf.setJournalAdaptiveGroupWrites(false);</span>
+
+<span class="nc" id="L331">        JournalChannel jc = spy(new JournalChannel(journalDir, 1));</span>
+<span class="nc" id="L332">        whenNew(JournalChannel.class).withAnyArguments().thenReturn(jc);</span>
+
+<span class="nc" id="L334">        LedgerDirsManager ledgerDirsManager = mock(LedgerDirsManager.class);</span>
+<span class="nc" id="L335">        Journal journal = new Journal(0, journalDir, conf, ledgerDirsManager);</span>
+
+        // machinery to suspend ForceWriteThread
+<span class="nc" id="L338">        CountDownLatch forceWriteThreadSuspendedLatch = new CountDownLatch(1);</span>
+<span class="nc" id="L339">        LinkedBlockingQueue&lt;ForceWriteRequest&gt; supportQueue =</span>
+<span class="nc" id="L340">                enableForceWriteThreadSuspension(forceWriteThreadSuspendedLatch, journal);</span>
+<span class="nc" id="L341">        journal.start();</span>
+
+<span class="nc" id="L343">        LogMark lastLogMarkBeforeWrite = journal.getLastLogMark().markLog().getCurMark();</span>
+<span class="nc" id="L344">        CountDownLatch latch = new CountDownLatch(1);</span>
+<span class="nc" id="L345">        long ledgerId = 1;</span>
+<span class="nc" id="L346">        journal.forceLedger(ledgerId, new WriteCallback() {</span>
+            @Override
+            public void writeComplete(int rc, long ledgerId, long entryId, BookieSocketAddress addr, Object ctx) {
+<span class="nc" id="L349">                latch.countDown();</span>
+<span class="nc" id="L350">            }</span>
+        }, null);
+
+        // forceLedger should not complete even if ForceWriteThread is suspended
+        // wait that an entry is written to the ForceWriteThread queue
+<span class="nc bnc" id="L355" title="All 2 branches missed.">        while (supportQueue.isEmpty()) {</span>
+<span class="nc" id="L356">            Thread.sleep(100);</span>
+        }
+<span class="nc" id="L358">        assertEquals(1, latch.getCount());</span>
+<span class="nc" id="L359">        assertEquals(1, supportQueue.size());</span>
+
+        // in constructor of JournalChannel we are calling forceWrite(true) but it is not tracked by PowerMock
+        // because the 'spy' is applied only on return from the constructor
+<span class="nc" id="L363">        verify(jc, times(0)).forceWrite(true);</span>
+
+        // let ForceWriteThread work
+<span class="nc" id="L366">        forceWriteThreadSuspendedLatch.countDown();</span>
+
+        // callback should complete now
+<span class="nc" id="L369">        assertTrue(latch.await(20, TimeUnit.SECONDS));</span>
+
+<span class="nc" id="L371">        verify(jc, atLeast(1)).forceWrite(false);</span>
+
+<span class="nc" id="L373">        assertEquals(0, supportQueue.size());</span>
+
+        // verify that log marker advanced
+<span class="nc" id="L376">        LastLogMark lastLogMarkAfterForceWrite = journal.getLastLogMark();</span>
+<span class="nc bnc" id="L377" title="All 2 branches missed.">        assertTrue(lastLogMarkAfterForceWrite.getCurMark().compare(lastLogMarkBeforeWrite) &gt; 0);</span>
+
+<span class="nc" id="L379">        journal.shutdown();</span>
+<span class="nc" id="L380">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

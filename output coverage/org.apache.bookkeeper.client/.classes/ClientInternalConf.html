@@ -1,0 +1,189 @@
+
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html id="htmlId">
+<head>
+  <title>Coverage Report :: ClientInternalConf</title>
+  <style type="text/css">
+    @import "../../.css/coverage.css";
+  </style>
+</head>
+
+<body>
+<div class="header"></div>
+
+<div class="content">
+<div class="breadCrumbs">
+    [ <a href="../../index.html">all classes</a> ]
+    [ <a href="../index.html">org.apache.bookkeeper.client</a> ]
+</div>
+
+<h1>Coverage Summary for Class: ClientInternalConf (org.apache.bookkeeper.client)</h1>
+
+<table class="coverageStats">
+<tr>
+  <th class="name">Class</th>
+<th class="coverageStat 
+">
+  Class, %
+</th>
+<th class="coverageStat 
+">
+  Method, %
+</th>
+<th class="coverageStat 
+">
+  Line, %
+</th>
+</tr>
+<tr>
+  <td class="name">ClientInternalConf</td>
+<td class="coverageStat">
+  <span class="percent">
+    100%
+  </span>
+  <span class="absValue">
+    (1/ 1)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    50%
+  </span>
+  <span class="absValue">
+    (2/ 4)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    88,6%
+  </span>
+  <span class="absValue">
+    (31/ 35)
+  </span>
+</td>
+</tr>
+
+</table>
+
+<br/>
+<br/>
+
+
+<div class="sourceCode"><i>1</i>&nbsp;/*
+<i>2</i>&nbsp; *
+<i>3</i>&nbsp; * Licensed to the Apache Software Foundation (ASF) under one
+<i>4</i>&nbsp; * or more contributor license agreements.  See the NOTICE file
+<i>5</i>&nbsp; * distributed with this work for additional information
+<i>6</i>&nbsp; * regarding copyright ownership.  The ASF licenses this file
+<i>7</i>&nbsp; * to you under the Apache License, Version 2.0 (the
+<i>8</i>&nbsp; * &quot;License&quot;); you may not use this file except in compliance
+<i>9</i>&nbsp; * with the License.  You may obtain a copy of the License at
+<i>10</i>&nbsp; *
+<i>11</i>&nbsp; *   http://www.apache.org/licenses/LICENSE-2.0
+<i>12</i>&nbsp; *
+<i>13</i>&nbsp; * Unless required by applicable law or agreed to in writing,
+<i>14</i>&nbsp; * software distributed under the License is distributed on an
+<i>15</i>&nbsp; * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+<i>16</i>&nbsp; * KIND, either express or implied.  See the License for the
+<i>17</i>&nbsp; * specific language governing permissions and limitations
+<i>18</i>&nbsp; * under the License.
+<i>19</i>&nbsp; *
+<i>20</i>&nbsp; */
+<i>21</i>&nbsp;package org.apache.bookkeeper.client;
+<i>22</i>&nbsp;
+<i>23</i>&nbsp;import java.util.Optional;
+<i>24</i>&nbsp;import java.util.concurrent.TimeUnit;
+<i>25</i>&nbsp;
+<i>26</i>&nbsp;import org.apache.bookkeeper.conf.ClientConfiguration;
+<i>27</i>&nbsp;import org.apache.bookkeeper.feature.Feature;
+<i>28</i>&nbsp;import org.apache.bookkeeper.feature.FeatureProvider;
+<i>29</i>&nbsp;import org.apache.bookkeeper.feature.SettableFeatureProvider;
+<i>30</i>&nbsp;
+<i>31</i>&nbsp;class ClientInternalConf {
+<i>32</i>&nbsp;    final Feature disableEnsembleChangeFeature;
+<i>33</i>&nbsp;    final boolean delayEnsembleChange;
+<i>34</i>&nbsp;
+<i>35</i>&nbsp;    final Optional&lt;SpeculativeRequestExecutionPolicy&gt; readSpeculativeRequestPolicy;
+<i>36</i>&nbsp;    final Optional&lt;SpeculativeRequestExecutionPolicy&gt; readLACSpeculativeRequestPolicy;
+<i>37</i>&nbsp;
+<i>38</i>&nbsp;    final int explicitLacInterval;
+<i>39</i>&nbsp;    final long waitForWriteSetMs;
+<i>40</i>&nbsp;    final long addEntryQuorumTimeoutNanos;
+<i>41</i>&nbsp;    final boolean enableParallelRecoveryRead;
+<i>42</i>&nbsp;    final boolean enableReorderReadSequence;
+<i>43</i>&nbsp;    final boolean enableStickyReads;
+<i>44</i>&nbsp;    final int recoveryReadBatchSize;
+<i>45</i>&nbsp;    final int throttleValue;
+<i>46</i>&nbsp;    final int bookieFailureHistoryExpirationMSec;
+<i>47</i>&nbsp;    final int maxAllowedEnsembleChanges;
+<i>48</i>&nbsp;    final long timeoutMonitorIntervalSec;
+<i>49</i>&nbsp;    final boolean enableBookieFailureTracking;
+<i>50</i>&nbsp;    final boolean useV2WireProtocol;
+<i>51</i>&nbsp;    final boolean enforceMinNumFaultDomainsForWrite;
+<i>52</i>&nbsp;
+<i>53</i>&nbsp;    static ClientInternalConf defaultValues() {
+<b class="nc"><i>54</i>&nbsp;        return fromConfig(new ClientConfiguration());</b>
+<i>55</i>&nbsp;    }
+<i>56</i>&nbsp;
+<i>57</i>&nbsp;    static ClientInternalConf fromConfig(ClientConfiguration conf) {
+<b class="nc"><i>58</i>&nbsp;        return fromConfigAndFeatureProvider(conf, SettableFeatureProvider.DISABLE_ALL);</b>
+<i>59</i>&nbsp;    }
+<i>60</i>&nbsp;
+<i>61</i>&nbsp;    static ClientInternalConf fromConfigAndFeatureProvider(ClientConfiguration conf,
+<i>62</i>&nbsp;                                                           FeatureProvider featureProvider) {
+<b class="fc"><i>63</i>&nbsp;        return new ClientInternalConf(conf, featureProvider);</b>
+<i>64</i>&nbsp;    }
+<i>65</i>&nbsp;
+<i>66</i>&nbsp;    private ClientInternalConf(ClientConfiguration conf,
+<b class="fc"><i>67</i>&nbsp;                               FeatureProvider featureProvider) {</b>
+<b class="fc"><i>68</i>&nbsp;        this.explicitLacInterval = conf.getExplictLacInterval();</b>
+<b class="fc"><i>69</i>&nbsp;        this.enableReorderReadSequence = conf.isReorderReadSequenceEnabled();</b>
+<b class="fc"><i>70</i>&nbsp;        this.enableParallelRecoveryRead = conf.getEnableParallelRecoveryRead();</b>
+<b class="fc"><i>71</i>&nbsp;        this.recoveryReadBatchSize = conf.getRecoveryReadBatchSize();</b>
+<b class="fc"><i>72</i>&nbsp;        this.waitForWriteSetMs = conf.getWaitTimeoutOnBackpressureMillis();</b>
+<b class="fc"><i>73</i>&nbsp;        this.addEntryQuorumTimeoutNanos = TimeUnit.SECONDS.toNanos(conf.getAddEntryQuorumTimeout());</b>
+<b class="fc"><i>74</i>&nbsp;        this.throttleValue = conf.getThrottleValue();</b>
+<b class="fc"><i>75</i>&nbsp;        this.bookieFailureHistoryExpirationMSec = conf.getBookieFailureHistoryExpirationMSec();</b>
+<i>76</i>&nbsp;
+<b class="fc"><i>77</i>&nbsp;        this.disableEnsembleChangeFeature = featureProvider.getFeature(conf.getDisableEnsembleChangeFeatureName());</b>
+<i>78</i>&nbsp;
+<b class="fc"><i>79</i>&nbsp;        this.delayEnsembleChange = conf.getDelayEnsembleChange();</b>
+<b class="fc"><i>80</i>&nbsp;        this.maxAllowedEnsembleChanges = conf.getMaxAllowedEnsembleChanges();</b>
+<b class="fc"><i>81</i>&nbsp;        this.timeoutMonitorIntervalSec = conf.getTimeoutMonitorIntervalSec();</b>
+<b class="fc"><i>82</i>&nbsp;        this.enableBookieFailureTracking = conf.getEnableBookieFailureTracking();</b>
+<b class="fc"><i>83</i>&nbsp;        this.useV2WireProtocol = conf.getUseV2WireProtocol();</b>
+<b class="fc"><i>84</i>&nbsp;        this.enableStickyReads = conf.isStickyReadsEnabled();</b>
+<b class="fc"><i>85</i>&nbsp;        this.enforceMinNumFaultDomainsForWrite = conf.getEnforceMinNumFaultDomainsForWrite();</b>
+<i>86</i>&nbsp;
+<b class="pc"><i>87</i>&nbsp;        if (conf.getFirstSpeculativeReadTimeout() &gt; 0) {</b>
+<b class="fc"><i>88</i>&nbsp;            this.readSpeculativeRequestPolicy =</b>
+<b class="fc"><i>89</i>&nbsp;                    Optional.of(new DefaultSpeculativeRequestExecutionPolicy(</b>
+<b class="fc"><i>90</i>&nbsp;                                        conf.getFirstSpeculativeReadTimeout(),</b>
+<b class="fc"><i>91</i>&nbsp;                                        conf.getMaxSpeculativeReadTimeout(),</b>
+<b class="fc"><i>92</i>&nbsp;                                        conf.getSpeculativeReadTimeoutBackoffMultiplier()));</b>
+<i>93</i>&nbsp;        } else {
+<b class="nc"><i>94</i>&nbsp;            this.readSpeculativeRequestPolicy = Optional.&lt;SpeculativeRequestExecutionPolicy&gt;empty();</b>
+<i>95</i>&nbsp;        }
+<b class="pc"><i>96</i>&nbsp;        if (conf.getFirstSpeculativeReadLACTimeout() &gt; 0) {</b>
+<b class="fc"><i>97</i>&nbsp;            this.readLACSpeculativeRequestPolicy =</b>
+<b class="fc"><i>98</i>&nbsp;                    Optional.of(new DefaultSpeculativeRequestExecutionPolicy(</b>
+<b class="fc"><i>99</i>&nbsp;                        conf.getFirstSpeculativeReadLACTimeout(),</b>
+<b class="fc"><i>100</i>&nbsp;                        conf.getMaxSpeculativeReadLACTimeout(),</b>
+<b class="fc"><i>101</i>&nbsp;                        conf.getSpeculativeReadLACTimeoutBackoffMultiplier()));</b>
+<i>102</i>&nbsp;        } else {
+<b class="nc"><i>103</i>&nbsp;            this.readLACSpeculativeRequestPolicy = Optional.&lt;SpeculativeRequestExecutionPolicy&gt;empty();</b>
+<i>104</i>&nbsp;        }
+<b class="fc"><i>105</i>&nbsp;    }</b>
+<i>106</i>&nbsp;}
+</div>
+</div>
+
+<div class="footer">
+    
+    <div style="float:right;">generated on 2021-06-28 15:57</div>
+</div>
+</body>
+</html>

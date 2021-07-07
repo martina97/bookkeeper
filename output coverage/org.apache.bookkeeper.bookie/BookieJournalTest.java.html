@@ -1,0 +1,858 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>BookieJournalTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$myBookieFenceLedgerTest.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.bookie</a> &gt; <span class="el_source">BookieJournalTest.java</span></div><h1>BookieJournalTest.java</h1><pre class="source lang-java linenums">/*
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.bookie;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+
+import java.io.File;
+import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Random;
+
+import org.apache.bookkeeper.bookie.Journal.LastLogMark;
+import org.apache.bookkeeper.client.ClientUtil;
+import org.apache.bookkeeper.client.LedgerHandle;
+import org.apache.bookkeeper.conf.ServerConfiguration;
+import org.apache.bookkeeper.conf.TestBKConfiguration;
+import org.apache.bookkeeper.util.IOUtils;
+import org.apache.commons.io.FileUtils;
+import org.junit.After;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.Mockito;
+import org.powermock.api.mockito.PowerMockito;
+import org.powermock.core.classloader.annotations.PrepareForTest;
+import org.powermock.modules.junit4.PowerMockRunner;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Test the bookie journal.
+ */
+@RunWith(PowerMockRunner.class)
+@PrepareForTest(JournalChannel.class)
+<span class="nc" id="L63">public class BookieJournalTest {</span>
+<span class="nc" id="L64">    private static final Logger LOG = LoggerFactory.getLogger(BookieJournalTest.class);</span>
+
+<span class="nc" id="L66">    final Random r = new Random(System.currentTimeMillis());</span>
+
+<span class="nc" id="L68">    final List&lt;File&gt; tempDirs = new ArrayList&lt;File&gt;();</span>
+
+    File createTempDir(String prefix, String suffix) throws IOException {
+<span class="nc" id="L71">        File dir = IOUtils.createTempDir(prefix, suffix);</span>
+<span class="nc" id="L72">        tempDirs.add(dir);</span>
+<span class="nc" id="L73">        return dir;</span>
+    }
+
+    @After
+    public void tearDown() throws Exception {
+<span class="nc bnc" id="L78" title="All 2 branches missed.">        for (File dir : tempDirs) {</span>
+<span class="nc" id="L79">            FileUtils.deleteDirectory(dir);</span>
+<span class="nc" id="L80">        }</span>
+<span class="nc" id="L81">        tempDirs.clear();</span>
+<span class="nc" id="L82">    }</span>
+
+    private void writeIndexFileForLedger(File indexDir, long ledgerId,
+                                         byte[] masterKey)
+            throws Exception {
+<span class="nc" id="L87">        File fn = new File(indexDir, IndexPersistenceMgr.getLedgerName(ledgerId));</span>
+<span class="nc" id="L88">        fn.getParentFile().mkdirs();</span>
+<span class="nc" id="L89">        FileInfo fi = new FileInfo(fn, masterKey, FileInfo.CURRENT_HEADER_VERSION);</span>
+        // force creation of index file
+<span class="nc" id="L91">        fi.write(new ByteBuffer[]{ ByteBuffer.allocate(0) }, 0);</span>
+<span class="nc" id="L92">        fi.close(true);</span>
+<span class="nc" id="L93">    }</span>
+
+    private void writePartialIndexFileForLedger(File indexDir, long ledgerId,
+                                                byte[] masterKey, boolean truncateToMasterKey)
+            throws Exception {
+<span class="nc" id="L98">        File fn = new File(indexDir, IndexPersistenceMgr.getLedgerName(ledgerId));</span>
+<span class="nc" id="L99">        fn.getParentFile().mkdirs();</span>
+<span class="nc" id="L100">        FileInfo fi = new FileInfo(fn, masterKey, FileInfo.CURRENT_HEADER_VERSION);</span>
+        // force creation of index file
+<span class="nc" id="L102">        fi.write(new ByteBuffer[]{ ByteBuffer.allocate(0) }, 0);</span>
+<span class="nc" id="L103">        fi.close(true);</span>
+        // file info header
+<span class="nc" id="L105">        int headerLen = 8 + 4 + masterKey.length;</span>
+        // truncate the index file
+        int leftSize;
+<span class="nc bnc" id="L108" title="All 2 branches missed.">        if (truncateToMasterKey) {</span>
+<span class="nc" id="L109">            leftSize = r.nextInt(headerLen);</span>
+        } else {
+<span class="nc" id="L111">            leftSize = headerLen + r.nextInt(1024 - headerLen);</span>
+        }
+<span class="nc" id="L113">        FileChannel fc = new RandomAccessFile(fn, &quot;rw&quot;).getChannel();</span>
+<span class="nc" id="L114">        fc.truncate(leftSize);</span>
+<span class="nc" id="L115">        fc.close();</span>
+<span class="nc" id="L116">    }</span>
+
+    /**
+     * Generate fence entry.
+     */
+    private static ByteBuf generateFenceEntry(long ledgerId) {
+<span class="nc" id="L122">        ByteBuf bb = Unpooled.buffer();</span>
+<span class="nc" id="L123">        bb.writeLong(ledgerId);</span>
+<span class="nc" id="L124">        bb.writeLong(Bookie.METAENTRY_ID_FENCE_KEY);</span>
+<span class="nc" id="L125">        return bb;</span>
+    }
+
+    /**
+     * Generate meta entry with given master key.
+     */
+    private static ByteBuf generateMetaEntry(long ledgerId, byte[] masterKey) {
+<span class="nc" id="L132">        ByteBuf bb = Unpooled.buffer();</span>
+<span class="nc" id="L133">        bb.writeLong(ledgerId);</span>
+<span class="nc" id="L134">        bb.writeLong(Bookie.METAENTRY_ID_LEDGER_KEY);</span>
+<span class="nc" id="L135">        bb.writeInt(masterKey.length);</span>
+<span class="nc" id="L136">        bb.writeBytes(masterKey);</span>
+<span class="nc" id="L137">        return bb;</span>
+    }
+
+    private void writeJunkJournal(File journalDir) throws Exception {
+<span class="nc" id="L141">        long logId = System.currentTimeMillis();</span>
+<span class="nc" id="L142">        File fn = new File(journalDir, Long.toHexString(logId) + &quot;.txn&quot;);</span>
+
+<span class="nc" id="L144">        FileChannel fc = new RandomAccessFile(fn, &quot;rw&quot;).getChannel();</span>
+
+<span class="nc" id="L146">        ByteBuffer zeros = ByteBuffer.allocate(512);</span>
+<span class="nc" id="L147">        fc.write(zeros, 4 * 1024 * 1024);</span>
+<span class="nc" id="L148">        fc.position(0);</span>
+
+<span class="nc bnc" id="L150" title="All 2 branches missed.">        for (int i = 1; i &lt;= 10; i++) {</span>
+<span class="nc" id="L151">            fc.write(ByteBuffer.wrap(&quot;JunkJunkJunk&quot;.getBytes()));</span>
+        }
+<span class="nc" id="L153">    }</span>
+
+    private void writePreV2Journal(File journalDir, int numEntries) throws Exception {
+<span class="nc" id="L156">        long logId = System.currentTimeMillis();</span>
+<span class="nc" id="L157">        File fn = new File(journalDir, Long.toHexString(logId) + &quot;.txn&quot;);</span>
+
+<span class="nc" id="L159">        FileChannel fc = new RandomAccessFile(fn, &quot;rw&quot;).getChannel();</span>
+
+<span class="nc" id="L161">        ByteBuffer zeros = ByteBuffer.allocate(512);</span>
+<span class="nc" id="L162">        fc.write(zeros, 4 * 1024 * 1024);</span>
+<span class="nc" id="L163">        fc.position(0);</span>
+
+<span class="nc" id="L165">        byte[] data = &quot;JournalTestData&quot;.getBytes();</span>
+<span class="nc" id="L166">        long lastConfirmed = LedgerHandle.INVALID_ENTRY_ID;</span>
+<span class="nc bnc" id="L167" title="All 2 branches missed.">        for (int i = 1; i &lt;= numEntries; i++) {</span>
+<span class="nc" id="L168">            ByteBuf packet = ClientUtil.generatePacket(1, i, lastConfirmed, i * data.length, data);</span>
+<span class="nc" id="L169">            lastConfirmed = i;</span>
+<span class="nc" id="L170">            ByteBuffer lenBuff = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L171">            lenBuff.putInt(packet.readableBytes());</span>
+<span class="nc" id="L172">            lenBuff.flip();</span>
+
+<span class="nc" id="L174">            fc.write(lenBuff);</span>
+<span class="nc" id="L175">            fc.write(packet.nioBuffer());</span>
+<span class="nc" id="L176">            packet.release();</span>
+        }
+<span class="nc" id="L178">    }</span>
+
+    private static void moveToPosition(JournalChannel jc, long pos) throws IOException {
+<span class="nc" id="L181">        jc.fc.position(pos);</span>
+<span class="nc" id="L182">        jc.bc.position = pos;</span>
+<span class="nc" id="L183">        jc.bc.writeBufferStartPosition.set(pos);</span>
+<span class="nc" id="L184">    }</span>
+
+    private static void updateJournalVersion(JournalChannel jc, int journalVersion) throws IOException {
+<span class="nc" id="L187">        long prevPos = jc.fc.position();</span>
+        try {
+<span class="nc" id="L189">            ByteBuffer versionBuffer = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L190">            versionBuffer.putInt(journalVersion);</span>
+<span class="nc" id="L191">            versionBuffer.flip();</span>
+<span class="nc" id="L192">            jc.fc.position(4);</span>
+<span class="nc" id="L193">            IOUtils.writeFully(jc.fc, versionBuffer);</span>
+<span class="nc" id="L194">            jc.fc.force(true);</span>
+        } finally {
+<span class="nc" id="L196">            jc.fc.position(prevPos);</span>
+        }
+<span class="nc" id="L198">    }</span>
+
+    private JournalChannel writeV2Journal(File journalDir, int numEntries) throws Exception {
+<span class="nc" id="L201">        long logId = System.currentTimeMillis();</span>
+<span class="nc" id="L202">        JournalChannel jc = new JournalChannel(journalDir, logId);</span>
+
+<span class="nc" id="L204">        moveToPosition(jc, JournalChannel.VERSION_HEADER_SIZE);</span>
+
+<span class="nc" id="L206">        BufferedChannel bc = jc.getBufferedChannel();</span>
+
+<span class="nc" id="L208">        byte[] data = new byte[1024];</span>
+<span class="nc" id="L209">        Arrays.fill(data, (byte) 'X');</span>
+<span class="nc" id="L210">        long lastConfirmed = LedgerHandle.INVALID_ENTRY_ID;</span>
+<span class="nc bnc" id="L211" title="All 2 branches missed.">        for (int i = 1; i &lt;= numEntries; i++) {</span>
+<span class="nc" id="L212">            ByteBuf packet = ClientUtil.generatePacket(1, i, lastConfirmed, i * data.length, data);</span>
+<span class="nc" id="L213">            lastConfirmed = i;</span>
+<span class="nc" id="L214">            ByteBuffer lenBuff = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L215">            lenBuff.putInt(packet.readableBytes());</span>
+<span class="nc" id="L216">            lenBuff.flip();</span>
+
+<span class="nc" id="L218">            bc.write(Unpooled.wrappedBuffer(lenBuff));</span>
+<span class="nc" id="L219">            bc.write(packet);</span>
+<span class="nc" id="L220">            packet.release();</span>
+        }
+<span class="nc" id="L222">        bc.flushAndForceWrite(false);</span>
+
+<span class="nc" id="L224">        updateJournalVersion(jc, JournalChannel.V2);</span>
+
+<span class="nc" id="L226">        return jc;</span>
+    }
+
+    private JournalChannel writeV3Journal(File journalDir, int numEntries, byte[] masterKey) throws Exception {
+<span class="nc" id="L230">        long logId = System.currentTimeMillis();</span>
+<span class="nc" id="L231">        JournalChannel jc = new JournalChannel(journalDir, logId);</span>
+
+<span class="nc" id="L233">        moveToPosition(jc, JournalChannel.VERSION_HEADER_SIZE);</span>
+
+<span class="nc" id="L235">        BufferedChannel bc = jc.getBufferedChannel();</span>
+
+<span class="nc" id="L237">        byte[] data = new byte[1024];</span>
+<span class="nc" id="L238">        Arrays.fill(data, (byte) 'X');</span>
+<span class="nc" id="L239">        long lastConfirmed = LedgerHandle.INVALID_ENTRY_ID;</span>
+<span class="nc bnc" id="L240" title="All 2 branches missed.">        for (int i = 0; i &lt;= numEntries; i++) {</span>
+            ByteBuf packet;
+<span class="nc bnc" id="L242" title="All 2 branches missed.">            if (i == 0) {</span>
+<span class="nc" id="L243">                packet = generateMetaEntry(1, masterKey);</span>
+            } else {
+<span class="nc" id="L245">                packet = ClientUtil.generatePacket(1, i, lastConfirmed, i * data.length, data);</span>
+            }
+<span class="nc" id="L247">            lastConfirmed = i;</span>
+<span class="nc" id="L248">            ByteBuffer lenBuff = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L249">            lenBuff.putInt(packet.readableBytes());</span>
+<span class="nc" id="L250">            lenBuff.flip();</span>
+
+<span class="nc" id="L252">            bc.write(Unpooled.wrappedBuffer(lenBuff));</span>
+<span class="nc" id="L253">            bc.write(packet);</span>
+<span class="nc" id="L254">            packet.release();</span>
+        }
+<span class="nc" id="L256">        bc.flushAndForceWrite(false);</span>
+
+<span class="nc" id="L258">        updateJournalVersion(jc, JournalChannel.V3);</span>
+
+<span class="nc" id="L260">        return jc;</span>
+    }
+
+    private JournalChannel writeV4Journal(File journalDir, int numEntries, byte[] masterKey) throws Exception {
+<span class="nc" id="L264">        long logId = System.currentTimeMillis();</span>
+<span class="nc" id="L265">        JournalChannel jc = new JournalChannel(journalDir, logId);</span>
+
+<span class="nc" id="L267">        moveToPosition(jc, JournalChannel.VERSION_HEADER_SIZE);</span>
+
+<span class="nc" id="L269">        BufferedChannel bc = jc.getBufferedChannel();</span>
+
+<span class="nc" id="L271">        byte[] data = new byte[1024];</span>
+<span class="nc" id="L272">        Arrays.fill(data, (byte) 'X');</span>
+<span class="nc" id="L273">        long lastConfirmed = LedgerHandle.INVALID_ENTRY_ID;</span>
+<span class="nc bnc" id="L274" title="All 2 branches missed.">        for (int i = 0; i &lt;= numEntries; i++) {</span>
+            ByteBuf packet;
+<span class="nc bnc" id="L276" title="All 2 branches missed.">            if (i == 0) {</span>
+<span class="nc" id="L277">                packet = generateMetaEntry(1, masterKey);</span>
+            } else {
+<span class="nc" id="L279">                packet = ClientUtil.generatePacket(1, i, lastConfirmed, i * data.length, data);</span>
+            }
+<span class="nc" id="L281">            lastConfirmed = i;</span>
+<span class="nc" id="L282">            ByteBuffer lenBuff = ByteBuffer.allocate(4);</span>
+<span class="nc" id="L283">            lenBuff.putInt(packet.readableBytes());</span>
+<span class="nc" id="L284">            lenBuff.flip();</span>
+<span class="nc" id="L285">            bc.write(Unpooled.wrappedBuffer(lenBuff));</span>
+<span class="nc" id="L286">            bc.write(packet);</span>
+<span class="nc" id="L287">            packet.release();</span>
+        }
+        // write fence key
+<span class="nc" id="L290">        ByteBuf packet = generateFenceEntry(1);</span>
+<span class="nc" id="L291">        ByteBuf lenBuf = Unpooled.buffer();</span>
+<span class="nc" id="L292">        lenBuf.writeInt(packet.readableBytes());</span>
+<span class="nc" id="L293">        bc.write(lenBuf);</span>
+<span class="nc" id="L294">        bc.write(packet);</span>
+<span class="nc" id="L295">        bc.flushAndForceWrite(false);</span>
+<span class="nc" id="L296">        updateJournalVersion(jc, JournalChannel.V4);</span>
+<span class="nc" id="L297">        return jc;</span>
+    }
+
+    static JournalChannel writeV5Journal(File journalDir, int numEntries,
+                                         byte[] masterKey) throws Exception {
+<span class="nc" id="L302">        return writeV5Journal(journalDir, numEntries, masterKey, false);</span>
+    }
+
+    static JournalChannel writeV5Journal(File journalDir, int numEntries,
+                                         byte[] masterKey, boolean corruptLength) throws Exception {
+<span class="nc" id="L307">        long logId = System.currentTimeMillis();</span>
+<span class="nc" id="L308">        JournalChannel jc = new JournalChannel(journalDir, logId);</span>
+
+<span class="nc" id="L310">        BufferedChannel bc = jc.getBufferedChannel();</span>
+
+<span class="nc" id="L312">        ByteBuf paddingBuff = Unpooled.buffer();</span>
+<span class="nc" id="L313">        paddingBuff.writeZero(2 * JournalChannel.SECTOR_SIZE);</span>
+<span class="nc" id="L314">        byte[] data = new byte[4 * 1024 * 1024];</span>
+<span class="nc" id="L315">        Arrays.fill(data, (byte) 'X');</span>
+<span class="nc" id="L316">        long lastConfirmed = LedgerHandle.INVALID_ENTRY_ID;</span>
+<span class="nc" id="L317">        long length = 0;</span>
+<span class="nc bnc" id="L318" title="All 2 branches missed.">        for (int i = 0; i &lt;= numEntries; i++) {</span>
+            ByteBuf packet;
+<span class="nc bnc" id="L320" title="All 2 branches missed.">            if (i == 0) {</span>
+<span class="nc" id="L321">                packet = generateMetaEntry(1, masterKey);</span>
+            } else {
+<span class="nc" id="L323">                packet = ClientUtil.generatePacket(1, i, lastConfirmed, length, data, 0, i);</span>
+            }
+<span class="nc" id="L325">            lastConfirmed = i;</span>
+<span class="nc" id="L326">            length += i;</span>
+<span class="nc" id="L327">            ByteBuf lenBuff = Unpooled.buffer();</span>
+<span class="nc bnc" id="L328" title="All 2 branches missed.">            if (corruptLength) {</span>
+<span class="nc" id="L329">                lenBuff.writeInt(-1);</span>
+            } else {
+<span class="nc" id="L331">                lenBuff.writeInt(packet.readableBytes());</span>
+            }
+<span class="nc" id="L333">            bc.write(lenBuff);</span>
+<span class="nc" id="L334">            bc.write(packet);</span>
+<span class="nc" id="L335">            packet.release();</span>
+<span class="nc" id="L336">            Journal.writePaddingBytes(jc, paddingBuff, JournalChannel.SECTOR_SIZE);</span>
+        }
+        // write fence key
+<span class="nc" id="L339">        ByteBuf packet = generateFenceEntry(1);</span>
+<span class="nc" id="L340">        ByteBuf lenBuf = Unpooled.buffer();</span>
+<span class="nc" id="L341">        lenBuf.writeInt(packet.readableBytes());</span>
+<span class="nc" id="L342">        bc.write(lenBuf);</span>
+<span class="nc" id="L343">        bc.write(packet);</span>
+<span class="nc" id="L344">        Journal.writePaddingBytes(jc, paddingBuff, JournalChannel.SECTOR_SIZE);</span>
+<span class="nc" id="L345">        bc.flushAndForceWrite(false);</span>
+<span class="nc" id="L346">        updateJournalVersion(jc, JournalChannel.V5);</span>
+<span class="nc" id="L347">        return jc;</span>
+    }
+
+    /**
+     * test that we can open a journal written without the magic
+     * word at the start. This is for versions of bookkeeper before
+     * the magic word was introduced
+     */
+    @Test
+    public void testPreV2Journal() throws Exception {
+<span class="nc" id="L357">        File journalDir = createTempDir(&quot;bookie&quot;, &quot;journal&quot;);</span>
+<span class="nc" id="L358">        Bookie.checkDirectoryStructure(Bookie.getCurrentDirectory(journalDir));</span>
+
+<span class="nc" id="L360">        File ledgerDir = createTempDir(&quot;bookie&quot;, &quot;ledger&quot;);</span>
+<span class="nc" id="L361">        Bookie.checkDirectoryStructure(Bookie.getCurrentDirectory(ledgerDir));</span>
+
+<span class="nc" id="L363">        writePreV2Journal(Bookie.getCurrentDirectory(journalDir), 100);</span>
+<span class="nc" id="L364">        writeIndexFileForLedger(Bookie.getCurrentDirectory(ledgerDir), 1, &quot;testPasswd&quot;.getBytes());</span>
+
+<span class="nc" id="L366">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L367">        conf.setJournalDirName(journalDir.getPath())</span>
+<span class="nc" id="L368">            .setLedgerDirNames(new String[] { ledgerDir.getPath() })</span>
+<span class="nc" id="L369">            .setMetadataServiceUri(null);</span>
+
+<span class="nc" id="L371">        Bookie b = createBookieAndReadJournal(conf);</span>
+
+<span class="nc" id="L373">        b.readEntry(1, 100);</span>
+        try {
+<span class="nc" id="L375">            b.readEntry(1, 101);</span>
+<span class="nc" id="L376">            fail(&quot;Shouldn't have found entry 101&quot;);</span>
+<span class="nc" id="L377">        } catch (Bookie.NoEntryException e) {</span>
+            // correct behaviour
+<span class="nc" id="L379">        }</span>
+
+<span class="nc" id="L381">        b.shutdown();</span>
+<span class="nc" id="L382">    }</span>
+
+    @Test
+    public void testV4Journal() throws Exception {
+<span class="nc" id="L386">        File journalDir = createTempDir(&quot;bookie&quot;, &quot;journal&quot;);</span>
+<span class="nc" id="L387">        Bookie.checkDirectoryStructure(Bookie.getCurrentDirectory(journalDir));</span>
+
+<span class="nc" id="L389">        File ledgerDir = createTempDir(&quot;bookie&quot;, &quot;ledger&quot;);</span>
+<span class="nc" id="L390">        Bookie.checkDirectoryStructure(Bookie.getCurrentDirectory(ledgerDir));</span>
+
+<span class="nc" id="L392">        writeV4Journal(Bookie.getCurrentDirectory(journalDir), 100, &quot;testPasswd&quot;.getBytes());</span>
+
+<span class="nc" id="L394">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L395">        conf.setJournalDirName(journalDir.getPath())</span>
+<span class="nc" id="L396">            .setLedgerDirNames(new String[] { ledgerDir.getPath() })</span>
+<span class="nc" id="L397">            .setMetadataServiceUri(null);</span>
+
+<span class="nc" id="L399">        Bookie b = createBookieAndReadJournal(conf);</span>
+
+<span class="nc" id="L401">        b.readEntry(1, 100);</span>
+        try {
+<span class="nc" id="L403">            b.readEntry(1, 101);</span>
+<span class="nc" id="L404">            fail(&quot;Shouldn't have found entry 101&quot;);</span>
+<span class="nc" id="L405">        } catch (Bookie.NoEntryException e) {</span>
+            // correct behaviour
+<span class="nc" id="L407">        }</span>
+<span class="nc" id="L408">        assertTrue(b.handles.getHandle(1, &quot;testPasswd&quot;.getBytes()).isFenced());</span>
+
+<span class="nc" id="L410">        b.shutdown();</span>
+<span class="nc" id="L411">    }</span>
+
+    @Test
+    public void testV5Journal() throws Exception {
+<span class="nc" id="L415">        File journalDir = createTempDir(&quot;bookie&quot;, &quot;journal&quot;);</span>
+<span class="nc" id="L416">        Bookie.checkDirectoryStructure(Bookie.getCurrentDirectory(journalDir));</span>
+
+<span class="nc" id="L418">        File ledgerDir = createTempDir(&quot;bookie&quot;, &quot;ledger&quot;);</span>
+<span class="nc" id="L419">        Bookie.checkDirectoryStructure(Bookie.getCurrentDirectory(ledgerDir));</span>
+
+<span class="nc" id="L421">        writeV5Journal(Bookie.getCurrentDirectory(journalDir), 2 * JournalChannel.SECTOR_SIZE,</span>
+<span class="nc" id="L422">                &quot;testV5Journal&quot;.getBytes());</span>
+
+<span class="nc" id="L424">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L425">        conf.setJournalDirName(journalDir.getPath())</span>
+<span class="nc" id="L426">            .setLedgerDirNames(new String[] { ledgerDir.getPath() })</span>
+<span class="nc" id="L427">            .setMetadataServiceUri(null);</span>
+
+<span class="nc" id="L429">        Bookie b = createBookieAndReadJournal(conf);</span>
+
+<span class="nc bnc" id="L431" title="All 2 branches missed.">        for (int i = 1; i &lt;= 2 * JournalChannel.SECTOR_SIZE; i++) {</span>
+<span class="nc" id="L432">            b.readEntry(1, i);</span>
+        }
+        try {
+<span class="nc" id="L435">            b.readEntry(1, 2 * JournalChannel.SECTOR_SIZE + 1);</span>
+<span class="nc" id="L436">            fail(&quot;Shouldn't have found entry &quot; + (2 * JournalChannel.SECTOR_SIZE + 1));</span>
+<span class="nc" id="L437">        } catch (Bookie.NoEntryException e) {</span>
+            // correct behavior
+<span class="nc" id="L439">        }</span>
+<span class="nc" id="L440">        assertTrue(b.handles.getHandle(1, &quot;testV5Journal&quot;.getBytes()).isFenced());</span>
+
+<span class="nc" id="L442">        b.shutdown();</span>
+<span class="nc" id="L443">    }</span>
+
+    /**
+     * Test that if the journal is all journal, we can not
+     * start the bookie. An admin should look to see what has
+     * happened in this case
+     */
+    @Test
+    public void testAllJunkJournal() throws Exception {
+<span class="nc" id="L452">        File journalDir = createTempDir(&quot;bookie&quot;, &quot;journal&quot;);</span>
+<span class="nc" id="L453">        Bookie.checkDirectoryStructure(Bookie.getCurrentDirectory(journalDir));</span>
+
+<span class="nc" id="L455">        File ledgerDir = createTempDir(&quot;bookie&quot;, &quot;ledger&quot;);</span>
+<span class="nc" id="L456">        Bookie.checkDirectoryStructure(Bookie.getCurrentDirectory(ledgerDir));</span>
+
+<span class="nc" id="L458">        writeJunkJournal(Bookie.getCurrentDirectory(journalDir));</span>
+
+<span class="nc" id="L460">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L461">        conf.setJournalDirName(journalDir.getPath())</span>
+<span class="nc" id="L462">            .setLedgerDirNames(new String[] { ledgerDir.getPath() })</span>
+<span class="nc" id="L463">            .setMetadataServiceUri(null);</span>
+
+<span class="nc" id="L465">        Bookie b = null;</span>
+        try {
+<span class="nc" id="L467">            b = new Bookie(conf);</span>
+<span class="nc" id="L468">            fail(&quot;Shouldn't have been able to start without admin&quot;);</span>
+<span class="nc" id="L469">        } catch (Throwable t) {</span>
+            // correct behaviour
+        } finally {
+<span class="nc bnc" id="L472" title="All 2 branches missed.">            if (b != null) {</span>
+<span class="nc" id="L473">                b.shutdown();</span>
+            }
+        }
+<span class="nc" id="L476">    }</span>
+
+    /**
+     * Test that we can start with an empty journal.
+     * This can happen if the bookie crashes between creating the
+     * journal and writing the magic word. It could also happen before
+     * the magic word existed, if the bookie started but nothing was
+     * ever written.
+     */
+    @Test
+    public void testEmptyJournal() throws Exception {
+<span class="nc" id="L487">        File journalDir = createTempDir(&quot;bookie&quot;, &quot;journal&quot;);</span>
+<span class="nc" id="L488">        Bookie.checkDirectoryStructure(Bookie.getCurrentDirectory(journalDir));</span>
+
+<span class="nc" id="L490">        File ledgerDir = createTempDir(&quot;bookie&quot;, &quot;ledger&quot;);</span>
+<span class="nc" id="L491">        Bookie.checkDirectoryStructure(Bookie.getCurrentDirectory(ledgerDir));</span>
+
+<span class="nc" id="L493">        writePreV2Journal(Bookie.getCurrentDirectory(journalDir), 0);</span>
+
+<span class="nc" id="L495">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L496">        conf.setJournalDirName(journalDir.getPath())</span>
+<span class="nc" id="L497">            .setLedgerDirNames(new String[] { ledgerDir.getPath() })</span>
+<span class="nc" id="L498">            .setMetadataServiceUri(null);</span>
+
+<span class="nc" id="L500">        Bookie b = new Bookie(conf);</span>
+<span class="nc" id="L501">    }</span>
+
+    /**
+     * Test that a journal can load if only the magic word and
+     * version are there.
+     */
+    @Test
+    public void testHeaderOnlyJournal() throws Exception {
+<span class="nc" id="L509">        File journalDir = createTempDir(&quot;bookie&quot;, &quot;journal&quot;);</span>
+<span class="nc" id="L510">        Bookie.checkDirectoryStructure(Bookie.getCurrentDirectory(journalDir));</span>
+
+<span class="nc" id="L512">        File ledgerDir = createTempDir(&quot;bookie&quot;, &quot;ledger&quot;);</span>
+<span class="nc" id="L513">        Bookie.checkDirectoryStructure(Bookie.getCurrentDirectory(ledgerDir));</span>
+
+<span class="nc" id="L515">        writeV2Journal(Bookie.getCurrentDirectory(journalDir), 0);</span>
+
+<span class="nc" id="L517">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L518">        conf.setJournalDirName(journalDir.getPath())</span>
+<span class="nc" id="L519">            .setLedgerDirNames(new String[] { ledgerDir.getPath() })</span>
+<span class="nc" id="L520">            .setMetadataServiceUri(null);</span>
+
+<span class="nc" id="L522">        Bookie b = new Bookie(conf);</span>
+<span class="nc" id="L523">    }</span>
+
+    /**
+     * Test that if a journal has junk at the end, it does not load.
+     * If the journal is corrupt like this, admin intervention is needed
+     */
+    @Test
+    public void testJunkEndedJournal() throws Exception {
+<span class="nc" id="L531">        File journalDir = createTempDir(&quot;bookie&quot;, &quot;journal&quot;);</span>
+<span class="nc" id="L532">        Bookie.checkDirectoryStructure(Bookie.getCurrentDirectory(journalDir));</span>
+
+<span class="nc" id="L534">        File ledgerDir = createTempDir(&quot;bookie&quot;, &quot;ledger&quot;);</span>
+<span class="nc" id="L535">        Bookie.checkDirectoryStructure(Bookie.getCurrentDirectory(ledgerDir));</span>
+
+<span class="nc" id="L537">        JournalChannel jc = writeV2Journal(Bookie.getCurrentDirectory(journalDir), 0);</span>
+<span class="nc" id="L538">        jc.getBufferedChannel().write(Unpooled.wrappedBuffer(&quot;JunkJunkJunk&quot;.getBytes()));</span>
+<span class="nc" id="L539">        jc.getBufferedChannel().flushAndForceWrite(false);</span>
+
+<span class="nc" id="L541">        writeIndexFileForLedger(ledgerDir, 1, &quot;testPasswd&quot;.getBytes());</span>
+
+<span class="nc" id="L543">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L544">        conf.setJournalDirName(journalDir.getPath())</span>
+<span class="nc" id="L545">            .setLedgerDirNames(new String[] { ledgerDir.getPath() })</span>
+<span class="nc" id="L546">            .setMetadataServiceUri(null);</span>
+
+<span class="nc" id="L548">        Bookie b = null;</span>
+        try {
+<span class="nc" id="L550">            b = new Bookie(conf);</span>
+<span class="nc" id="L551">        } catch (Throwable t) {</span>
+            // correct behaviour
+<span class="nc" id="L553">        }</span>
+<span class="nc" id="L554">    }</span>
+
+    /**
+     * Test that if the bookie crashes while writing the length
+     * of an entry, that we can recover.
+     *
+     * &lt;p&gt;This is currently not the case, which is bad as recovery
+     * should be fine here. The bookie has crashed while writing
+     * but so the client has not be notified of success.
+     */
+    @Test
+    public void testTruncatedInLenJournal() throws Exception {
+<span class="nc" id="L566">        File journalDir = createTempDir(&quot;bookie&quot;, &quot;journal&quot;);</span>
+<span class="nc" id="L567">        Bookie.checkDirectoryStructure(Bookie.getCurrentDirectory(journalDir));</span>
+
+<span class="nc" id="L569">        File ledgerDir = createTempDir(&quot;bookie&quot;, &quot;ledger&quot;);</span>
+<span class="nc" id="L570">        Bookie.checkDirectoryStructure(Bookie.getCurrentDirectory(ledgerDir));</span>
+
+<span class="nc" id="L572">        JournalChannel jc = writeV2Journal(</span>
+<span class="nc" id="L573">                Bookie.getCurrentDirectory(journalDir), 100);</span>
+<span class="nc" id="L574">        ByteBuffer zeros = ByteBuffer.allocate(2048);</span>
+
+<span class="nc" id="L576">        jc.fc.position(jc.getBufferedChannel().position() - 0x429);</span>
+<span class="nc" id="L577">        jc.fc.write(zeros);</span>
+<span class="nc" id="L578">        jc.fc.force(false);</span>
+
+<span class="nc" id="L580">        writeIndexFileForLedger(Bookie.getCurrentDirectory(ledgerDir),</span>
+<span class="nc" id="L581">                                1, &quot;testPasswd&quot;.getBytes());</span>
+
+<span class="nc" id="L583">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L584">        conf.setJournalDirName(journalDir.getPath())</span>
+<span class="nc" id="L585">            .setLedgerDirNames(new String[] { ledgerDir.getPath() })</span>
+<span class="nc" id="L586">            .setMetadataServiceUri(null);</span>
+
+<span class="nc" id="L588">        Bookie b = createBookieAndReadJournal(conf);</span>
+
+<span class="nc" id="L590">        b.readEntry(1, 99);</span>
+
+        try {
+<span class="nc" id="L593">            b.readEntry(1, 100);</span>
+<span class="nc" id="L594">            fail(&quot;Shouldn't have found entry 100&quot;);</span>
+<span class="nc" id="L595">        } catch (Bookie.NoEntryException e) {</span>
+            // correct behaviour
+<span class="nc" id="L597">        }</span>
+<span class="nc" id="L598">    }</span>
+
+    /**
+     * Test that if the bookie crashes in the middle of writing
+     * the actual entry it can recover.
+     * In this case the entry will be available, but it will corrupt.
+     * This is ok, as the client will disregard the entry after looking
+     * at its checksum.
+     */
+    @Test
+    public void testTruncatedInEntryJournal() throws Exception {
+<span class="nc" id="L609">        File journalDir = createTempDir(&quot;bookie&quot;, &quot;journal&quot;);</span>
+<span class="nc" id="L610">        Bookie.checkDirectoryStructure(Bookie.getCurrentDirectory(journalDir));</span>
+
+<span class="nc" id="L612">        File ledgerDir = createTempDir(&quot;bookie&quot;, &quot;ledger&quot;);</span>
+<span class="nc" id="L613">        Bookie.checkDirectoryStructure(Bookie.getCurrentDirectory(ledgerDir));</span>
+
+<span class="nc" id="L615">        JournalChannel jc = writeV2Journal(</span>
+<span class="nc" id="L616">                Bookie.getCurrentDirectory(journalDir), 100);</span>
+<span class="nc" id="L617">        ByteBuffer zeros = ByteBuffer.allocate(2048);</span>
+
+<span class="nc" id="L619">        jc.fc.position(jc.getBufferedChannel().position() - 0x300);</span>
+<span class="nc" id="L620">        jc.fc.write(zeros);</span>
+<span class="nc" id="L621">        jc.fc.force(false);</span>
+
+<span class="nc" id="L623">        writeIndexFileForLedger(Bookie.getCurrentDirectory(ledgerDir),</span>
+<span class="nc" id="L624">                                1, &quot;testPasswd&quot;.getBytes());</span>
+
+<span class="nc" id="L626">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L627">        conf.setJournalDirName(journalDir.getPath())</span>
+<span class="nc" id="L628">            .setLedgerDirNames(new String[] { ledgerDir.getPath() })</span>
+<span class="nc" id="L629">            .setMetadataServiceUri(null);</span>
+
+<span class="nc" id="L631">        Bookie b = createBookieAndReadJournal(conf);</span>
+
+<span class="nc" id="L633">        b.readEntry(1, 99);</span>
+
+        // still able to read last entry, but it's junk
+<span class="nc" id="L636">        ByteBuf buf = b.readEntry(1, 100);</span>
+<span class="nc" id="L637">        assertEquals(&quot;Ledger Id is wrong&quot;, buf.readLong(), 1);</span>
+<span class="nc" id="L638">        assertEquals(&quot;Entry Id is wrong&quot;, buf.readLong(), 100);</span>
+<span class="nc" id="L639">        assertEquals(&quot;Last confirmed is wrong&quot;, buf.readLong(), 99);</span>
+<span class="nc" id="L640">        assertEquals(&quot;Length is wrong&quot;, buf.readLong(), 100 * 1024);</span>
+<span class="nc" id="L641">        buf.readLong(); // skip checksum</span>
+<span class="nc" id="L642">        boolean allX = true;</span>
+<span class="nc bnc" id="L643" title="All 2 branches missed.">        for (int i = 0; i &lt; 1024; i++) {</span>
+<span class="nc" id="L644">            byte x = buf.readByte();</span>
+<span class="nc bnc" id="L645" title="All 4 branches missed.">            allX = allX &amp;&amp; x == (byte) 'X';</span>
+        }
+<span class="nc" id="L647">        assertFalse(&quot;Some of buffer should have been zeroed&quot;, allX);</span>
+
+        try {
+<span class="nc" id="L650">            b.readEntry(1, 101);</span>
+<span class="nc" id="L651">            fail(&quot;Shouldn't have found entry 101&quot;);</span>
+<span class="nc" id="L652">        } catch (Bookie.NoEntryException e) {</span>
+            // correct behaviour
+<span class="nc" id="L654">        }</span>
+<span class="nc" id="L655">    }</span>
+
+    private Bookie createBookieAndReadJournal(ServerConfiguration conf) throws Exception {
+<span class="nc" id="L658">        Bookie b = new Bookie(conf);</span>
+<span class="nc bnc" id="L659" title="All 2 branches missed.">        for (Journal journal : b.journals) {</span>
+<span class="nc" id="L660">            LastLogMark lastLogMark = journal.getLastLogMark().markLog();</span>
+<span class="nc" id="L661">            b.readJournal();</span>
+<span class="nc bnc" id="L662" title="All 2 branches missed.">            assertTrue(journal.getLastLogMark().getCurMark().compare(lastLogMark.getCurMark()) &gt; 0);</span>
+<span class="nc" id="L663">        }</span>
+<span class="nc" id="L664">        return b;</span>
+    }
+
+    /**
+     * Test journal replay with SortedLedgerStorage and a very small max
+     * arena size.
+     */
+    @Test
+    public void testSortedLedgerStorageReplayWithSmallMaxArenaSize() throws Exception {
+<span class="nc" id="L673">        File journalDir = createTempDir(&quot;bookie&quot;, &quot;journal&quot;);</span>
+<span class="nc" id="L674">        Bookie.checkDirectoryStructure(Bookie.getCurrentDirectory(journalDir));</span>
+
+<span class="nc" id="L676">        File ledgerDir = createTempDir(&quot;bookie&quot;, &quot;ledger&quot;);</span>
+<span class="nc" id="L677">        Bookie.checkDirectoryStructure(Bookie.getCurrentDirectory(ledgerDir));</span>
+
+<span class="nc" id="L679">        JournalChannel jc = writeV2Journal(</span>
+<span class="nc" id="L680">                Bookie.getCurrentDirectory(journalDir), 100);</span>
+
+<span class="nc" id="L682">        jc.fc.force(false);</span>
+
+<span class="nc" id="L684">        writeIndexFileForLedger(Bookie.getCurrentDirectory(ledgerDir),</span>
+<span class="nc" id="L685">                1, &quot;testPasswd&quot;.getBytes());</span>
+
+<span class="nc" id="L687">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L688">        conf.setLedgerStorageClass(&quot;org.apache.bookkeeper.bookie.SortedLedgerStorage&quot;);</span>
+<span class="nc" id="L689">        conf.setSkipListArenaMaxAllocSize(0);</span>
+<span class="nc" id="L690">        conf.setJournalDirName(journalDir.getPath())</span>
+<span class="nc" id="L691">                .setLedgerDirNames(new String[] { ledgerDir.getPath() });</span>
+
+<span class="nc" id="L693">        Bookie b = new Bookie(conf);</span>
+<span class="nc" id="L694">        b.readJournal();</span>
+<span class="nc" id="L695">        b.ledgerStorage.flush();</span>
+<span class="nc" id="L696">        b.readEntry(1, 80);</span>
+<span class="nc" id="L697">        b.readEntry(1, 99);</span>
+<span class="nc" id="L698">    }</span>
+
+    /**
+     * Test partial index (truncate master key) with pre-v3 journals.
+     */
+    @Test
+    public void testPartialFileInfoPreV3Journal1() throws Exception {
+<span class="nc" id="L705">        testPartialFileInfoPreV3Journal(true);</span>
+<span class="nc" id="L706">    }</span>
+
+    /**
+     * Test partial index with pre-v3 journals.
+     */
+    @Test
+    public void testPartialFileInfoPreV3Journal2() throws Exception {
+<span class="nc" id="L713">        testPartialFileInfoPreV3Journal(false);</span>
+<span class="nc" id="L714">    }</span>
+
+    /**
+     * Test partial index file with pre-v3 journals.
+     */
+    private void testPartialFileInfoPreV3Journal(boolean truncateMasterKey)
+        throws Exception {
+<span class="nc" id="L721">        File journalDir = createTempDir(&quot;bookie&quot;, &quot;journal&quot;);</span>
+<span class="nc" id="L722">        Bookie.checkDirectoryStructure(Bookie.getCurrentDirectory(journalDir));</span>
+
+<span class="nc" id="L724">        File ledgerDir = createTempDir(&quot;bookie&quot;, &quot;ledger&quot;);</span>
+<span class="nc" id="L725">        Bookie.checkDirectoryStructure(Bookie.getCurrentDirectory(ledgerDir));</span>
+
+<span class="nc" id="L727">        writePreV2Journal(Bookie.getCurrentDirectory(journalDir), 100);</span>
+<span class="nc" id="L728">        writePartialIndexFileForLedger(Bookie.getCurrentDirectory(ledgerDir),</span>
+<span class="nc" id="L729">                                       1, &quot;testPasswd&quot;.getBytes(), truncateMasterKey);</span>
+
+<span class="nc" id="L731">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L732">        conf.setJournalDirName(journalDir.getPath())</span>
+<span class="nc" id="L733">            .setLedgerDirNames(new String[] { ledgerDir.getPath() })</span>
+<span class="nc" id="L734">            .setMetadataServiceUri(null);</span>
+
+<span class="nc bnc" id="L736" title="All 2 branches missed.">        if (truncateMasterKey) {</span>
+            try {
+<span class="nc" id="L738">                Bookie b = new Bookie(conf);</span>
+<span class="nc" id="L739">                b.readJournal();</span>
+<span class="nc" id="L740">                fail(&quot;Should not reach here!&quot;);</span>
+<span class="nc" id="L741">            } catch (IOException ie) {</span>
+<span class="nc" id="L742">            }</span>
+        } else {
+<span class="nc" id="L744">            Bookie b = new Bookie(conf);</span>
+<span class="nc" id="L745">            b.readJournal();</span>
+<span class="nc" id="L746">            b.readEntry(1, 100);</span>
+            try {
+<span class="nc" id="L748">                b.readEntry(1, 101);</span>
+<span class="nc" id="L749">                fail(&quot;Shouldn't have found entry 101&quot;);</span>
+<span class="nc" id="L750">            } catch (Bookie.NoEntryException e) {</span>
+                // correct behaviour
+<span class="nc" id="L752">            }</span>
+        }
+<span class="nc" id="L754">    }</span>
+
+    /**
+     * Test partial index (truncate master key) with post-v3 journals.
+     */
+    @Test
+    public void testPartialFileInfoPostV3Journal1() throws Exception {
+<span class="nc" id="L761">        testPartialFileInfoPostV3Journal(true);</span>
+<span class="nc" id="L762">    }</span>
+
+    /**
+     * Test partial index with post-v3 journals.
+     */
+    @Test
+    public void testPartialFileInfoPostV3Journal2() throws Exception {
+<span class="nc" id="L769">        testPartialFileInfoPostV3Journal(false);</span>
+<span class="nc" id="L770">    }</span>
+
+    /**
+     * Test partial index file with post-v3 journals.
+     */
+    private void testPartialFileInfoPostV3Journal(boolean truncateMasterKey)
+        throws Exception {
+<span class="nc" id="L777">        File journalDir = createTempDir(&quot;bookie&quot;, &quot;journal&quot;);</span>
+<span class="nc" id="L778">        Bookie.checkDirectoryStructure(Bookie.getCurrentDirectory(journalDir));</span>
+
+<span class="nc" id="L780">        File ledgerDir = createTempDir(&quot;bookie&quot;, &quot;ledger&quot;);</span>
+<span class="nc" id="L781">        Bookie.checkDirectoryStructure(Bookie.getCurrentDirectory(ledgerDir));</span>
+
+<span class="nc" id="L783">        byte[] masterKey = &quot;testPasswd&quot;.getBytes();</span>
+
+<span class="nc" id="L785">        writeV3Journal(Bookie.getCurrentDirectory(journalDir), 100, masterKey);</span>
+<span class="nc" id="L786">        writePartialIndexFileForLedger(Bookie.getCurrentDirectory(ledgerDir), 1, masterKey,</span>
+                                       truncateMasterKey);
+
+<span class="nc" id="L789">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L790">        conf.setJournalDirName(journalDir.getPath())</span>
+<span class="nc" id="L791">            .setLedgerDirNames(new String[] { ledgerDir.getPath() })</span>
+<span class="nc" id="L792">            .setMetadataServiceUri(null);</span>
+
+<span class="nc" id="L794">        Bookie b = new Bookie(conf);</span>
+<span class="nc" id="L795">        b.readJournal();</span>
+<span class="nc" id="L796">        b.readEntry(1, 100);</span>
+        try {
+<span class="nc" id="L798">            b.readEntry(1, 101);</span>
+<span class="nc" id="L799">            fail(&quot;Shouldn't have found entry 101&quot;);</span>
+<span class="nc" id="L800">        } catch (Bookie.NoEntryException e) {</span>
+            // correct behaviour
+<span class="nc" id="L802">        }</span>
+<span class="nc" id="L803">    }</span>
+
+    /**
+      * Test for fake IOException during read of Journal.
+      */
+    @Test
+    public void testJournalScanIOException() throws Exception {
+<span class="nc" id="L810">        File journalDir = createTempDir(&quot;bookie&quot;, &quot;journal&quot;);</span>
+<span class="nc" id="L811">        Bookie.checkDirectoryStructure(Bookie.getCurrentDirectory(journalDir));</span>
+
+<span class="nc" id="L813">        File ledgerDir = createTempDir(&quot;bookie&quot;, &quot;ledger&quot;);</span>
+<span class="nc" id="L814">        Bookie.checkDirectoryStructure(Bookie.getCurrentDirectory(ledgerDir));</span>
+
+<span class="nc" id="L816">        writeV4Journal(Bookie.getCurrentDirectory(journalDir), 100, &quot;testPasswd&quot;.getBytes());</span>
+
+<span class="nc" id="L818">        ServerConfiguration conf = TestBKConfiguration.newServerConfiguration();</span>
+<span class="nc" id="L819">        conf.setJournalDirName(journalDir.getPath())</span>
+<span class="nc" id="L820">                .setLedgerDirNames(new String[] { ledgerDir.getPath() })</span>
+<span class="nc" id="L821">                .setMetadataServiceUri(null);</span>
+
+<span class="nc" id="L823">        Journal.JournalScanner journalScanner = new DummyJournalScan();</span>
+<span class="nc" id="L824">        FileChannel fileChannel = PowerMockito.mock(FileChannel.class);</span>
+
+<span class="nc" id="L826">        PowerMockito.when(fileChannel.position(Mockito.anyLong()))</span>
+<span class="nc" id="L827">                .thenThrow(new IOException());</span>
+
+<span class="nc" id="L829">        PowerMockito.mockStatic(JournalChannel.class);</span>
+<span class="nc" id="L830">        PowerMockito.when(JournalChannel.openFileChannel(Mockito.any(RandomAccessFile.class))).thenReturn(fileChannel);</span>
+
+<span class="nc" id="L832">        Bookie b = new Bookie(conf);</span>
+
+<span class="nc bnc" id="L834" title="All 2 branches missed.">        for (Journal journal : b.journals) {</span>
+<span class="nc" id="L835">            List&lt;Long&gt; journalIds = journal.listJournalIds(journal.getJournalDirectory(), null);</span>
+
+<span class="nc" id="L837">            assertEquals(journalIds.size(), 1);</span>
+
+            try {
+<span class="nc" id="L840">                journal.scanJournal(journalIds.get(0), Long.MAX_VALUE, journalScanner);</span>
+<span class="nc" id="L841">                fail(&quot;Should not have been able to scan the journal&quot;);</span>
+<span class="nc" id="L842">            } catch (Exception e) {</span>
+                // Expected
+<span class="nc" id="L844">            }</span>
+<span class="nc" id="L845">        }</span>
+
+<span class="nc" id="L847">        b.shutdown();</span>
+<span class="nc" id="L848">    }</span>
+
+<span class="nc" id="L850">    private class DummyJournalScan implements Journal.JournalScanner {</span>
+
+        @Override
+        public void process(int journalVersion, long offset, ByteBuffer entry) throws IOException {
+<span class="nc" id="L854">            LOG.warn(&quot;Journal Version : &quot; + journalVersion);</span>
+<span class="nc" id="L855">        }</span>
+    };
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

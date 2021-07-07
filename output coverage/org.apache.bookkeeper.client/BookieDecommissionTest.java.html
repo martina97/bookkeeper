@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>BookieDecommissionTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">BookieDecommissionTest.java</span></div><h1>BookieDecommissionTest.java</h1><pre class="source lang-java linenums">/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+package org.apache.bookkeeper.client;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
+
+import java.util.Iterator;
+
+import lombok.extern.slf4j.Slf4j;
+import org.apache.bookkeeper.bookie.Bookie;
+import org.apache.bookkeeper.client.BKException.BKIllegalOpException;
+import org.apache.bookkeeper.client.BookKeeper.DigestType;
+import org.apache.bookkeeper.common.testing.annotations.FlakyTest;
+import org.apache.bookkeeper.conf.ServerConfiguration;
+import org.apache.bookkeeper.meta.UnderreplicatedLedger;
+import org.apache.bookkeeper.meta.ZkLedgerUnderreplicationManager;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.junit.Test;
+
+/**
+ * Unit test of bookie decommission operations.
+ */
+<span class="nc" id="L40">@Slf4j</span>
+public class BookieDecommissionTest extends BookKeeperClusterTestCase {
+
+    private static final int NUM_OF_BOOKIES = 6;
+<span class="nc" id="L44">    private static DigestType digestType = DigestType.CRC32;</span>
+    private static final String PASSWORD = &quot;testPasswd&quot;;
+
+    public BookieDecommissionTest() {
+<span class="nc" id="L48">        super(NUM_OF_BOOKIES, 480);</span>
+<span class="nc" id="L49">        baseConf.setOpenLedgerRereplicationGracePeriod(String.valueOf(30000));</span>
+<span class="nc" id="L50">        setAutoRecoveryEnabled(true);</span>
+<span class="nc" id="L51">    }</span>
+
+    @FlakyTest(&quot;https://github.com/apache/bookkeeper/issues/502&quot;)
+    public void testDecommissionBookie() throws Exception {
+<span class="nc" id="L55">        ZkLedgerUnderreplicationManager urLedgerMgr = new ZkLedgerUnderreplicationManager(baseClientConf, zkc);</span>
+<span class="nc" id="L56">        BookKeeperAdmin bkAdmin = new BookKeeperAdmin(zkUtil.getZooKeeperConnectString());</span>
+
+<span class="nc" id="L58">        int numOfLedgers = 2 * NUM_OF_BOOKIES;</span>
+<span class="nc" id="L59">        int numOfEntries = 2 * NUM_OF_BOOKIES;</span>
+<span class="nc bnc" id="L60" title="All 2 branches missed.">        for (int i = 0; i &lt; numOfLedgers; i++) {</span>
+<span class="nc" id="L61">            LedgerHandle lh = bkc.createLedger(3, 2, digestType, PASSWORD.getBytes());</span>
+<span class="nc bnc" id="L62" title="All 2 branches missed.">            for (int j = 0; j &lt; numOfEntries; j++) {</span>
+<span class="nc" id="L63">                lh.addEntry(&quot;entry&quot;.getBytes());</span>
+            }
+<span class="nc" id="L65">            lh.close();</span>
+        }
+        /*
+         * create ledgers having empty segments (segment with no entries)
+         */
+<span class="nc bnc" id="L70" title="All 2 branches missed.">        for (int i = 0; i &lt; numOfLedgers; i++) {</span>
+<span class="nc" id="L71">            LedgerHandle emptylh = bkc.createLedger(3, 2, digestType, PASSWORD.getBytes());</span>
+<span class="nc" id="L72">            emptylh.close();</span>
+        }
+
+        try {
+            /*
+             * if we try to call decommissionBookie for a bookie which is not
+             * shutdown, then it should throw BKIllegalOpException
+             */
+<span class="nc" id="L80">            bkAdmin.decommissionBookie(bs.get(0).getLocalAddress());</span>
+<span class="nc" id="L81">            fail(&quot;Expected BKIllegalOpException because that bookie is not shutdown yet&quot;);</span>
+<span class="nc" id="L82">        } catch (BKIllegalOpException bkioexc) {</span>
+            // expected IllegalException
+<span class="nc" id="L84">        }</span>
+
+<span class="nc" id="L86">        ServerConfiguration killedBookieConf = killBookie(1);</span>
+        /*
+         * this decommisionBookie should make sure that there are no
+         * underreplicated ledgers because of this bookie
+         */
+<span class="nc" id="L91">        bkAdmin.decommissionBookie(Bookie.getBookieAddress(killedBookieConf));</span>
+<span class="nc" id="L92">        bkAdmin.triggerAudit();</span>
+<span class="nc" id="L93">        Thread.sleep(500);</span>
+<span class="nc" id="L94">        Iterator&lt;UnderreplicatedLedger&gt; ledgersToRereplicate = urLedgerMgr.listLedgersToRereplicate(null);</span>
+<span class="nc bnc" id="L95" title="All 2 branches missed.">        if (ledgersToRereplicate.hasNext()) {</span>
+<span class="nc bnc" id="L96" title="All 2 branches missed.">            while (ledgersToRereplicate.hasNext()) {</span>
+<span class="nc" id="L97">                Long ledgerId = ledgersToRereplicate.next().getLedgerId();</span>
+<span class="nc" id="L98">                log.error(&quot;Ledger: {} is underreplicated which is not expected&quot;, ledgerId);</span>
+<span class="nc" id="L99">            }</span>
+<span class="nc" id="L100">            fail(&quot;There are not supposed to be any underreplicatedledgers&quot;);</span>
+        }
+
+<span class="nc" id="L103">        killedBookieConf = killBookie(0);</span>
+<span class="nc" id="L104">        bkAdmin.decommissionBookie(Bookie.getBookieAddress(killedBookieConf));</span>
+<span class="nc" id="L105">        bkAdmin.triggerAudit();</span>
+<span class="nc" id="L106">        Thread.sleep(500);</span>
+<span class="nc" id="L107">        ledgersToRereplicate = urLedgerMgr.listLedgersToRereplicate(null);</span>
+<span class="nc bnc" id="L108" title="All 2 branches missed.">        if (ledgersToRereplicate.hasNext()) {</span>
+<span class="nc bnc" id="L109" title="All 2 branches missed.">            while (ledgersToRereplicate.hasNext()) {</span>
+<span class="nc" id="L110">                Long ledgerId = ledgersToRereplicate.next().getLedgerId();</span>
+<span class="nc" id="L111">                log.error(&quot;Ledger: {} is underreplicated which is not expected&quot;, ledgerId);</span>
+<span class="nc" id="L112">            }</span>
+<span class="nc" id="L113">            fail(&quot;There are not supposed to be any underreplicatedledgers&quot;);</span>
+        }
+<span class="nc" id="L115">        bkAdmin.close();</span>
+<span class="nc" id="L116">    }</span>
+
+    @Test
+    public void testDecommissionForLedgersWithMultipleSegmentsAndNotWriteClosed() throws Exception {
+<span class="nc" id="L120">        ZkLedgerUnderreplicationManager urLedgerMgr = new ZkLedgerUnderreplicationManager(baseClientConf, zkc);</span>
+<span class="nc" id="L121">        BookKeeperAdmin bkAdmin = new BookKeeperAdmin(zkUtil.getZooKeeperConnectString());</span>
+<span class="nc" id="L122">        int numOfEntries = 2 * NUM_OF_BOOKIES;</span>
+
+<span class="nc" id="L124">        LedgerHandle lh1 = bkc.createLedgerAdv(1L, numBookies, 3, 3, digestType, PASSWORD.getBytes(), null);</span>
+<span class="nc" id="L125">        LedgerHandle lh2 = bkc.createLedgerAdv(2L, numBookies, 3, 3, digestType, PASSWORD.getBytes(), null);</span>
+<span class="nc" id="L126">        LedgerHandle lh3 = bkc.createLedgerAdv(3L, numBookies, 3, 3, digestType, PASSWORD.getBytes(), null);</span>
+<span class="nc" id="L127">        LedgerHandle lh4 = bkc.createLedgerAdv(4L, numBookies, 3, 3, digestType, PASSWORD.getBytes(), null);</span>
+<span class="nc bnc" id="L128" title="All 2 branches missed.">        for (int j = 0; j &lt; numOfEntries; j++) {</span>
+<span class="nc" id="L129">            lh1.addEntry(j, &quot;data&quot;.getBytes());</span>
+<span class="nc" id="L130">            lh2.addEntry(j, &quot;data&quot;.getBytes());</span>
+<span class="nc" id="L131">            lh3.addEntry(j, &quot;data&quot;.getBytes());</span>
+<span class="nc" id="L132">            lh4.addEntry(j, &quot;data&quot;.getBytes());</span>
+        }
+
+<span class="nc" id="L135">        startNewBookie();</span>
+
+<span class="nc" id="L137">        assertEquals(&quot;Number of Available Bookies&quot;, NUM_OF_BOOKIES + 1, bkAdmin.getAvailableBookies().size());</span>
+
+<span class="nc" id="L139">        ServerConfiguration killedBookieConf = killBookie(0);</span>
+
+        /*
+         * since one of the bookie is killed, ensemble change happens when next
+         * write is made.So new fragment will be created for those 2 ledgers.
+         */
+<span class="nc bnc" id="L145" title="All 2 branches missed.">        for (int j = numOfEntries; j &lt; 2 * numOfEntries; j++) {</span>
+<span class="nc" id="L146">            lh1.addEntry(j, &quot;data&quot;.getBytes());</span>
+<span class="nc" id="L147">            lh2.addEntry(j, &quot;data&quot;.getBytes());</span>
+        }
+
+        /*
+         * Here lh1 and lh2 have multiple fragments and are writeclosed. But lh3 and lh4 are
+         * not writeclosed and contains only one fragment.
+         */
+<span class="nc" id="L154">        lh1.close();</span>
+<span class="nc" id="L155">        lh2.close();</span>
+
+        /*
+         * If the last fragment of the ledger is underreplicated and if the
+         * ledger is not closed then it will remain underreplicated for
+         * openLedgerRereplicationGracePeriod (by default 30 secs). For more
+         * info. Check BOOKKEEPER-237 and BOOKKEEPER-325. But later
+         * ReplicationWorker will fence the ledger.
+         */
+<span class="nc" id="L164">        bkAdmin.decommissionBookie(Bookie.getBookieAddress(killedBookieConf));</span>
+<span class="nc" id="L165">        bkAdmin.triggerAudit();</span>
+<span class="nc" id="L166">        Thread.sleep(500);</span>
+<span class="nc" id="L167">        Iterator&lt;UnderreplicatedLedger&gt; ledgersToRereplicate = urLedgerMgr.listLedgersToRereplicate(null);</span>
+<span class="nc bnc" id="L168" title="All 2 branches missed.">        if (ledgersToRereplicate.hasNext()) {</span>
+<span class="nc bnc" id="L169" title="All 2 branches missed.">            while (ledgersToRereplicate.hasNext()) {</span>
+<span class="nc" id="L170">                long ledgerId = ledgersToRereplicate.next().getLedgerId();</span>
+<span class="nc" id="L171">                log.error(&quot;Ledger: {} is underreplicated which is not expected&quot;, ledgerId);</span>
+<span class="nc" id="L172">            }</span>
+<span class="nc" id="L173">            fail(&quot;There are not supposed to be any underreplicatedledgers&quot;);</span>
+        }
+<span class="nc" id="L175">        bkAdmin.close();</span>
+<span class="nc" id="L176">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SlowInterleavedLedgerStorage.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$myBookieFenceLedgerTest.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.bookie</a> &gt; <span class="el_source">SlowInterleavedLedgerStorage.java</span></div><h1>SlowInterleavedLedgerStorage.java</h1><pre class="source lang-java linenums">package org.apache.bookkeeper.bookie;
+
+/*
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.UnpooledByteBufAllocator;
+
+import java.io.IOException;
+
+import org.apache.bookkeeper.conf.ServerConfiguration;
+import org.apache.bookkeeper.meta.LedgerManager;
+import org.apache.bookkeeper.stats.StatsLogger;
+
+/**
+ * Strictly for testing.
+ * have to be in org.apache.bookkeeper.bookie to not introduce changes to InterleavedLedgerStorage
+ */
+public class SlowInterleavedLedgerStorage extends InterleavedLedgerStorage {
+
+    public static final String PROP_SLOW_STORAGE_FLUSH_DELAY = &quot;test.slowStorage.flushDelay&quot;;
+    public static final String PROP_SLOW_STORAGE_ADD_DELAY = &quot;test.slowStorage.addDelay&quot;;
+    public static final String PROP_SLOW_STORAGE_GET_DELAY = &quot;test.slowStorage.getDelay&quot;;
+
+    /**
+     * Strictly for testing.
+     */
+    public static class SlowEntryLogger extends EntryLogger {
+<span class="nc" id="L48">        public volatile long getDelay = 0;</span>
+<span class="nc" id="L49">        public volatile long addDelay = 0;</span>
+<span class="nc" id="L50">        public volatile long flushDelay = 0;</span>
+
+        public SlowEntryLogger(ServerConfiguration conf, LedgerDirsManager ledgerDirsManager, EntryLogListener listener,
+                StatsLogger statsLogger) throws IOException {
+<span class="nc" id="L54">            super(conf, ledgerDirsManager, listener, statsLogger, UnpooledByteBufAllocator.DEFAULT);</span>
+<span class="nc" id="L55">        }</span>
+
+        public SlowEntryLogger setAddDelay(long delay) {
+<span class="nc" id="L58">            addDelay = delay;</span>
+<span class="nc" id="L59">            return this;</span>
+        }
+
+        public SlowEntryLogger setGetDelay(long delay) {
+<span class="nc" id="L63">            getDelay = delay;</span>
+<span class="nc" id="L64">            return this;</span>
+        }
+
+        public SlowEntryLogger setFlushDelay(long delay) {
+<span class="nc" id="L68">            flushDelay = delay;</span>
+<span class="nc" id="L69">            return this;</span>
+        }
+
+        @Override
+        public void flush() throws IOException {
+<span class="nc" id="L74">            delayMs(flushDelay);</span>
+<span class="nc" id="L75">            super.flush();</span>
+<span class="nc" id="L76">        }</span>
+
+        @Override
+        public long addEntry(long ledger, ByteBuf entry, boolean rollLog) throws IOException {
+<span class="nc" id="L80">            delayMs(addDelay);</span>
+<span class="nc" id="L81">            return super.addEntry(ledger, entry, rollLog);</span>
+        }
+
+        @Override
+        public ByteBuf readEntry(long ledgerId, long entryId, long location)
+                throws IOException, Bookie.NoEntryException {
+<span class="nc" id="L87">            delayMs(getDelay);</span>
+<span class="nc" id="L88">            return super.readEntry(ledgerId, entryId, location);</span>
+        }
+
+        private static void delayMs(long delay) {
+<span class="nc bnc" id="L92" title="All 2 branches missed.">            if (delay &lt; 1) {</span>
+<span class="nc" id="L93">                return;</span>
+            }
+            try {
+<span class="nc" id="L96">                Thread.sleep(delay);</span>
+<span class="nc" id="L97">            } catch (InterruptedException e) {</span>
+                //noop
+<span class="nc" id="L99">            }</span>
+<span class="nc" id="L100">        }</span>
+
+    }
+
+    public SlowInterleavedLedgerStorage() {
+<span class="nc" id="L105">        super();</span>
+<span class="nc" id="L106">    }</span>
+
+    @Override
+    public void initialize(ServerConfiguration conf,
+                           LedgerManager ledgerManager,
+                           LedgerDirsManager ledgerDirsManager,
+                           LedgerDirsManager indexDirsManager,
+                           StateManager stateManager,
+                           CheckpointSource checkpointSource,
+                           Checkpointer checkpointer,
+                           StatsLogger statsLogger,
+                           ByteBufAllocator allocator)
+            throws IOException {
+<span class="nc" id="L119">        super.initialize(conf, ledgerManager, ledgerDirsManager, indexDirsManager,</span>
+                stateManager, checkpointSource, checkpointer, statsLogger, allocator);
+        // do not want to add these to config class, reading throw &quot;raw&quot; interface
+<span class="nc" id="L122">        long getDelay = conf.getLong(PROP_SLOW_STORAGE_GET_DELAY, 0);</span>
+<span class="nc" id="L123">        long addDelay = conf.getLong(PROP_SLOW_STORAGE_ADD_DELAY, 0);</span>
+<span class="nc" id="L124">        long flushDelay = conf.getLong(PROP_SLOW_STORAGE_FLUSH_DELAY, 0);</span>
+
+<span class="nc" id="L126">        entryLogger = new SlowEntryLogger(conf, ledgerDirsManager, this, statsLogger)</span>
+<span class="nc" id="L127">                .setAddDelay(addDelay)</span>
+<span class="nc" id="L128">                .setGetDelay(getDelay)</span>
+<span class="nc" id="L129">                .setFlushDelay(flushDelay);</span>
+<span class="nc" id="L130">    }</span>
+
+    public void setAddDelay(long delay) {
+<span class="nc" id="L133">        ((SlowEntryLogger) entryLogger).setAddDelay(delay);</span>
+<span class="nc" id="L134">    }</span>
+
+    public void setGetDelay(long delay) {
+<span class="nc" id="L137">        ((SlowEntryLogger) entryLogger).setGetDelay(delay);</span>
+<span class="nc" id="L138">    }</span>
+
+    public void setFlushDelay(long delay) {
+<span class="nc" id="L141">        ((SlowEntryLogger) entryLogger).setFlushDelay(delay);</span>
+<span class="nc" id="L142">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

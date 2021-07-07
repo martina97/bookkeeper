@@ -1,0 +1,616 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>BookKeeperCloseTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">BookKeeperCloseTest.java</span></div><h1>BookKeeperCloseTest.java</h1><pre class="source lang-java linenums">/**
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.client;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import com.google.common.util.concurrent.SettableFuture;
+
+import io.netty.buffer.ByteBuf;
+
+import java.io.IOException;
+import java.util.Enumeration;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiConsumer;
+
+import org.apache.bookkeeper.bookie.Bookie;
+import org.apache.bookkeeper.bookie.BookieException;
+import org.apache.bookkeeper.client.AsyncCallback.AddCallback;
+import org.apache.bookkeeper.client.AsyncCallback.CloseCallback;
+import org.apache.bookkeeper.client.AsyncCallback.CreateCallback;
+import org.apache.bookkeeper.client.AsyncCallback.ReadCallback;
+import org.apache.bookkeeper.client.BKException.BKClientClosedException;
+import org.apache.bookkeeper.client.BookKeeper.DigestType;
+import org.apache.bookkeeper.conf.ServerConfiguration;
+import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.proto.BookkeeperInternalCallbacks.GenericCallback;
+import org.apache.bookkeeper.proto.BookkeeperInternalCallbacks.WriteCallback;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * This unit test verifies the behavior of bookkeeper apis, where the operations
+ * are being executed through a closed bookkeeper client.
+ */
+public class BookKeeperCloseTest extends BookKeeperClusterTestCase {
+
+    // Depending on the taste, select the amount of logging
+    // by decommenting one of the two lines below
+    // static Logger LOG = Logger.getRootLogger();
+<span class="nc" id="L65">    private static final Logger LOG = LoggerFactory</span>
+<span class="nc" id="L66">            .getLogger(BookKeeperCloseTest.class);</span>
+<span class="nc" id="L67">    private DigestType digestType = DigestType.CRC32;</span>
+    private static final String PASSWORD = &quot;testPasswd&quot;;
+<span class="nc" id="L69">    private static final BiConsumer&lt;Long, Long&gt; NOOP_BICONSUMER = (l, e) -&gt; { };</span>
+
+    public BookKeeperCloseTest() {
+<span class="nc" id="L72">        super(3);</span>
+<span class="nc" id="L73">    }</span>
+
+    private void restartBookieSlow() throws Exception{
+<span class="nc" id="L76">        ServerConfiguration conf = killBookie(0);</span>
+
+<span class="nc" id="L78">        Bookie delayBookie = new Bookie(conf) {</span>
+                @Override
+                public void recoveryAddEntry(ByteBuf entry, WriteCallback cb,
+                                             Object ctx, byte[] masterKey)
+                        throws IOException, BookieException, InterruptedException {
+                    try {
+<span class="nc" id="L84">                        Thread.sleep(5000);</span>
+<span class="nc" id="L85">                    } catch (InterruptedException ie) {</span>
+                        // ignore, only interrupted if shutting down,
+                        // and an exception would spam the logs
+<span class="nc" id="L88">                        Thread.currentThread().interrupt();</span>
+<span class="nc" id="L89">                    }</span>
+<span class="nc" id="L90">                    super.recoveryAddEntry(entry, cb, ctx, masterKey);</span>
+<span class="nc" id="L91">                }</span>
+
+                @Override
+                public void addEntry(ByteBuf entry, boolean ackBeforeSync, WriteCallback cb,
+                                     Object ctx, byte[] masterKey)
+                        throws IOException, BookieException, InterruptedException {
+                    try {
+<span class="nc" id="L98">                        Thread.sleep(5000);</span>
+<span class="nc" id="L99">                    } catch (InterruptedException ie) {</span>
+                        // ignore, only interrupted if shutting down,
+                        // and an exception would spam the logs
+<span class="nc" id="L102">                        Thread.currentThread().interrupt();</span>
+<span class="nc" id="L103">                    }</span>
+<span class="nc" id="L104">                    super.addEntry(entry, ackBeforeSync, cb, ctx, masterKey);</span>
+<span class="nc" id="L105">                }</span>
+
+                @Override
+                public ByteBuf readEntry(long ledgerId, long entryId)
+                        throws IOException, NoLedgerException {
+                    try {
+<span class="nc" id="L111">                        Thread.sleep(5000);</span>
+<span class="nc" id="L112">                    } catch (InterruptedException ie) {</span>
+                        // ignore, only interrupted if shutting down,
+                        // and an exception would spam the logs
+<span class="nc" id="L115">                        Thread.currentThread().interrupt();</span>
+<span class="nc" id="L116">                    }</span>
+<span class="nc" id="L117">                    return super.readEntry(ledgerId, entryId);</span>
+                }
+            };
+<span class="nc" id="L120">        bsConfs.add(conf);</span>
+<span class="nc" id="L121">        bs.add(startBookie(conf, delayBookie));</span>
+<span class="nc" id="L122">    }</span>
+
+    /**
+     * Test that createledger using bookkeeper client which is closed should
+     * throw ClientClosedException.
+     */
+    @Test
+    public void testCreateLedger() throws Exception {
+<span class="nc" id="L130">        BookKeeper bk = new BookKeeper(baseClientConf, zkc);</span>
+<span class="nc" id="L131">        LOG.info(&quot;Closing bookkeeper client&quot;);</span>
+<span class="nc" id="L132">        bk.close();</span>
+        try {
+<span class="nc" id="L134">            bk.createLedger(digestType, PASSWORD.getBytes());</span>
+<span class="nc" id="L135">            fail(&quot;should have failed, client is closed&quot;);</span>
+<span class="nc" id="L136">        } catch (BKClientClosedException e) {</span>
+            // correct
+<span class="nc" id="L138">        }</span>
+
+        // using async, because this could trigger an assertion
+<span class="nc" id="L141">        final AtomicInteger returnCode = new AtomicInteger(0);</span>
+<span class="nc" id="L142">        final CountDownLatch openLatch = new CountDownLatch(1);</span>
+<span class="nc" id="L143">        CreateCallback cb = new CreateCallback() {</span>
+            @Override
+            public void createComplete(int rc, LedgerHandle lh, Object ctx) {
+<span class="nc" id="L146">                returnCode.set(rc);</span>
+<span class="nc" id="L147">                openLatch.countDown();</span>
+<span class="nc" id="L148">            }</span>
+        };
+<span class="nc" id="L150">        bk.asyncCreateLedger(3, 2, digestType, PASSWORD.getBytes(), cb,</span>
+                             openLatch);
+
+<span class="nc" id="L153">        LOG.info(&quot;Waiting to finish the ledger creation&quot;);</span>
+        // wait for creating the ledger
+<span class="nc" id="L155">        assertTrue(&quot;create ledger call should have completed&quot;,</span>
+<span class="nc" id="L156">                openLatch.await(20, TimeUnit.SECONDS));</span>
+<span class="nc" id="L157">        assertEquals(&quot;Succesfully created ledger through closed bkclient!&quot;,</span>
+<span class="nc" id="L158">                BKException.Code.ClientClosedException, returnCode.get());</span>
+<span class="nc" id="L159">    }</span>
+
+    /**
+     * Test that opening a ledger using bookkeeper client which is closed should
+     * throw ClientClosedException.
+     */
+    @Test
+    public void testFenceLedger() throws Exception {
+<span class="nc" id="L167">        BookKeeper bk = new BookKeeper(baseClientConf, zkc);</span>
+<span class="nc" id="L168">        LOG.info(&quot;Create ledger and add entries to it&quot;);</span>
+<span class="nc" id="L169">        LedgerHandle lh = createLedgerWithEntries(bk, 100);</span>
+<span class="nc" id="L170">        LOG.info(&quot;Closing bookkeeper client&quot;);</span>
+
+<span class="nc" id="L172">        restartBookieSlow();</span>
+
+<span class="nc" id="L174">        bk.close();</span>
+
+        try {
+<span class="nc" id="L177">            bk.openLedger(lh.getId(), digestType, PASSWORD.getBytes());</span>
+<span class="nc" id="L178">            fail(&quot;should have failed, client is closed&quot;);</span>
+<span class="nc" id="L179">        } catch (BKClientClosedException e) {</span>
+            // correct
+<span class="nc" id="L181">        }</span>
+
+        try {
+<span class="nc" id="L184">            bk.openLedgerNoRecovery(lh.getId(), digestType, PASSWORD.getBytes());</span>
+<span class="nc" id="L185">            fail(&quot;should have failed, client is closed&quot;);</span>
+<span class="nc" id="L186">        } catch (BKClientClosedException e) {</span>
+            // correct
+<span class="nc" id="L188">        }</span>
+
+<span class="nc" id="L190">        final AtomicInteger returnCode = new AtomicInteger(0);</span>
+<span class="nc" id="L191">        final CountDownLatch openLatch = new CountDownLatch(1);</span>
+<span class="nc" id="L192">        AsyncCallback.OpenCallback cb = new AsyncCallback.OpenCallback() {</span>
+            public void openComplete(int rc, LedgerHandle lh, Object ctx) {
+<span class="nc" id="L194">                returnCode.set(rc);</span>
+<span class="nc" id="L195">                openLatch.countDown();</span>
+<span class="nc" id="L196">            }</span>
+        };
+<span class="nc" id="L198">        bk.asyncOpenLedger(lh.getId(), digestType, PASSWORD.getBytes(), cb,</span>
+                           openLatch);
+
+<span class="nc" id="L201">        LOG.info(&quot;Waiting to open the ledger asynchronously&quot;);</span>
+<span class="nc" id="L202">        assertTrue(&quot;Open call should have completed&quot;,</span>
+<span class="nc" id="L203">                openLatch.await(20, TimeUnit.SECONDS));</span>
+<span class="nc" id="L204">        assertTrue(&quot;Open should not have succeeded through closed bkclient!&quot;,</span>
+<span class="nc bnc" id="L205" title="All 2 branches missed.">                   BKException.Code.ClientClosedException == returnCode.get());</span>
+<span class="nc" id="L206">    }</span>
+
+    /**
+     * Test that deleting a ledger using bookkeeper client which is closed
+     * should throw ClientClosedException.
+     */
+    @Test
+    public void testDeleteLedger() throws Exception {
+<span class="nc" id="L214">        BookKeeper bk = new BookKeeper(baseClientConf, zkc);</span>
+<span class="nc" id="L215">        LOG.info(&quot;Create ledger and add entries to it&quot;);</span>
+<span class="nc" id="L216">        LedgerHandle lh = createLedgerWithEntries(bk, 100);</span>
+<span class="nc" id="L217">        LOG.info(&quot;Closing bookkeeper client&quot;);</span>
+<span class="nc" id="L218">        bk.close();</span>
+        try {
+<span class="nc" id="L220">            bk.deleteLedger(lh.getId());</span>
+<span class="nc" id="L221">            fail(&quot;should have failed, client is closed&quot;);</span>
+<span class="nc" id="L222">        } catch (BKClientClosedException e) {</span>
+            // correct
+<span class="nc" id="L224">        }</span>
+
+        // using async, because this could trigger an assertion
+<span class="nc" id="L227">        final AtomicInteger returnCode = new AtomicInteger(0);</span>
+<span class="nc" id="L228">        final CountDownLatch openLatch = new CountDownLatch(1);</span>
+<span class="nc" id="L229">        AsyncCallback.DeleteCallback cb = new AsyncCallback.DeleteCallback() {</span>
+            public void deleteComplete(int rc, Object ctx) {
+<span class="nc" id="L231">                returnCode.set(rc);</span>
+<span class="nc" id="L232">                openLatch.countDown();</span>
+<span class="nc" id="L233">            }</span>
+        };
+<span class="nc" id="L235">        bk.asyncDeleteLedger(lh.getId(), cb, openLatch);</span>
+
+<span class="nc" id="L237">        LOG.info(&quot;Waiting to delete the ledger asynchronously&quot;);</span>
+<span class="nc" id="L238">        assertTrue(&quot;Delete call should have completed&quot;,</span>
+<span class="nc" id="L239">                openLatch.await(20, TimeUnit.SECONDS));</span>
+<span class="nc" id="L240">        assertEquals(&quot;Delete should not have succeeded through closed bkclient!&quot;,</span>
+<span class="nc" id="L241">                     BKException.Code.ClientClosedException, returnCode.get());</span>
+<span class="nc" id="L242">    }</span>
+
+    /**
+     * Test that adding entry to a ledger using bookkeeper client which is
+     * closed should throw ClientClosedException.
+     */
+    @Test
+    public void testAddLedgerEntry() throws Exception {
+<span class="nc" id="L250">        BookKeeper bk = new BookKeeper(baseClientConf, zkc);</span>
+<span class="nc" id="L251">        LOG.info(&quot;Create ledger and add entries to it&quot;);</span>
+<span class="nc" id="L252">        LedgerHandle lh = createLedgerWithEntries(bk, 1);</span>
+<span class="nc" id="L253">        LOG.info(&quot;Closing bookkeeper client&quot;);</span>
+
+<span class="nc" id="L255">        restartBookieSlow();</span>
+
+<span class="nc" id="L257">        bk.close();</span>
+
+        try {
+<span class="nc" id="L260">            lh.addEntry(&quot;foobar&quot;.getBytes());</span>
+<span class="nc" id="L261">            fail(&quot;should have failed, client is closed&quot;);</span>
+<span class="nc" id="L262">        } catch (BKClientClosedException e) {</span>
+            // correct
+<span class="nc" id="L264">        }</span>
+
+<span class="nc" id="L266">        final CountDownLatch completeLatch = new CountDownLatch(1);</span>
+<span class="nc" id="L267">        final AtomicInteger rc = new AtomicInteger(BKException.Code.OK);</span>
+<span class="nc" id="L268">        lh.asyncAddEntry(&quot;foobar&quot;.getBytes(), new AddCallback() {</span>
+                public void addComplete(int rccb, LedgerHandle lh, long entryId,
+                                        Object ctx) {
+<span class="nc" id="L271">                    rc.set(rccb);</span>
+<span class="nc" id="L272">                    completeLatch.countDown();</span>
+<span class="nc" id="L273">                }</span>
+            }, null);
+
+<span class="nc" id="L276">        LOG.info(&quot;Waiting to finish adding another entry asynchronously&quot;);</span>
+<span class="nc" id="L277">        assertTrue(&quot;Add entry to ledger call should have completed&quot;,</span>
+<span class="nc" id="L278">                completeLatch.await(20, TimeUnit.SECONDS));</span>
+<span class="nc" id="L279">        assertEquals(</span>
+                &quot;Add entry to ledger should not have succeeded through closed bkclient!&quot;,
+<span class="nc" id="L281">                BKException.Code.ClientClosedException, rc.get());</span>
+<span class="nc" id="L282">    }</span>
+
+    /**
+     * Test that closing a ledger using bookkeeper client which is closed should
+     * throw ClientClosedException.
+     */
+    @Test
+    public void testCloseLedger() throws Exception {
+<span class="nc" id="L290">        BookKeeper bk = new BookKeeper(baseClientConf, zkc);</span>
+<span class="nc" id="L291">        LOG.info(&quot;Create ledger and add entries to it&quot;);</span>
+<span class="nc" id="L292">        LedgerHandle lh = createLedgerWithEntries(bk, 100);</span>
+<span class="nc" id="L293">        LedgerHandle lh2 = createLedgerWithEntries(bk, 100);</span>
+
+<span class="nc" id="L295">        LOG.info(&quot;Closing bookkeeper client&quot;);</span>
+<span class="nc" id="L296">        bk.close();</span>
+
+        try {
+<span class="nc" id="L299">            lh.close();</span>
+<span class="nc" id="L300">            fail(&quot;should have failed, client is closed&quot;);</span>
+<span class="nc" id="L301">        } catch (BKClientClosedException e) {</span>
+            // correct
+<span class="nc" id="L303">        }</span>
+
+<span class="nc" id="L305">        final CountDownLatch completeLatch = new CountDownLatch(1);</span>
+<span class="nc" id="L306">        final AtomicInteger rc = new AtomicInteger(BKException.Code.OK);</span>
+<span class="nc" id="L307">        lh2.asyncClose(new CloseCallback() {</span>
+                public void closeComplete(int rccb, LedgerHandle lh, Object ctx) {
+<span class="nc" id="L309">                    rc.set(rccb);</span>
+<span class="nc" id="L310">                    completeLatch.countDown();</span>
+<span class="nc" id="L311">                }</span>
+            }, null);
+
+<span class="nc" id="L314">        LOG.info(&quot;Waiting to finish adding another entry asynchronously&quot;);</span>
+<span class="nc" id="L315">        assertTrue(&quot;Close ledger call should have completed&quot;,</span>
+<span class="nc" id="L316">                completeLatch.await(20, TimeUnit.SECONDS));</span>
+<span class="nc" id="L317">        assertEquals(</span>
+                &quot;Close ledger should have succeeded through closed bkclient!&quot;,
+<span class="nc" id="L319">                BKException.Code.ClientClosedException, rc.get());</span>
+<span class="nc" id="L320">    }</span>
+
+    /**
+     * Test that reading entry from a ledger using bookkeeper client which is
+     * closed should throw ClientClosedException.
+     */
+    @Test
+    public void testReadLedgerEntry() throws Exception {
+<span class="nc" id="L328">        BookKeeper bk = new BookKeeper(baseClientConf, zkc);</span>
+<span class="nc" id="L329">        LOG.info(&quot;Create ledger and add entries to it&quot;);</span>
+<span class="nc" id="L330">        int numOfEntries = 100;</span>
+<span class="nc" id="L331">        LedgerHandle lh = createLedgerWithEntries(bk, numOfEntries);</span>
+<span class="nc" id="L332">        LOG.info(&quot;Closing bookkeeper client&quot;);</span>
+
+<span class="nc" id="L334">        restartBookieSlow();</span>
+
+<span class="nc" id="L336">        bk.close();</span>
+
+        try {
+<span class="nc" id="L339">            lh.readEntries(0, numOfEntries - 1);</span>
+<span class="nc" id="L340">            fail(&quot;should have failed, client is closed&quot;);</span>
+<span class="nc" id="L341">        } catch (BKClientClosedException e) {</span>
+            // correct
+<span class="nc" id="L343">        }</span>
+
+<span class="nc" id="L345">        final CountDownLatch readLatch = new CountDownLatch(1);</span>
+<span class="nc" id="L346">        final AtomicInteger rc = new AtomicInteger(BKException.Code.OK);</span>
+<span class="nc" id="L347">        ReadCallback cb = new ReadCallback() {</span>
+            @Override
+            public void readComplete(int rccb, LedgerHandle lh,
+                    Enumeration&lt;LedgerEntry&gt; seq, Object ctx) {
+<span class="nc" id="L351">                rc.set(rccb);</span>
+<span class="nc" id="L352">                readLatch.countDown();</span>
+<span class="nc" id="L353">            }</span>
+        };
+<span class="nc" id="L355">        lh.asyncReadEntries(0, numOfEntries - 1, cb, readLatch);</span>
+
+<span class="nc" id="L357">        LOG.info(&quot;Waiting to finish reading the entries asynchronously&quot;);</span>
+<span class="nc" id="L358">        assertTrue(&quot;Read entry ledger call should have completed&quot;,</span>
+<span class="nc" id="L359">                readLatch.await(20, TimeUnit.SECONDS));</span>
+<span class="nc" id="L360">        assertEquals(</span>
+                &quot;Read entry ledger should have succeeded through closed bkclient!&quot;,
+<span class="nc" id="L362">                BKException.Code.ClientClosedException, rc.get());</span>
+<span class="nc" id="L363">    }</span>
+
+    /**
+     * Test that readlastconfirmed entry from a ledger using bookkeeper client
+     * which is closed should throw ClientClosedException.
+     */
+    @Test
+    public void testReadLastConfirmed() throws Exception {
+<span class="nc" id="L371">        BookKeeper bk = new BookKeeper(baseClientConf, zkc);</span>
+<span class="nc" id="L372">        LOG.info(&quot;Create ledger and add entries to it&quot;);</span>
+<span class="nc" id="L373">        LedgerHandle lh = createLedgerWithEntries(bk, 100);</span>
+<span class="nc" id="L374">        LOG.info(&quot;Closing bookkeeper client&quot;);</span>
+
+        // make all bookies slow
+<span class="nc" id="L377">        restartBookieSlow();</span>
+<span class="nc" id="L378">        restartBookieSlow();</span>
+<span class="nc" id="L379">        restartBookieSlow();</span>
+
+<span class="nc" id="L381">        bk.close();</span>
+
+<span class="nc" id="L383">        final CountDownLatch readLatch = new CountDownLatch(1);</span>
+<span class="nc" id="L384">        final AtomicInteger rc = new AtomicInteger(BKException.Code.OK);</span>
+<span class="nc" id="L385">        AsyncCallback.ReadLastConfirmedCallback cb = new AsyncCallback.ReadLastConfirmedCallback() {</span>
+
+            @Override
+            public void readLastConfirmedComplete(int rccb, long lastConfirmed,
+                    Object ctx) {
+<span class="nc" id="L390">                rc.set(rccb);</span>
+<span class="nc" id="L391">                readLatch.countDown();</span>
+<span class="nc" id="L392">            }</span>
+        };
+<span class="nc" id="L394">        lh.asyncReadLastConfirmed(cb, readLatch);</span>
+
+<span class="nc" id="L396">        LOG.info(&quot;Waiting to finish reading last confirmed entry asynchronously&quot;);</span>
+<span class="nc" id="L397">        assertTrue(&quot;ReadLastConfirmed call should have completed&quot;,</span>
+<span class="nc" id="L398">                readLatch.await(20, TimeUnit.SECONDS));</span>
+<span class="nc" id="L399">        assertEquals(</span>
+                &quot;ReadLastConfirmed should have succeeded through closed bkclient!&quot;,
+<span class="nc" id="L401">                BKException.Code.ClientClosedException, rc.get());</span>
+
+        try {
+<span class="nc" id="L404">            lh.readLastConfirmed();</span>
+<span class="nc" id="L405">            fail(&quot;should have failed, client is closed&quot;);</span>
+<span class="nc" id="L406">        } catch (BKClientClosedException e) {</span>
+            // correct
+<span class="nc" id="L408">        }</span>
+<span class="nc" id="L409">    }</span>
+
+    /**
+     * Test that checking a ledger using a closed BK client will
+     * throw a ClientClosedException.
+     */
+    @Test
+    public void testLedgerCheck() throws Exception {
+<span class="nc" id="L417">        BookKeeper bk = new BookKeeper(baseClientConf, zkc);</span>
+<span class="nc" id="L418">        LOG.info(&quot;Create ledger and add entries to it&quot;);</span>
+<span class="nc" id="L419">        LedgerHandle lh = createLedgerWithEntries(bk, 100);</span>
+<span class="nc" id="L420">        LOG.info(&quot;Closing bookkeeper client&quot;);</span>
+<span class="nc" id="L421">        LedgerChecker lc = new LedgerChecker(bk);</span>
+
+<span class="nc" id="L423">        restartBookieSlow();</span>
+<span class="nc" id="L424">        bk.close();</span>
+
+<span class="nc" id="L426">        final CountDownLatch postLatch = new CountDownLatch(1);</span>
+<span class="nc" id="L427">        final AtomicInteger postRc = new AtomicInteger(BKException.Code.OK);</span>
+<span class="nc" id="L428">        lc.checkLedger(lh, new GenericCallback&lt;Set&lt;LedgerFragment&gt;&gt;() {</span>
+                @Override
+                public void operationComplete(int rc, Set&lt;LedgerFragment&gt; result) {
+<span class="nc" id="L431">                    postRc.set(rc);</span>
+<span class="nc" id="L432">                    postLatch.countDown();</span>
+<span class="nc" id="L433">                }</span>
+            });
+<span class="nc" id="L435">        assertTrue(&quot;checkLedger should have finished&quot;, postLatch.await(30, TimeUnit.SECONDS));</span>
+<span class="nc" id="L436">        assertEquals(&quot;Should have client closed exception&quot;,</span>
+<span class="nc" id="L437">                     postRc.get(), BKException.Code.ClientClosedException);</span>
+<span class="nc" id="L438">    }</span>
+
+<span class="nc" id="L440">    private static class CheckerCb implements GenericCallback&lt;Set&lt;LedgerFragment&gt;&gt; {</span>
+<span class="nc" id="L441">        CountDownLatch latch = new CountDownLatch(1);</span>
+<span class="nc" id="L442">        int rc = BKException.Code.OK;</span>
+<span class="nc" id="L443">        Set&lt;LedgerFragment&gt; result = null;</span>
+
+        @Override
+        public void operationComplete(int rc, Set&lt;LedgerFragment&gt; result) {
+<span class="nc" id="L447">            this.rc = rc;</span>
+<span class="nc" id="L448">            this.result = result;</span>
+<span class="nc" id="L449">            latch.countDown();</span>
+<span class="nc" id="L450">        }</span>
+
+        int getRc(int time, TimeUnit unit) throws Exception {
+<span class="nc bnc" id="L453" title="All 2 branches missed.">            if (latch.await(time, unit)) {</span>
+<span class="nc" id="L454">                return rc;</span>
+            } else {
+<span class="nc" id="L456">                throw new Exception(&quot;Didn't complete&quot;);</span>
+            }
+        }
+
+        Set&lt;LedgerFragment&gt; getResult(int time, TimeUnit unit) throws Exception {
+<span class="nc bnc" id="L461" title="All 2 branches missed.">            if (latch.await(time, unit)) {</span>
+<span class="nc" id="L462">                return result;</span>
+            } else {
+<span class="nc" id="L464">                throw new Exception(&quot;Didn't complete&quot;);</span>
+            }
+        }
+    }
+    /**
+     * Test that BookKeeperAdmin operationg using a closed BK client will
+     * throw a ClientClosedException.
+     */
+    @Test
+    public void testBookKeeperAdmin() throws Exception {
+<span class="nc" id="L474">        BookKeeper bk = new BookKeeper(baseClientConf, zkc);</span>
+<span class="nc" id="L475">        try (BookKeeperAdmin bkadmin = new BookKeeperAdmin(bk)) {</span>
+
+<span class="nc" id="L477">            LOG.info(&quot;Create ledger and add entries to it&quot;);</span>
+<span class="nc" id="L478">            LedgerHandle lh1 = createLedgerWithEntries(bk, 100);</span>
+<span class="nc" id="L479">            LedgerHandle lh2 = createLedgerWithEntries(bk, 100);</span>
+<span class="nc" id="L480">            LedgerHandle lh3 = createLedgerWithEntries(bk, 100);</span>
+<span class="nc" id="L481">            lh3.close();</span>
+
+<span class="nc" id="L483">            BookieSocketAddress bookieToKill = getBookie(0);</span>
+<span class="nc" id="L484">            killBookie(bookieToKill);</span>
+<span class="nc" id="L485">            startNewBookie();</span>
+
+<span class="nc" id="L487">            CheckerCb checkercb = new CheckerCb();</span>
+<span class="nc" id="L488">            LedgerChecker lc = new LedgerChecker(bk);</span>
+<span class="nc" id="L489">            lc.checkLedger(lh3, checkercb);</span>
+<span class="nc" id="L490">            assertEquals(&quot;Should have completed&quot;,</span>
+<span class="nc" id="L491">                         checkercb.getRc(30, TimeUnit.SECONDS), BKException.Code.OK);</span>
+<span class="nc" id="L492">            assertEquals(&quot;Should have a missing fragment&quot;,</span>
+<span class="nc" id="L493">                         1, checkercb.getResult(30, TimeUnit.SECONDS).size());</span>
+
+            // make sure a bookie in each quorum is slow
+<span class="nc" id="L496">            restartBookieSlow();</span>
+<span class="nc" id="L497">            restartBookieSlow();</span>
+
+<span class="nc" id="L499">            bk.close();</span>
+
+            try {
+<span class="nc" id="L502">                bkadmin.openLedger(lh1.getId());</span>
+<span class="nc" id="L503">                fail(&quot;Shouldn't be able to open with a closed client&quot;);</span>
+<span class="nc" id="L504">            } catch (BKException.BKClientClosedException cce) {</span>
+                // correct behaviour
+<span class="nc" id="L506">            }</span>
+
+            try {
+<span class="nc" id="L509">                bkadmin.openLedgerNoRecovery(lh1.getId());</span>
+<span class="nc" id="L510">                fail(&quot;Shouldn't be able to open with a closed client&quot;);</span>
+<span class="nc" id="L511">            } catch (BKException.BKClientClosedException cce) {</span>
+                // correct behaviour
+<span class="nc" id="L513">            }</span>
+
+            try {
+<span class="nc" id="L516">                bkadmin.recoverBookieData(bookieToKill);</span>
+<span class="nc" id="L517">                fail(&quot;Shouldn't be able to recover with a closed client&quot;);</span>
+<span class="nc" id="L518">            } catch (BKException.BKClientClosedException cce) {</span>
+                // correct behaviour
+<span class="nc" id="L520">            }</span>
+
+            try {
+<span class="nc" id="L523">                bkadmin.replicateLedgerFragment(lh3,</span>
+<span class="nc" id="L524">                        checkercb.getResult(10, TimeUnit.SECONDS).iterator().next(), NOOP_BICONSUMER);</span>
+<span class="nc" id="L525">                fail(&quot;Shouldn't be able to replicate with a closed client&quot;);</span>
+<span class="nc" id="L526">            } catch (BKException.BKClientClosedException cce) {</span>
+                // correct behaviour
+<span class="nc" id="L528">            }</span>
+        }
+<span class="nc" id="L530">    }</span>
+
+    /**
+     * Test that the bookkeeper client doesn't leave any threads hanging around.
+     * See {@link https://issues.apache.org/jira/browse/BOOKKEEPER-804}
+     */
+    @Test
+    public void testBookKeeperCloseThreads() throws Exception {
+<span class="nc" id="L538">        ThreadGroup group = new ThreadGroup(&quot;test-group&quot;);</span>
+<span class="nc" id="L539">        final SettableFuture&lt;Void&gt; future = SettableFuture.&lt;Void&gt;create();</span>
+
+<span class="nc" id="L541">        Thread t = new Thread(group, &quot;TestThread&quot;) {</span>
+                @Override
+                public void run() {
+                    try {
+<span class="nc" id="L545">                        BookKeeper bk = new BookKeeper(baseClientConf);</span>
+                        // 9 is a ledger id of an existing ledger
+<span class="nc" id="L547">                        LedgerHandle lh = bk.createLedger(BookKeeper.DigestType.CRC32, &quot;passwd&quot;.getBytes());</span>
+<span class="nc" id="L548">                        lh.addEntry(&quot;foobar&quot;.getBytes());</span>
+<span class="nc" id="L549">                        lh.close();</span>
+<span class="nc" id="L550">                        long id = lh.getId();</span>
+                        // 9 is a ledger id of an existing ledger
+<span class="nc" id="L552">                        lh = bk.openLedgerNoRecovery(id, BookKeeper.DigestType.CRC32, &quot;passwd&quot;.getBytes());</span>
+<span class="nc" id="L553">                        Enumeration&lt;LedgerEntry&gt; entries = lh.readEntries(0, 0);</span>
+
+<span class="nc" id="L555">                        lh.close();</span>
+<span class="nc" id="L556">                        bk.close();</span>
+<span class="nc" id="L557">                        future.set(null);</span>
+<span class="nc" id="L558">                    } catch (InterruptedException ie) {</span>
+<span class="nc" id="L559">                        Thread.currentThread().interrupt();</span>
+<span class="nc" id="L560">                        future.setException(ie);</span>
+<span class="nc" id="L561">                    } catch (Exception e) {</span>
+<span class="nc" id="L562">                        future.setException(e);</span>
+<span class="nc" id="L563">                    }</span>
+<span class="nc" id="L564">                }</span>
+            };
+<span class="nc" id="L566">        t.start();</span>
+
+<span class="nc" id="L568">        future.get();</span>
+<span class="nc" id="L569">        t.join();</span>
+
+        // check in a loop for 10 seconds
+        // because sometimes it takes a while to threads to go away
+<span class="nc bnc" id="L573" title="All 2 branches missed.">        for (int i = 0; i &lt; 10; i++) {</span>
+<span class="nc bnc" id="L574" title="All 2 branches missed.">            if (group.activeCount() &gt; 0) {</span>
+<span class="nc" id="L575">                Thread[] threads = new Thread[group.activeCount()];</span>
+<span class="nc" id="L576">                group.enumerate(threads);</span>
+<span class="nc bnc" id="L577" title="All 2 branches missed.">                for (Thread leftover : threads) {</span>
+<span class="nc" id="L578">                    LOG.error(&quot;Leftover thread after {} secs: {}&quot;, i, leftover);</span>
+                }
+<span class="nc" id="L580">                Thread.sleep(1000);</span>
+            } else {
+                break;
+            }
+        }
+<span class="nc" id="L585">        assertEquals(&quot;Should be no threads left in group&quot;, 0, group.activeCount());</span>
+<span class="nc" id="L586">    }</span>
+
+    private LedgerHandle createLedgerWithEntries(BookKeeper bk, int numOfEntries)
+            throws Exception {
+<span class="nc" id="L590">        LedgerHandle lh = bk</span>
+<span class="nc" id="L591">                .createLedger(3, 3, digestType, PASSWORD.getBytes());</span>
+
+<span class="nc" id="L593">        final AtomicInteger rc = new AtomicInteger(BKException.Code.OK);</span>
+<span class="nc" id="L594">        final CountDownLatch latch = new CountDownLatch(numOfEntries);</span>
+
+<span class="nc" id="L596">        final AddCallback cb = new AddCallback() {</span>
+                public void addComplete(int rccb, LedgerHandle lh, long entryId,
+                                        Object ctx) {
+<span class="nc" id="L599">                    rc.compareAndSet(BKException.Code.OK, rccb);</span>
+<span class="nc" id="L600">                    latch.countDown();</span>
+<span class="nc" id="L601">                }</span>
+            };
+<span class="nc bnc" id="L603" title="All 2 branches missed.">        for (int i = 0; i &lt; numOfEntries; i++) {</span>
+<span class="nc" id="L604">            lh.asyncAddEntry(&quot;foobar&quot;.getBytes(), cb, null);</span>
+        }
+<span class="nc bnc" id="L606" title="All 2 branches missed.">        if (!latch.await(30, TimeUnit.SECONDS)) {</span>
+<span class="nc" id="L607">            throw new Exception(&quot;Entries took too long to add&quot;);</span>
+        }
+<span class="nc bnc" id="L609" title="All 2 branches missed.">        if (rc.get() != BKException.Code.OK) {</span>
+<span class="nc" id="L610">            throw BKException.create(rc.get());</span>
+        }
+<span class="nc" id="L612">        return lh;</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

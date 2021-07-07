@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MyLedgerEntriesImplCreateTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$MyLedgerEntriesImplCreateTest.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client.impl</a> &gt; <span class="el_source">MyLedgerEntriesImplCreateTest.java</span></div><h1>MyLedgerEntriesImplCreateTest.java</h1><pre class="source lang-java linenums">package org.apache.bookkeeper.client.impl;
+import com.google.common.collect.Lists;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import org.apache.bookkeeper.client.api.LedgerEntry;
+import org.junit.Assert;
+import org.junit.Test;
+import org.junit.Before;
+import org.junit.After;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.junit.Assert.fail;
+
+/**
+ * LedgerEntriesImpl Tester.
+ *
+ * @author &lt;Authors name&gt;
+ * @since &lt;pre&gt;lug 1, 2021&lt;/pre&gt;
+ * @version 1.0
+ */
+
+@RunWith(value = Parameterized.class)
+public class MyLedgerEntriesImplCreateTest {
+<span class="fc" id="L31">    private final int entryNumber = 1;</span>
+    private LedgerEntriesImpl ledgerEntriesImpl;
+<span class="fc" id="L33">    private List&lt;LedgerEntry&gt; entryList = Lists.newArrayList();</span>
+
+    // contenuto di ogni entry
+    //private final long ledgerId = 1234L;
+    //private final long entryId = 5678L;
+    //private long entryId;
+<span class="fc" id="L39">    private final long length = 9876L;</span>
+<span class="fc" id="L40">    private final byte[] dataBytes = &quot;test-ledger-entries-impl&quot;.getBytes(UTF_8);</span>
+<span class="fc" id="L41">    private final ArrayList&lt;ByteBuf&gt; bufs = Lists.newArrayListWithExpectedSize(entryNumber);</span>
+    private boolean expectedResult;
+
+
+<span class="fc" id="L45">    public MyLedgerEntriesImplCreateTest(boolean expectedResult, List&lt;LedgerEntry&gt; entryList) {</span>
+<span class="fc" id="L46">        this.expectedResult = expectedResult;</span>
+<span class="fc" id="L47">        this.entryList = entryList;</span>
+
+<span class="fc" id="L49">    }</span>
+
+    @Before
+    public void setUp() throws Exception {
+        /*
+        List&lt;LedgerEntry&gt; ausiliarEntryList =  Lists.newArrayList();
+        for (int i = 0; i &lt; entryNumber; i++) {
+            ByteBuf buf = Unpooled.wrappedBuffer(dataBytes);
+            bufs.add(buf);
+            ausiliarEntryList.add(LedgerEntryImpl.create(i, i));
+        }
+
+        ledgerEntriesImpl = LedgerEntriesImpl.create(ausiliarEntryList);
+
+         */
+<span class="fc" id="L64">    }</span>
+
+    @After
+    public void tearDown() throws Exception {
+        /*
+        ledgerEntriesImpl.close();
+
+        try {
+            ledgerEntriesImpl.iterator();
+            fail(&quot;should fail iterator after close&quot;);
+        } catch (NullPointerException e) {
+            // expected behavior
+        }
+
+         */
+<span class="fc" id="L79">    }</span>
+
+    public static List&lt;LedgerEntry&gt; createEntryList(long ledgerId, long entryId) {
+<span class="fc" id="L82">        List&lt;LedgerEntry&gt; list = Lists.newArrayList();</span>
+<span class="fc" id="L83">        list.add(LedgerEntryImpl.create(ledgerId, entryId));</span>
+<span class="fc" id="L84">        return list;</span>
+    }
+
+    @Parameterized.Parameters
+    public static Collection&lt;?&gt; getTestParameters() {
+<span class="fc" id="L89">        return Arrays.asList(new Object[][]{</span>
+
+<span class="fc" id="L91">                {false, null},</span>
+<span class="fc" id="L92">                {false, Lists.newArrayList()},</span>
+<span class="fc" id="L93">                {true, createEntryList(0,0)}</span>
+
+        });
+
+    }
+
+    /**
+     *
+     * Method: create(List&lt;LedgerEntry&gt; entries)
+     *
+     */
+    @Test
+    public void testGetEntry() throws Exception {
+<span class="fc" id="L106">        System.out.println(&quot;LISTA ===&quot; + entryList);</span>
+        boolean result;
+        try {
+<span class="fc" id="L109">            LedgerEntriesImpl entry = LedgerEntriesImpl.create(entryList);</span>
+<span class="fc" id="L110">            result = entryList.get(0).equals(entry.getEntry(0));</span>
+            //Assert.assertEquals(entryList.get(0), entry.getEntry(0));
+
+<span class="fc" id="L113">        } catch (Exception e) {</span>
+<span class="fc" id="L114">            e.printStackTrace();</span>
+<span class="fc" id="L115">            result = false;</span>
+<span class="fc" id="L116">        }</span>
+<span class="fc" id="L117">        Assert.assertEquals(expectedResult, result);</span>
+<span class="fc" id="L118">    }</span>
+
+
+
+
+
+
+    /**
+     *
+     * Method: create(List&lt;LedgerEntry&gt; entries)
+     *
+     */
+    //  @Test
+    //  public void testCreate() throws Exception {
+//TODO: Test goes here...
+}
+
+
+
+/**
+ *
+ * Method: iterator()
+ *
+ */
+//  @Test
+// public void testIterator() throws Exception {
+//TODO: Test goes here...
+// }
+
+/**
+ *
+ * Method: close()
+ *
+ */
+// @Test
+//public void testClose() throws Exception {
+//TODO: Test goes here...
+// }
+
+
+/**
+ *
+ * Method: recycle()
+ *
+ */
+// @Test
+// public void testRecycle() throws Exception {
+//TODO: Test goes here...
+/*
+try {
+   Method method = LedgerEntriesImpl.getClass().getMethod(&quot;recycle&quot;);
+   method.setAccessible(true);
+   method.invoke(&lt;Object&gt;, &lt;Parameters&gt;);
+} catch(NoSuchMethodException e) {
+} catch(IllegalAccessException e) {
+} catch(InvocationTargetException e) {
+}
+*/
+//  }
+
+/**
+ *
+ * Method: releaseByteBuf()
+ *
+ */
+//@Test
+//public void testReleaseByteBuf() throws Exception {
+//TODO: Test goes here...
+/*
+try {
+   Method method = LedgerEntriesImpl.getClass().getMethod(&quot;releaseByteBuf&quot;);
+   method.setAccessible(true);
+   method.invoke(&lt;Object&gt;, &lt;Parameters&gt;);
+} catch(NoSuchMethodException e) {
+} catch(IllegalAccessException e) {
+} catch(InvocationTargetException e) {
+}
+*/
+//   }
+
+//}
+
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

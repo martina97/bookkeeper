@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>BookKeeperTestClient.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">BookKeeperTestClient.java</span></div><h1>BookKeeperTestClient.java</h1><pre class="source lang-java linenums">/*
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.client;
+
+import io.netty.buffer.UnpooledByteBufAllocator;
+
+import java.io.IOException;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Future;
+
+import lombok.extern.slf4j.Slf4j;
+
+import org.apache.bookkeeper.common.concurrent.FutureUtils;
+import org.apache.bookkeeper.conf.ClientConfiguration;
+import org.apache.bookkeeper.discover.RegistrationClient.RegistrationListener;
+import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.proto.BookieClient;
+import org.apache.bookkeeper.stats.NullStatsLogger;
+import org.apache.bookkeeper.test.TestStatsProvider;
+import org.apache.zookeeper.ZooKeeper;
+
+/**
+ * Test BookKeeperClient which allows access to members we don't
+ * wish to expose in the public API.
+ */
+<span class="fc" id="L44">@Slf4j</span>
+public class BookKeeperTestClient extends BookKeeper {
+    TestStatsProvider statsProvider;
+
+    public BookKeeperTestClient(ClientConfiguration conf, TestStatsProvider statsProvider)
+            throws IOException, InterruptedException, BKException {
+<span class="pc bpc" id="L50" title="1 of 2 branches missed.">        super(conf, null, null, new UnpooledByteBufAllocator(false),</span>
+<span class="fc" id="L51">              statsProvider == null ? NullStatsLogger.INSTANCE : statsProvider.getStatsLogger(&quot;&quot;),</span>
+              null, null, null);
+<span class="fc" id="L53">        this.statsProvider = statsProvider;</span>
+<span class="fc" id="L54">    }</span>
+
+    public BookKeeperTestClient(ClientConfiguration conf)
+            throws InterruptedException, BKException, IOException {
+<span class="nc" id="L58">        this(conf, null);</span>
+<span class="nc" id="L59">    }</span>
+
+    public ZooKeeper getZkHandle() {
+<span class="nc" id="L62">        return super.getZkHandle();</span>
+    }
+
+    public ClientConfiguration getConf() {
+<span class="nc" id="L66">        return super.getConf();</span>
+    }
+
+    public BookieClient getBookieClient() {
+<span class="nc" id="L70">        return bookieClient;</span>
+    }
+
+    public Future&lt;?&gt; waitForReadOnlyBookie(BookieSocketAddress b)
+            throws Exception {
+<span class="nc" id="L75">        return waitForBookieInSet(b, false);</span>
+    }
+
+    public Future&lt;?&gt; waitForWritableBookie(BookieSocketAddress b)
+            throws Exception {
+<span class="fc" id="L80">        return waitForBookieInSet(b, true);</span>
+    }
+
+    /**
+     * Wait for bookie to appear in either the writable set of bookies,
+     * or the read only set of bookies. Also ensure that it doesn't exist
+     * in the other set before completing.
+     */
+    private Future&lt;?&gt; waitForBookieInSet(BookieSocketAddress b,
+                                                       boolean writable) throws Exception {
+<span class="pc bpc" id="L90" title="1 of 2 branches missed.">        log.info(&quot;Wait for {} to become {}&quot;,</span>
+                 b, writable ? &quot;writable&quot; : &quot;readonly&quot;);
+
+<span class="fc" id="L93">        CompletableFuture&lt;Void&gt; readOnlyFuture = new CompletableFuture&lt;&gt;();</span>
+<span class="fc" id="L94">        CompletableFuture&lt;Void&gt; writableFuture = new CompletableFuture&lt;&gt;();</span>
+
+<span class="fc" id="L96">        RegistrationListener readOnlyListener = (bookies) -&gt; {</span>
+<span class="fc" id="L97">            boolean contains = bookies.getValue().contains(b);</span>
+<span class="pc bpc" id="L98" title="5 of 8 branches missed.">            if ((!writable &amp;&amp; contains) || (writable &amp;&amp; !contains)) {</span>
+<span class="fc" id="L99">                readOnlyFuture.complete(null);</span>
+            }
+<span class="fc" id="L101">        };</span>
+<span class="fc" id="L102">        RegistrationListener writableListener = (bookies) -&gt; {</span>
+<span class="fc" id="L103">            boolean contains = bookies.getValue().contains(b);</span>
+<span class="pc bpc" id="L104" title="4 of 8 branches missed.">            if ((writable &amp;&amp; contains) || (!writable &amp;&amp; !contains)) {</span>
+<span class="fc" id="L105">                writableFuture.complete(null);</span>
+            }
+<span class="fc" id="L107">        };</span>
+
+<span class="fc" id="L109">        getMetadataClientDriver().getRegistrationClient().watchWritableBookies(writableListener);</span>
+<span class="fc" id="L110">        getMetadataClientDriver().getRegistrationClient().watchReadOnlyBookies(readOnlyListener);</span>
+
+<span class="pc bpc" id="L112" title="1 of 2 branches missed.">        if (writable) {</span>
+<span class="fc" id="L113">            return writableFuture</span>
+<span class="fc" id="L114">                .thenCompose(ignored -&gt; getMetadataClientDriver().getRegistrationClient().getReadOnlyBookies())</span>
+<span class="fc" id="L115">                .thenCompose(readonlyBookies -&gt; {</span>
+<span class="pc bpc" id="L116" title="1 of 2 branches missed.">                    if (readonlyBookies.getValue().contains(b)) {</span>
+                        // if the bookie still shows up at readonly path, wait for it to disappear
+<span class="nc" id="L118">                        return readOnlyFuture;</span>
+                    } else {
+<span class="fc" id="L120">                        return FutureUtils.Void();</span>
+                    }
+                });
+        } else {
+<span class="nc" id="L124">            return readOnlyFuture</span>
+<span class="nc" id="L125">                .thenCompose(ignored -&gt; getMetadataClientDriver().getRegistrationClient().getWritableBookies())</span>
+<span class="nc" id="L126">                .thenCompose(writableBookies -&gt; {</span>
+<span class="nc bnc" id="L127" title="All 2 branches missed.">                    if (writableBookies.getValue().contains(b)) {</span>
+                        // if the bookie still shows up at writable path, wait for it to disappear
+<span class="nc" id="L129">                        return writableFuture;</span>
+                    } else {
+<span class="nc" id="L131">                        return FutureUtils.Void();</span>
+                    }
+                });
+        }
+    }
+
+    public TestStatsProvider getTestStatsProvider() {
+<span class="nc" id="L138">        return statsProvider;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

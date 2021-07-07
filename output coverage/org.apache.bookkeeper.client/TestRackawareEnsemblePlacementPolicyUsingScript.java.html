@@ -1,0 +1,483 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>TestRackawareEnsemblePlacementPolicyUsingScript.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">TestRackawareEnsemblePlacementPolicyUsingScript.java</span></div><h1>TestRackawareEnsemblePlacementPolicyUsingScript.java</h1><pre class="source lang-java linenums">/**
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.client;
+
+import static org.apache.bookkeeper.client.RackawareEnsemblePlacementPolicy.REPP_DNS_RESOLVER_CLASS;
+import static org.apache.bookkeeper.feature.SettableFeatureProvider.DISABLE_ALL;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+
+import io.netty.util.HashedWheelTimer;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+
+import org.apache.bookkeeper.client.BKException.BKNotEnoughBookiesException;
+import org.apache.bookkeeper.conf.ClientConfiguration;
+import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.net.CommonConfigurationKeys;
+import org.apache.bookkeeper.net.DNSToSwitchMapping;
+import org.apache.bookkeeper.net.ScriptBasedMapping;
+import org.apache.bookkeeper.stats.NullStatsLogger;
+import org.apache.bookkeeper.util.Shell;
+import org.junit.After;
+import org.junit.Assume;
+import org.junit.Before;
+import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * In this testsuite, ScriptBasedMapping is used as DNS_RESOLVER_CLASS for
+ * mapping nodes to racks. Shell Script -
+ * src/test/resources/networkmappingscript.sh is used in ScriptBasedMapping for
+ * resolving racks. This script maps HostAddress to rack depending on the last
+ * character of the HostAddress string. for eg. 127.0.0.1 :- /1, 127.0.0.2 :-
+ * /2, 99.12.34.21 :- /1
+ *
+ * &lt;p&gt;This testsuite has same testscenarios as in
+ * TestRackawareEnsemblePlacementPolicy.java.
+ *
+ * &lt;p&gt;For now this Testsuite works only on Unix based OS.
+ */
+<span class="nc" id="L69">public class TestRackawareEnsemblePlacementPolicyUsingScript {</span>
+
+<span class="nc" id="L71">    static final Logger LOG = LoggerFactory.getLogger(TestRackawareEnsemblePlacementPolicyUsingScript.class);</span>
+
+    HashedWheelTimer timer;
+    RackawareEnsemblePlacementPolicy repp;
+<span class="nc" id="L75">    ClientConfiguration conf = new ClientConfiguration();</span>
+
+    @Before
+    public void setUp() throws Exception {
+<span class="nc" id="L79">        conf.setProperty(REPP_DNS_RESOLVER_CLASS, ScriptBasedMapping.class.getName());</span>
+<span class="nc" id="L80">        conf.setProperty(CommonConfigurationKeys.NET_TOPOLOGY_SCRIPT_FILE_NAME_KEY,</span>
+                &quot;src/test/resources/networkmappingscript.sh&quot;);
+<span class="nc" id="L82">        timer = new HashedWheelTimer(</span>
+<span class="nc" id="L83">                new ThreadFactoryBuilder().setNameFormat(&quot;TestTimer-%d&quot;).build(),</span>
+<span class="nc" id="L84">                conf.getTimeoutTimerTickDurationMs(), TimeUnit.MILLISECONDS,</span>
+<span class="nc" id="L85">                conf.getTimeoutTimerNumTicks());</span>
+
+<span class="nc" id="L87">        repp = new RackawareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L88">        repp.initialize(conf, Optional.&lt;DNSToSwitchMapping&gt;empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+<span class="nc" id="L89">    }</span>
+
+    @After
+    public void tearDown() throws Exception {
+<span class="nc" id="L93">        repp.uninitalize();</span>
+<span class="nc" id="L94">    }</span>
+
+    private void ignoreTestIfItIsWindowsOS() {
+<span class="nc bnc" id="L97" title="All 2 branches missed.">        Assume.assumeTrue(!Shell.WINDOWS);</span>
+<span class="nc" id="L98">    }</span>
+
+    @Test
+    public void testReplaceBookieWithEnoughBookiesInSameRack() throws Exception {
+<span class="nc" id="L102">        ignoreTestIfItIsWindowsOS();</span>
+<span class="nc" id="L103">        BookieSocketAddress addr1 = new BookieSocketAddress(&quot;127.0.0.1&quot;, 3181); // /1 rack</span>
+<span class="nc" id="L104">        BookieSocketAddress addr2 = new BookieSocketAddress(&quot;127.0.0.2&quot;, 3181); // /2 rack</span>
+<span class="nc" id="L105">        BookieSocketAddress addr3 = new BookieSocketAddress(&quot;127.0.1.2&quot;, 3181); // /2 rack</span>
+<span class="nc" id="L106">        BookieSocketAddress addr4 = new BookieSocketAddress(&quot;127.0.0.4&quot;, 3181); // /4 rack</span>
+
+        // Update cluster
+<span class="nc" id="L109">        Set&lt;BookieSocketAddress&gt; addrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L110">        addrs.add(addr1);</span>
+<span class="nc" id="L111">        addrs.add(addr2);</span>
+<span class="nc" id="L112">        addrs.add(addr3);</span>
+<span class="nc" id="L113">        addrs.add(addr4);</span>
+<span class="nc" id="L114">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+        // replace node under r2
+<span class="nc" id="L116">        BookieSocketAddress replacedBookie = repp.replaceBookie(1, 1, 1, null, new ArrayList&lt;&gt;(),</span>
+<span class="nc" id="L117">                                                                addr2, new HashSet&lt;&gt;()).getResult();</span>
+<span class="nc" id="L118">        assertEquals(addr3, replacedBookie);</span>
+<span class="nc" id="L119">    }</span>
+
+    @Test
+    public void testReplaceBookieWithEnoughBookiesInDifferentRack() throws Exception {
+<span class="nc" id="L123">        ignoreTestIfItIsWindowsOS();</span>
+<span class="nc" id="L124">        BookieSocketAddress addr1 = new BookieSocketAddress(&quot;127.0.0.1&quot;, 3181); // /1 rack</span>
+<span class="nc" id="L125">        BookieSocketAddress addr2 = new BookieSocketAddress(&quot;127.0.0.2&quot;, 3181); // /2 rack</span>
+<span class="nc" id="L126">        BookieSocketAddress addr3 = new BookieSocketAddress(&quot;127.0.0.3&quot;, 3181); // /3 rack</span>
+<span class="nc" id="L127">        BookieSocketAddress addr4 = new BookieSocketAddress(&quot;127.0.0.4&quot;, 3181); // /4 rack</span>
+
+        // Update cluster
+<span class="nc" id="L130">        Set&lt;BookieSocketAddress&gt; addrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L131">        addrs.add(addr1);</span>
+<span class="nc" id="L132">        addrs.add(addr2);</span>
+<span class="nc" id="L133">        addrs.add(addr3);</span>
+<span class="nc" id="L134">        addrs.add(addr4);</span>
+<span class="nc" id="L135">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+        // replace node under r2
+<span class="nc" id="L137">        Set&lt;BookieSocketAddress&gt; excludedAddrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L138">        excludedAddrs.add(addr1);</span>
+<span class="nc" id="L139">        BookieSocketAddress replacedBookie = repp.replaceBookie(1, 1, 1, null, new ArrayList&lt;&gt;(),</span>
+<span class="nc" id="L140">                                                                addr2, excludedAddrs).getResult();</span>
+
+<span class="nc" id="L142">        assertFalse(addr1.equals(replacedBookie));</span>
+<span class="nc bnc" id="L143" title="All 4 branches missed.">        assertTrue(addr3.equals(replacedBookie) || addr4.equals(replacedBookie));</span>
+<span class="nc" id="L144">    }</span>
+
+    @Test
+    public void testReplaceBookieWithNotEnoughBookies() throws Exception {
+<span class="nc" id="L148">        ignoreTestIfItIsWindowsOS();</span>
+<span class="nc" id="L149">        BookieSocketAddress addr1 = new BookieSocketAddress(&quot;127.0.0.1&quot;, 3181); // /1 rack</span>
+<span class="nc" id="L150">        BookieSocketAddress addr2 = new BookieSocketAddress(&quot;127.0.0.2&quot;, 3181); // /2 rack</span>
+<span class="nc" id="L151">        BookieSocketAddress addr3 = new BookieSocketAddress(&quot;127.0.0.3&quot;, 3181); // /3 rack</span>
+<span class="nc" id="L152">        BookieSocketAddress addr4 = new BookieSocketAddress(&quot;127.0.0.4&quot;, 3181); // /4 rack</span>
+
+        // Update cluster
+<span class="nc" id="L155">        Set&lt;BookieSocketAddress&gt; addrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L156">        addrs.add(addr1);</span>
+<span class="nc" id="L157">        addrs.add(addr2);</span>
+<span class="nc" id="L158">        addrs.add(addr3);</span>
+<span class="nc" id="L159">        addrs.add(addr4);</span>
+<span class="nc" id="L160">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+        // replace node under r2
+<span class="nc" id="L162">        Set&lt;BookieSocketAddress&gt; excludedAddrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L163">        excludedAddrs.add(addr1);</span>
+<span class="nc" id="L164">        excludedAddrs.add(addr3);</span>
+<span class="nc" id="L165">        excludedAddrs.add(addr4);</span>
+        try {
+<span class="nc" id="L167">            repp.replaceBookie(1, 1, 1, null, new ArrayList&lt;BookieSocketAddress&gt;(), addr2, excludedAddrs);</span>
+<span class="nc" id="L168">            fail(&quot;Should throw BKNotEnoughBookiesException when there is not enough bookies&quot;);</span>
+<span class="nc" id="L169">        } catch (BKNotEnoughBookiesException bnebe) {</span>
+            // should throw not BKNotEnoughBookiesException
+<span class="nc" id="L171">        }</span>
+<span class="nc" id="L172">    }</span>
+
+    /*
+     * Test that even in case of script mapping error
+     * we are getting default rack that makes sense for the policy.
+     * i.e. if all nodes in rack-aware policy use /rack format
+     * but one gets node /default-region/default-rack the node addition to topology will fail.
+     *
+     * This case adds node with non-default rack, then adds nodes with one on default rack.
+     */
+    @Test
+    public void testReplaceBookieWithScriptMappingError() throws Exception {
+<span class="nc" id="L184">        ignoreTestIfItIsWindowsOS();</span>
+<span class="nc" id="L185">        BookieSocketAddress addr0 = new BookieSocketAddress(&quot;127.0.0.0&quot;, 3181); // error mapping to rack here</span>
+<span class="nc" id="L186">        BookieSocketAddress addr1 = new BookieSocketAddress(&quot;127.0.0.1&quot;, 3181); // /1 rack</span>
+<span class="nc" id="L187">        BookieSocketAddress addr2 = new BookieSocketAddress(&quot;127.0.0.2&quot;, 3181); // /2 rack</span>
+
+        // Update cluster, add node that maps to non-default rack
+<span class="nc" id="L190">        Set&lt;BookieSocketAddress&gt; addrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L191">        addrs.add(addr1);</span>
+
+<span class="nc" id="L193">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+
+<span class="nc" id="L195">        addrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L196">        addrs.add(addr0);</span>
+<span class="nc" id="L197">        addrs.add(addr1);</span>
+<span class="nc" id="L198">        addrs.add(addr2);</span>
+<span class="nc" id="L199">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+
+        // replace node under r2
+<span class="nc" id="L202">        Set&lt;BookieSocketAddress&gt; excludedAddrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L203">        excludedAddrs.add(addr1);</span>
+<span class="nc" id="L204">        BookieSocketAddress replacedBookie = repp.replaceBookie(1, 1, 1, null, new ArrayList&lt;&gt;(),</span>
+<span class="nc" id="L205">                                                                addr2, excludedAddrs).getResult();</span>
+
+<span class="nc" id="L207">        assertFalse(addr1.equals(replacedBookie));</span>
+<span class="nc" id="L208">        assertFalse(addr2.equals(replacedBookie));</span>
+<span class="nc" id="L209">        assertTrue(addr0.equals(replacedBookie));</span>
+<span class="nc" id="L210">    }</span>
+
+    /*
+     * Test that even in case of script mapping error
+     * we are getting default rack that makes sense for the policy.
+     * i.e. if all nodes in rack-aware policy use /rack format
+     * but one gets node /default-region/default-rack the node addition to topology will fail.
+     *
+     * This case adds node with default rack, then adds nodes with non-default rack.
+     * Almost the same as testReplaceBookieWithScriptMappingError but different order of addition.
+     */
+    @Test
+    public void testReplaceBookieWithScriptMappingError2() throws Exception {
+<span class="nc" id="L223">        ignoreTestIfItIsWindowsOS();</span>
+<span class="nc" id="L224">        BookieSocketAddress addr0 = new BookieSocketAddress(&quot;127.0.0.0&quot;, 3181); // error mapping to rack here</span>
+<span class="nc" id="L225">        BookieSocketAddress addr1 = new BookieSocketAddress(&quot;127.0.0.1&quot;, 3181); // /1 rack</span>
+<span class="nc" id="L226">        BookieSocketAddress addr2 = new BookieSocketAddress(&quot;127.0.0.2&quot;, 3181); // /2 rack</span>
+
+        // Update cluster, add node that maps to default rack first
+<span class="nc" id="L229">        Set&lt;BookieSocketAddress&gt; addrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L230">        addrs.add(addr0);</span>
+
+<span class="nc" id="L232">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+
+<span class="nc" id="L234">        addrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L235">        addrs.add(addr0);</span>
+<span class="nc" id="L236">        addrs.add(addr1);</span>
+<span class="nc" id="L237">        addrs.add(addr2);</span>
+<span class="nc" id="L238">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+
+        // replace node under r2
+<span class="nc" id="L241">        Set&lt;BookieSocketAddress&gt; excludedAddrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L242">        excludedAddrs.add(addr1);</span>
+<span class="nc" id="L243">        BookieSocketAddress replacedBookie = repp.replaceBookie(1, 1, 1, null, new ArrayList&lt;&gt;(),</span>
+<span class="nc" id="L244">                                                                addr2, excludedAddrs).getResult();</span>
+
+<span class="nc" id="L246">        assertFalse(addr1.equals(replacedBookie));</span>
+<span class="nc" id="L247">        assertFalse(addr2.equals(replacedBookie));</span>
+<span class="nc" id="L248">        assertTrue(addr0.equals(replacedBookie));</span>
+<span class="nc" id="L249">    }</span>
+
+    @Test
+    public void testNewEnsembleWithSingleRack() throws Exception {
+<span class="nc" id="L253">        ignoreTestIfItIsWindowsOS();</span>
+<span class="nc" id="L254">        BookieSocketAddress addr1 = new BookieSocketAddress(&quot;127.0.0.1&quot;, 3181); // /1 rack</span>
+<span class="nc" id="L255">        BookieSocketAddress addr2 = new BookieSocketAddress(&quot;127.0.1.1&quot;, 3181); // /1 rack</span>
+<span class="nc" id="L256">        BookieSocketAddress addr3 = new BookieSocketAddress(&quot;127.0.2.1&quot;, 3181); // /1 rack</span>
+<span class="nc" id="L257">        BookieSocketAddress addr4 = new BookieSocketAddress(&quot;127.0.3.1&quot;, 3181); // /1 rack</span>
+        // Update cluster
+<span class="nc" id="L259">        Set&lt;BookieSocketAddress&gt; addrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L260">        addrs.add(addr1);</span>
+<span class="nc" id="L261">        addrs.add(addr2);</span>
+<span class="nc" id="L262">        addrs.add(addr3);</span>
+<span class="nc" id="L263">        addrs.add(addr4);</span>
+<span class="nc" id="L264">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+        try {
+<span class="nc" id="L266">            List&lt;BookieSocketAddress&gt; ensemble = repp.newEnsemble(3, 2, 2, null,</span>
+<span class="nc" id="L267">                                                                  new HashSet&lt;&gt;()).getResult();</span>
+<span class="nc" id="L268">            assertEquals(0, getNumCoveredWriteQuorums(ensemble, 2));</span>
+<span class="nc" id="L269">            List&lt;BookieSocketAddress&gt; ensemble2 = repp.newEnsemble(4, 2, 2, null,</span>
+<span class="nc" id="L270">                                                                   new HashSet&lt;&gt;()).getResult();</span>
+<span class="nc" id="L271">            assertEquals(0, getNumCoveredWriteQuorums(ensemble2, 2));</span>
+<span class="nc" id="L272">        } catch (BKNotEnoughBookiesException bnebe) {</span>
+<span class="nc" id="L273">            fail(&quot;Should not get not enough bookies exception even there is only one rack.&quot;);</span>
+<span class="nc" id="L274">        }</span>
+<span class="nc" id="L275">    }</span>
+
+    @Test
+    public void testNewEnsembleWithMultipleRacks() throws Exception {
+<span class="nc" id="L279">        ignoreTestIfItIsWindowsOS();</span>
+<span class="nc" id="L280">        BookieSocketAddress addr1 = new BookieSocketAddress(&quot;127.0.0.1&quot;, 3181); // /1 rack</span>
+<span class="nc" id="L281">        BookieSocketAddress addr2 = new BookieSocketAddress(&quot;127.0.0.2&quot;, 3181); // /2 rack</span>
+<span class="nc" id="L282">        BookieSocketAddress addr3 = new BookieSocketAddress(&quot;127.0.1.2&quot;, 3181); // /2 rack</span>
+<span class="nc" id="L283">        BookieSocketAddress addr4 = new BookieSocketAddress(&quot;127.0.2.2&quot;, 3181); // /2 rack</span>
+        // Update cluster
+<span class="nc" id="L285">        Set&lt;BookieSocketAddress&gt; addrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L286">        addrs.add(addr1);</span>
+<span class="nc" id="L287">        addrs.add(addr2);</span>
+<span class="nc" id="L288">        addrs.add(addr3);</span>
+<span class="nc" id="L289">        addrs.add(addr4);</span>
+<span class="nc" id="L290">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+        try {
+<span class="nc" id="L292">            List&lt;BookieSocketAddress&gt; ensemble = repp.newEnsemble(3, 2, 2, null,</span>
+<span class="nc" id="L293">                                                                  new HashSet&lt;&gt;()).getResult();</span>
+<span class="nc" id="L294">            int numCovered = getNumCoveredWriteQuorums(ensemble, 2);</span>
+<span class="nc bnc" id="L295" title="All 2 branches missed.">            assertTrue(numCovered == 2);</span>
+<span class="nc" id="L296">            List&lt;BookieSocketAddress&gt; ensemble2 = repp.newEnsemble(4, 2, 2, null,</span>
+<span class="nc" id="L297">                                                                   new HashSet&lt;&gt;()).getResult();</span>
+<span class="nc" id="L298">            numCovered = getNumCoveredWriteQuorums(ensemble2, 2);</span>
+<span class="nc bnc" id="L299" title="All 2 branches missed.">            assertTrue(numCovered == 2);</span>
+<span class="nc" id="L300">        } catch (BKNotEnoughBookiesException bnebe) {</span>
+<span class="nc" id="L301">            fail(&quot;Should not get not enough bookies exception&quot;);</span>
+<span class="nc" id="L302">        }</span>
+<span class="nc" id="L303">    }</span>
+
+    @Test
+    public void testNewEnsembleWithEnoughRacks() throws Exception {
+<span class="nc" id="L307">        ignoreTestIfItIsWindowsOS();</span>
+<span class="nc" id="L308">        BookieSocketAddress addr1 = new BookieSocketAddress(&quot;127.0.0.1&quot;, 3181); // /1 rack</span>
+<span class="nc" id="L309">        BookieSocketAddress addr2 = new BookieSocketAddress(&quot;127.0.0.2&quot;, 3181); // /2 rack</span>
+<span class="nc" id="L310">        BookieSocketAddress addr3 = new BookieSocketAddress(&quot;127.0.0.3&quot;, 3181); // /3 rack</span>
+<span class="nc" id="L311">        BookieSocketAddress addr4 = new BookieSocketAddress(&quot;127.0.0.4&quot;, 3181); // /4 rack</span>
+<span class="nc" id="L312">        BookieSocketAddress addr5 = new BookieSocketAddress(&quot;127.0.1.1&quot;, 3181); // /1 rack</span>
+<span class="nc" id="L313">        BookieSocketAddress addr6 = new BookieSocketAddress(&quot;127.0.1.2&quot;, 3181); // /2 rack</span>
+<span class="nc" id="L314">        BookieSocketAddress addr7 = new BookieSocketAddress(&quot;127.0.1.3&quot;, 3181); // /3 rack</span>
+<span class="nc" id="L315">        BookieSocketAddress addr8 = new BookieSocketAddress(&quot;127.0.1.4&quot;, 3181); // /4 rack</span>
+        // Update cluster
+<span class="nc" id="L317">        Set&lt;BookieSocketAddress&gt; addrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L318">        addrs.add(addr1);</span>
+<span class="nc" id="L319">        addrs.add(addr2);</span>
+<span class="nc" id="L320">        addrs.add(addr3);</span>
+<span class="nc" id="L321">        addrs.add(addr4);</span>
+<span class="nc" id="L322">        addrs.add(addr5);</span>
+<span class="nc" id="L323">        addrs.add(addr6);</span>
+<span class="nc" id="L324">        addrs.add(addr7);</span>
+<span class="nc" id="L325">        addrs.add(addr8);</span>
+<span class="nc" id="L326">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+        try {
+<span class="nc" id="L328">            List&lt;BookieSocketAddress&gt; ensemble1 = repp.newEnsemble(3, 2, 2, null,</span>
+<span class="nc" id="L329">                                                                   new HashSet&lt;&gt;()).getResult();</span>
+<span class="nc" id="L330">            assertEquals(3, getNumCoveredWriteQuorums(ensemble1, 2));</span>
+<span class="nc" id="L331">            List&lt;BookieSocketAddress&gt; ensemble2 = repp.newEnsemble(4, 2, 2, null,</span>
+<span class="nc" id="L332">                                                                   new HashSet&lt;&gt;()).getResult();</span>
+<span class="nc" id="L333">            assertEquals(4, getNumCoveredWriteQuorums(ensemble2, 2));</span>
+<span class="nc" id="L334">        } catch (BKNotEnoughBookiesException bnebe) {</span>
+<span class="nc" id="L335">            fail(&quot;Should not get not enough bookies exception.&quot;);</span>
+<span class="nc" id="L336">        }</span>
+<span class="nc" id="L337">    }</span>
+
+    /**
+     * Test for BOOKKEEPER-633.
+     */
+
+    @Test
+    public void testRemoveBookieFromCluster() {
+<span class="nc" id="L345">        ignoreTestIfItIsWindowsOS();</span>
+<span class="nc" id="L346">        BookieSocketAddress addr1 = new BookieSocketAddress(&quot;127.0.0.1&quot;, 3181); // /1 rack</span>
+<span class="nc" id="L347">        BookieSocketAddress addr2 = new BookieSocketAddress(&quot;127.0.0.2&quot;, 3181); // /2 rack</span>
+<span class="nc" id="L348">        BookieSocketAddress addr3 = new BookieSocketAddress(&quot;127.0.1.2&quot;, 3181); // /2 rack</span>
+<span class="nc" id="L349">        BookieSocketAddress addr4 = new BookieSocketAddress(&quot;127.0.0.4&quot;, 3181); // /4 rack</span>
+        // Update cluster
+<span class="nc" id="L351">        Set&lt;BookieSocketAddress&gt; addrs = new HashSet&lt;BookieSocketAddress&gt;();</span>
+<span class="nc" id="L352">        addrs.add(addr1);</span>
+<span class="nc" id="L353">        addrs.add(addr2);</span>
+<span class="nc" id="L354">        addrs.add(addr3);</span>
+<span class="nc" id="L355">        addrs.add(addr4);</span>
+<span class="nc" id="L356">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+<span class="nc" id="L357">        addrs.remove(addr1);</span>
+<span class="nc" id="L358">        repp.onClusterChanged(addrs, new HashSet&lt;BookieSocketAddress&gt;());</span>
+<span class="nc" id="L359">    }</span>
+
+    @Test
+    public void testNetworkTopologyScriptFileNameIsEmpty() throws Exception {
+<span class="nc" id="L363">        ignoreTestIfItIsWindowsOS();</span>
+<span class="nc" id="L364">        repp.uninitalize();</span>
+
+<span class="nc" id="L366">        ClientConfiguration newConf = new ClientConfiguration();</span>
+<span class="nc" id="L367">        newConf.setProperty(REPP_DNS_RESOLVER_CLASS, ScriptBasedMapping.class.getName());</span>
+<span class="nc" id="L368">        newConf.setProperty(CommonConfigurationKeys.NET_TOPOLOGY_SCRIPT_FILE_NAME_KEY, &quot;&quot;);</span>
+<span class="nc" id="L369">        newConf.setEnforceMinNumRacksPerWriteQuorum(false);</span>
+<span class="nc" id="L370">        timer = new HashedWheelTimer(new ThreadFactoryBuilder().setNameFormat(&quot;TestTimer-%d&quot;).build(),</span>
+<span class="nc" id="L371">                newConf.getTimeoutTimerTickDurationMs(), TimeUnit.MILLISECONDS, newConf.getTimeoutTimerNumTicks());</span>
+
+<span class="nc" id="L373">        repp = new RackawareEnsemblePlacementPolicy();</span>
+        try {
+<span class="nc" id="L375">            repp.initialize(newConf, Optional.&lt;DNSToSwitchMapping&gt; empty(), timer, DISABLE_ALL,</span>
+                    NullStatsLogger.INSTANCE);
+<span class="nc" id="L377">        } catch (RuntimeException re) {</span>
+<span class="nc" id="L378">            fail(&quot;EnforceMinNumRacksPerWriteQuorum is not set, so repp.initialize should succeed even if&quot;</span>
+                    + &quot; networkTopologyScriptFileName is empty&quot;);
+<span class="nc" id="L380">        }</span>
+<span class="nc" id="L381">        repp.uninitalize();</span>
+
+<span class="nc" id="L383">        newConf.setEnforceMinNumRacksPerWriteQuorum(true);</span>
+<span class="nc" id="L384">        repp = new RackawareEnsemblePlacementPolicy();</span>
+        try {
+<span class="nc" id="L386">            repp.initialize(newConf, Optional.&lt;DNSToSwitchMapping&gt; empty(), timer, DISABLE_ALL,</span>
+                    NullStatsLogger.INSTANCE);
+<span class="nc" id="L388">            fail(&quot;EnforceMinNumRacksPerWriteQuorum is set, so repp.initialize should fail if&quot;</span>
+                    + &quot; networkTopologyScriptFileName is empty&quot;);
+<span class="nc" id="L390">        } catch (RuntimeException re) {</span>
+<span class="nc" id="L391">        }</span>
+<span class="nc" id="L392">        repp.uninitalize();</span>
+
+<span class="nc" id="L394">        newConf.setProperty(CommonConfigurationKeys.NET_TOPOLOGY_SCRIPT_FILE_NAME_KEY,</span>
+                &quot;src/test/resources/networkmappingscript.sh&quot;);
+        try {
+<span class="nc" id="L397">            repp.initialize(newConf, Optional.&lt;DNSToSwitchMapping&gt; empty(), timer, DISABLE_ALL,</span>
+                    NullStatsLogger.INSTANCE);
+<span class="nc" id="L399">        } catch (RuntimeException re) {</span>
+<span class="nc" id="L400">            fail(&quot;EnforceMinNumRacksPerWriteQuorum is set and networkTopologyScriptFileName is not empty,&quot;</span>
+                    + &quot; so it should succeed&quot;);
+<span class="nc" id="L402">        }</span>
+<span class="nc" id="L403">        repp.uninitalize();</span>
+<span class="nc" id="L404">    }</span>
+
+    @Test
+    public void testIfValidateConfFails() throws Exception {
+<span class="nc" id="L408">        ignoreTestIfItIsWindowsOS();</span>
+<span class="nc" id="L409">        repp.uninitalize();</span>
+
+<span class="nc" id="L411">        ClientConfiguration newConf = new ClientConfiguration();</span>
+<span class="nc" id="L412">        newConf.setProperty(REPP_DNS_RESOLVER_CLASS, ScriptBasedMapping.class.getName());</span>
+        /*
+         * this script, exits with error value if no argument is passed to it.
+         * So mapping.validateConf will fail.
+         */
+<span class="nc" id="L417">        newConf.setProperty(CommonConfigurationKeys.NET_TOPOLOGY_SCRIPT_FILE_NAME_KEY,</span>
+                &quot;src/test/resources/networkmappingscriptwithargs.sh&quot;);
+<span class="nc" id="L419">        timer = new HashedWheelTimer(new ThreadFactoryBuilder().setNameFormat(&quot;TestTimer-%d&quot;).build(),</span>
+<span class="nc" id="L420">                newConf.getTimeoutTimerTickDurationMs(), TimeUnit.MILLISECONDS, newConf.getTimeoutTimerNumTicks());</span>
+
+<span class="nc" id="L422">        repp = new RackawareEnsemblePlacementPolicy();</span>
+<span class="nc" id="L423">        repp.initialize(newConf, Optional.&lt;DNSToSwitchMapping&gt; empty(), timer, DISABLE_ALL, NullStatsLogger.INSTANCE);</span>
+
+<span class="nc" id="L425">        repp.uninitalize();</span>
+<span class="nc" id="L426">        repp = new RackawareEnsemblePlacementPolicy();</span>
+        try {
+<span class="nc" id="L428">            repp.initialize(newConf, Optional.&lt;DNSToSwitchMapping&gt; empty(), timer, DISABLE_ALL,</span>
+                    NullStatsLogger.INSTANCE);
+<span class="nc" id="L430">        } catch (RuntimeException re) {</span>
+<span class="nc" id="L431">            fail(&quot;EnforceMinNumRacksPerWriteQuorum is not set, so repp.initialize should succeed&quot;</span>
+                    + &quot; even if mapping.validateConf fails&quot;);
+<span class="nc" id="L433">        }</span>
+
+<span class="nc" id="L435">        newConf.setEnforceMinNumRacksPerWriteQuorum(true);</span>
+<span class="nc" id="L436">        repp.uninitalize();</span>
+<span class="nc" id="L437">        repp = new RackawareEnsemblePlacementPolicy();</span>
+        try {
+<span class="nc" id="L439">            repp.initialize(newConf, Optional.&lt;DNSToSwitchMapping&gt; empty(), timer, DISABLE_ALL,</span>
+                    NullStatsLogger.INSTANCE);
+<span class="nc" id="L441">            fail(&quot;EnforceMinNumRacksPerWriteQuorum is set, so repp.initialize should fail&quot;</span>
+                    + &quot; if mapping.validateConf fails&quot;);
+<span class="nc" id="L443">        } catch (RuntimeException re) {</span>
+
+<span class="nc" id="L445">        }</span>
+
+        /*
+         * this script returns successfully even if no argument is passed to it.
+         * So mapping.validateConf will succeed.
+         */
+<span class="nc" id="L451">        newConf.setProperty(CommonConfigurationKeys.NET_TOPOLOGY_SCRIPT_FILE_NAME_KEY,</span>
+                &quot;src/test/resources/networkmappingscript.sh&quot;);
+<span class="nc" id="L453">        repp.uninitalize();</span>
+<span class="nc" id="L454">        repp = new RackawareEnsemblePlacementPolicy();</span>
+        try {
+<span class="nc" id="L456">            repp.initialize(newConf, Optional.&lt;DNSToSwitchMapping&gt; empty(), timer, DISABLE_ALL,</span>
+                    NullStatsLogger.INSTANCE);
+<span class="nc" id="L458">        } catch (RuntimeException re) {</span>
+<span class="nc" id="L459">            fail(&quot;EnforceMinNumRacksPerWriteQuorum is set, and mapping.validateConf succeeds.&quot;</span>
+                    + &quot; So repp.initialize should succeed&quot;);
+<span class="nc" id="L461">        }</span>
+<span class="nc" id="L462">    }</span>
+
+    private int getNumCoveredWriteQuorums(List&lt;BookieSocketAddress&gt; ensemble, int writeQuorumSize)
+            throws Exception {
+<span class="nc" id="L466">        int ensembleSize = ensemble.size();</span>
+<span class="nc" id="L467">        int numCoveredWriteQuorums = 0;</span>
+<span class="nc bnc" id="L468" title="All 2 branches missed.">        for (int i = 0; i &lt; ensembleSize; i++) {</span>
+<span class="nc" id="L469">            Set&lt;String&gt; racks = new HashSet&lt;String&gt;();</span>
+<span class="nc bnc" id="L470" title="All 2 branches missed.">            for (int j = 0; j &lt; writeQuorumSize; j++) {</span>
+<span class="nc" id="L471">                int bookieIdx = (i + j) % ensembleSize;</span>
+<span class="nc" id="L472">                BookieSocketAddress addr = ensemble.get(bookieIdx);</span>
+<span class="nc" id="L473">                String hostAddress = addr.getSocketAddress().getAddress().getHostAddress();</span>
+<span class="nc" id="L474">                String rack = &quot;/&quot; + hostAddress.charAt(hostAddress.length() - 1);</span>
+<span class="nc" id="L475">                racks.add(rack);</span>
+            }
+<span class="nc bnc" id="L477" title="All 2 branches missed.">            numCoveredWriteQuorums += (racks.size() &gt; 1 ? 1 : 0);</span>
+        }
+<span class="nc" id="L479">        return numCoveredWriteQuorums;</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

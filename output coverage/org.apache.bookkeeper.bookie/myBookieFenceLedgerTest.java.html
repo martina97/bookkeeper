@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>myBookieFenceLedgerTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$myBookieFenceLedgerTest.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.bookie</a> &gt; <span class="el_source">myBookieFenceLedgerTest.java</span></div><h1>myBookieFenceLedgerTest.java</h1><pre class="source lang-java linenums">package org.apache.bookkeeper.bookie;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import org.apache.bookkeeper.client.BookKeeper;
+import org.apache.bookkeeper.client.LedgerHandle;
+import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.proto.BookkeeperInternalCallbacks;
+import org.apache.bookkeeper.test.BookKeeperClusterTestCase;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.Collection;
+
+@RunWith(Parameterized.class)
+public class myBookieFenceLedgerTest extends BookKeeperClusterTestCase {
+
+    //private static final byte[] masterKey = &quot;password&quot;.getBytes();
+
+    private long ledgerId;
+    private byte[] masterKey;
+    private boolean expected;
+
+    public myBookieFenceLedgerTest(long ledgerId, byte[] masterKey, boolean expected) {
+<span class="fc" id="L30">        super(3);</span>
+<span class="fc" id="L31">        this.ledgerId = ledgerId;</span>
+<span class="fc" id="L32">        this.masterKey = masterKey;</span>
+<span class="fc" id="L33">        this.expected = expected;</span>
+<span class="fc" id="L34">    }</span>
+
+
+    @Parameterized.Parameters
+    public static Collection params() {
+
+<span class="fc" id="L40">        return Arrays.asList(new Object[][] {</span>
+<span class="fc" id="L41">                { -1, null, false },</span>
+<span class="fc" id="L42">                { 0, &quot;password&quot;.getBytes(), true },</span>
+<span class="fc" id="L43">                { 0, null, false }</span>
+        });
+    }
+
+
+    @Override
+    @Before
+    public void setUp() throws Exception {
+<span class="fc" id="L51">        super.setUp();</span>
+
+<span class="fc" id="L53">        LedgerHandle ledger = bkc.createLedger(BookKeeper.DigestType.CRC32, &quot;password&quot;.getBytes());</span>
+
+<span class="fc bfc" id="L55" title="All 2 branches covered.">        if(ledgerId == 0) {</span>
+<span class="fc" id="L56">            ledgerId = ledger.getId();</span>
+        }
+
+<span class="fc" id="L59">    }</span>
+
+
+    @Test
+    public void test(){
+
+<span class="fc" id="L65">        Bookie bk = bs.get(0).getBookie();</span>
+<span class="fc" id="L66">        boolean result = true;</span>
+
+        try {
+<span class="fc" id="L69">            bk.fenceLedger(ledgerId, masterKey);</span>
+<span class="fc" id="L70">        } catch (IOException | BookieException e) {</span>
+<span class="fc" id="L71">            e.printStackTrace();</span>
+<span class="fc" id="L72">            result = false;</span>
+
+<span class="fc" id="L74">        }</span>
+
+<span class="fc bfc" id="L76" title="All 2 branches covered.">        if(result){</span>
+
+<span class="fc" id="L78">            result = false;</span>
+
+            try {
+
+<span class="fc" id="L82">                ByteBuf buf = Unpooled.buffer();</span>
+<span class="fc" id="L83">                buf.writeLong(ledgerId);</span>
+<span class="fc" id="L84">                buf.writeBytes(&quot;bla bla bla&quot;.getBytes());</span>
+
+<span class="fc" id="L86">                BookkeeperInternalCallbacks.WriteCallback wc = new BookkeeperInternalCallbacks.WriteCallback() {</span>
+                    @Override
+                    public void writeComplete(int rc, long ledgerId, long entryId, BookieSocketAddress addr, Object ctx) {
+
+<span class="nc" id="L90">                    }</span>
+                };
+
+<span class="nc" id="L93">                bk.addEntry(buf,false,wc,null, masterKey);</span>
+
+<span class="fc" id="L95">            } catch (InterruptedException | BookieException | IOException e) {</span>
+<span class="fc" id="L96">                e.printStackTrace();</span>
+<span class="fc" id="L97">                result = true;</span>
+<span class="nc" id="L98">            }</span>
+
+
+        }
+
+<span class="fc" id="L103">        Assert.assertEquals(expected,result);</span>
+
+<span class="fc" id="L105">    }</span>
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

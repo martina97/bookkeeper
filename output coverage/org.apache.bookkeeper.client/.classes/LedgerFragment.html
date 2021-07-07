@@ -1,0 +1,310 @@
+
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html id="htmlId">
+<head>
+  <title>Coverage Report :: LedgerFragment</title>
+  <style type="text/css">
+    @import "../../.css/coverage.css";
+  </style>
+</head>
+
+<body>
+<div class="header"></div>
+
+<div class="content">
+<div class="breadCrumbs">
+    [ <a href="../../index.html">all classes</a> ]
+    [ <a href="../index.html">org.apache.bookkeeper.client</a> ]
+</div>
+
+<h1>Coverage Summary for Class: LedgerFragment (org.apache.bookkeeper.client)</h1>
+
+<table class="coverageStats">
+<tr>
+  <th class="name">Class</th>
+<th class="coverageStat 
+">
+  Class, %
+</th>
+<th class="coverageStat 
+">
+  Method, %
+</th>
+<th class="coverageStat 
+">
+  Line, %
+</th>
+</tr>
+<tr>
+  <td class="name">LedgerFragment</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 1)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 17)
+  </span>
+</td>
+<td class="coverageStat">
+  <span class="percent">
+    0%
+  </span>
+  <span class="absValue">
+    (0/ 69)
+  </span>
+</td>
+</tr>
+
+</table>
+
+<br/>
+<br/>
+
+
+<div class="sourceCode"><i>1</i>&nbsp;/**
+<i>2</i>&nbsp; * Licensed to the Apache Software Foundation (ASF) under one
+<i>3</i>&nbsp; * or more contributor license agreements.  See the NOTICE file
+<i>4</i>&nbsp; * distributed with this work for additional information
+<i>5</i>&nbsp; * regarding copyright ownership.  The ASF licenses this file
+<i>6</i>&nbsp; * to you under the Apache License, Version 2.0 (the
+<i>7</i>&nbsp; * &quot;License&quot;); you may not use this file except in compliance
+<i>8</i>&nbsp; * with the License.  You may obtain a copy of the License at
+<i>9</i>&nbsp; *
+<i>10</i>&nbsp; *   http://www.apache.org/licenses/LICENSE-2.0
+<i>11</i>&nbsp; *
+<i>12</i>&nbsp; * Unless required by applicable law or agreed to in writing,
+<i>13</i>&nbsp; * software distributed under the License is distributed on an
+<i>14</i>&nbsp; * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+<i>15</i>&nbsp; * KIND, either express or implied.  See the License for the
+<i>16</i>&nbsp; * specific language governing permissions and limitations
+<i>17</i>&nbsp; * under the License.
+<i>18</i>&nbsp; *
+<i>19</i>&nbsp; */
+<i>20</i>&nbsp;package org.apache.bookkeeper.client;
+<i>21</i>&nbsp;
+<i>22</i>&nbsp;import java.util.HashSet;
+<i>23</i>&nbsp;import java.util.List;
+<i>24</i>&nbsp;import java.util.Set;
+<i>25</i>&nbsp;import java.util.SortedMap;
+<i>26</i>&nbsp;import org.apache.bookkeeper.net.BookieSocketAddress;
+<i>27</i>&nbsp;
+<i>28</i>&nbsp;/**
+<i>29</i>&nbsp; * Represents the entries of a segment of a ledger which are stored on subset of
+<i>30</i>&nbsp; * bookies in the segments bookie ensemble.
+<i>31</i>&nbsp; *
+<i>32</i>&nbsp; * &lt;p&gt;Used for checking and recovery
+<i>33</i>&nbsp; */
+<i>34</i>&nbsp;public class LedgerFragment {
+<i>35</i>&nbsp;    private final Set&lt;Integer&gt; bookieIndexes;
+<i>36</i>&nbsp;    private final List&lt;BookieSocketAddress&gt; ensemble;
+<i>37</i>&nbsp;    private final long firstEntryId;
+<i>38</i>&nbsp;    private final long lastKnownEntryId;
+<i>39</i>&nbsp;    private final long ledgerId;
+<i>40</i>&nbsp;    private final DistributionSchedule schedule;
+<i>41</i>&nbsp;    private final boolean isLedgerClosed;
+<i>42</i>&nbsp;
+<i>43</i>&nbsp;    LedgerFragment(LedgerHandle lh,
+<i>44</i>&nbsp;                   long firstEntryId,
+<i>45</i>&nbsp;                   long lastKnownEntryId,
+<b class="nc"><i>46</i>&nbsp;                   Set&lt;Integer&gt; bookieIndexes) {</b>
+<b class="nc"><i>47</i>&nbsp;        this.ledgerId = lh.getId();</b>
+<b class="nc"><i>48</i>&nbsp;        this.firstEntryId = firstEntryId;</b>
+<b class="nc"><i>49</i>&nbsp;        this.lastKnownEntryId = lastKnownEntryId;</b>
+<b class="nc"><i>50</i>&nbsp;        this.bookieIndexes = bookieIndexes;</b>
+<b class="nc"><i>51</i>&nbsp;        this.ensemble = lh.getLedgerMetadata().getEnsembleAt(firstEntryId);</b>
+<b class="nc"><i>52</i>&nbsp;        this.schedule = lh.getDistributionSchedule();</b>
+<b class="nc"><i>53</i>&nbsp;        SortedMap&lt;Long, ? extends List&lt;BookieSocketAddress&gt;&gt; ensembles = lh</b>
+<b class="nc"><i>54</i>&nbsp;                .getLedgerMetadata().getAllEnsembles();</b>
+<b class="nc"><i>55</i>&nbsp;        this.isLedgerClosed = lh.getLedgerMetadata().isClosed()</b>
+<b class="nc"><i>56</i>&nbsp;                || !ensemble.equals(ensembles.get(ensembles.lastKey()));</b>
+<b class="nc"><i>57</i>&nbsp;    }</b>
+<i>58</i>&nbsp;
+<b class="nc"><i>59</i>&nbsp;    LedgerFragment(LedgerFragment lf, Set&lt;Integer&gt; subset) {</b>
+<b class="nc"><i>60</i>&nbsp;        this.ledgerId = lf.ledgerId;</b>
+<b class="nc"><i>61</i>&nbsp;        this.firstEntryId = lf.firstEntryId;</b>
+<b class="nc"><i>62</i>&nbsp;        this.lastKnownEntryId = lf.lastKnownEntryId;</b>
+<b class="nc"><i>63</i>&nbsp;        this.bookieIndexes = subset;</b>
+<b class="nc"><i>64</i>&nbsp;        this.ensemble = lf.ensemble;</b>
+<b class="nc"><i>65</i>&nbsp;        this.schedule = lf.schedule;</b>
+<b class="nc"><i>66</i>&nbsp;        this.isLedgerClosed = lf.isLedgerClosed;</b>
+<b class="nc"><i>67</i>&nbsp;    }</b>
+<i>68</i>&nbsp;
+<i>69</i>&nbsp;    /**
+<i>70</i>&nbsp;     * Return a ledger fragment contains subset of bookies.
+<i>71</i>&nbsp;     *
+<i>72</i>&nbsp;     * @param subset
+<i>73</i>&nbsp;     *          subset of bookies.
+<i>74</i>&nbsp;     * @return ledger fragment contains subset of bookies
+<i>75</i>&nbsp;     */
+<i>76</i>&nbsp;    public LedgerFragment subset(Set&lt;Integer&gt; subset) {
+<b class="nc"><i>77</i>&nbsp;        return new LedgerFragment(this, subset);</b>
+<i>78</i>&nbsp;    }
+<i>79</i>&nbsp;
+<i>80</i>&nbsp;    /**
+<i>81</i>&nbsp;     * Returns true, if and only if the ledger fragment will never be modified
+<i>82</i>&nbsp;     * by any of the clients in future, otherwise false. i.e,
+<i>83</i>&nbsp;     * &lt;ol&gt;
+<i>84</i>&nbsp;     * &lt;li&gt;If ledger is in closed state, then no other clients can modify this
+<i>85</i>&nbsp;     * fragment.&lt;/li&gt;
+<i>86</i>&nbsp;     * &lt;li&gt;If ledger is not in closed state and the current fragment is not a
+<i>87</i>&nbsp;     * last fragment, then no one will modify this fragment.&lt;/li&gt;
+<i>88</i>&nbsp;     * &lt;/ol&gt;
+<i>89</i>&nbsp;     */
+<i>90</i>&nbsp;    public boolean isClosed() {
+<b class="nc"><i>91</i>&nbsp;        return isLedgerClosed;</b>
+<i>92</i>&nbsp;    }
+<i>93</i>&nbsp;
+<i>94</i>&nbsp;    long getLedgerId() {
+<b class="nc"><i>95</i>&nbsp;        return ledgerId;</b>
+<i>96</i>&nbsp;    }
+<i>97</i>&nbsp;
+<i>98</i>&nbsp;    public long getFirstEntryId() {
+<b class="nc"><i>99</i>&nbsp;        return firstEntryId;</b>
+<i>100</i>&nbsp;    }
+<i>101</i>&nbsp;
+<i>102</i>&nbsp;    public long getLastKnownEntryId() {
+<b class="nc"><i>103</i>&nbsp;        return lastKnownEntryId;</b>
+<i>104</i>&nbsp;    }
+<i>105</i>&nbsp;
+<i>106</i>&nbsp;    /**
+<i>107</i>&nbsp;     * Gets the failedBookie address.
+<i>108</i>&nbsp;     */
+<i>109</i>&nbsp;    public BookieSocketAddress getAddress(int bookieIndex) {
+<b class="nc"><i>110</i>&nbsp;        return ensemble.get(bookieIndex);</b>
+<i>111</i>&nbsp;    }
+<i>112</i>&nbsp;
+<i>113</i>&nbsp;    public Set&lt;BookieSocketAddress&gt; getAddresses() {
+<b class="nc"><i>114</i>&nbsp;        Set&lt;BookieSocketAddress&gt; addresses = new HashSet&lt;BookieSocketAddress&gt;();</b>
+<b class="nc"><i>115</i>&nbsp;        for (int bookieIndex : bookieIndexes) {</b>
+<b class="nc"><i>116</i>&nbsp;            addresses.add(ensemble.get(bookieIndex));</b>
+<b class="nc"><i>117</i>&nbsp;        }</b>
+<b class="nc"><i>118</i>&nbsp;        return addresses;</b>
+<i>119</i>&nbsp;    }
+<i>120</i>&nbsp;
+<i>121</i>&nbsp;    /**
+<i>122</i>&nbsp;     * Gets the failedBookie index.
+<i>123</i>&nbsp;     */
+<i>124</i>&nbsp;    public Set&lt;Integer&gt; getBookiesIndexes() {
+<b class="nc"><i>125</i>&nbsp;        return bookieIndexes;</b>
+<i>126</i>&nbsp;    }
+<i>127</i>&nbsp;
+<i>128</i>&nbsp;    /**
+<i>129</i>&nbsp;     * Gets the first stored entry id of the fragment in failed bookies.
+<i>130</i>&nbsp;     *
+<i>131</i>&nbsp;     * @return entryId
+<i>132</i>&nbsp;     */
+<i>133</i>&nbsp;    public long getFirstStoredEntryId() {
+<b class="nc"><i>134</i>&nbsp;        long firstEntry = LedgerHandle.INVALID_ENTRY_ID;</b>
+<b class="nc"><i>135</i>&nbsp;        for (int bookieIndex : bookieIndexes) {</b>
+<b class="nc"><i>136</i>&nbsp;            Long firstStoredEntryForBookie = getFirstStoredEntryId(bookieIndex);</b>
+<b class="nc"><i>137</i>&nbsp;            if (firstStoredEntryForBookie != LedgerHandle.INVALID_ENTRY_ID) {</b>
+<b class="nc"><i>138</i>&nbsp;                if (firstEntry == LedgerHandle.INVALID_ENTRY_ID) {</b>
+<b class="nc"><i>139</i>&nbsp;                    firstEntry = firstStoredEntryForBookie;</b>
+<i>140</i>&nbsp;                } else {
+<b class="nc"><i>141</i>&nbsp;                    firstEntry = Math.min(firstEntry, firstStoredEntryForBookie);</b>
+<i>142</i>&nbsp;                }
+<i>143</i>&nbsp;            }
+<b class="nc"><i>144</i>&nbsp;        }</b>
+<b class="nc"><i>145</i>&nbsp;        return firstEntry;</b>
+<i>146</i>&nbsp;    }
+<i>147</i>&nbsp;
+<i>148</i>&nbsp;    /**
+<i>149</i>&nbsp;     * Get the first stored entry id of the fragment in the given failed bookies.
+<i>150</i>&nbsp;     *
+<i>151</i>&nbsp;     * @param bookieIndex
+<i>152</i>&nbsp;     *          the bookie index in the ensemble.
+<i>153</i>&nbsp;     * @return first stored entry id on the bookie.
+<i>154</i>&nbsp;     */
+<i>155</i>&nbsp;    public Long getFirstStoredEntryId(int bookieIndex) {
+<b class="nc"><i>156</i>&nbsp;        long firstEntry = firstEntryId;</b>
+<i>157</i>&nbsp;
+<b class="nc"><i>158</i>&nbsp;        for (int i = 0; i &lt; ensemble.size() &amp;&amp; firstEntry &lt;= lastKnownEntryId; i++) {</b>
+<b class="nc"><i>159</i>&nbsp;            if (schedule.hasEntry(firstEntry, bookieIndex)) {</b>
+<b class="nc"><i>160</i>&nbsp;                return firstEntry;</b>
+<i>161</i>&nbsp;            } else {
+<b class="nc"><i>162</i>&nbsp;                firstEntry++;</b>
+<i>163</i>&nbsp;            }
+<i>164</i>&nbsp;        }
+<b class="nc"><i>165</i>&nbsp;        return LedgerHandle.INVALID_ENTRY_ID;</b>
+<i>166</i>&nbsp;    }
+<i>167</i>&nbsp;
+<i>168</i>&nbsp;    /**
+<i>169</i>&nbsp;     * Gets the last stored entry id of the fragment in failed bookie.
+<i>170</i>&nbsp;     *
+<i>171</i>&nbsp;     * @return entryId
+<i>172</i>&nbsp;     */
+<i>173</i>&nbsp;    public long getLastStoredEntryId() {
+<b class="nc"><i>174</i>&nbsp;        long lastEntry = LedgerHandle.INVALID_ENTRY_ID;</b>
+<b class="nc"><i>175</i>&nbsp;        for (int bookieIndex : bookieIndexes) {</b>
+<b class="nc"><i>176</i>&nbsp;            Long lastStoredEntryIdForBookie = getLastStoredEntryId(bookieIndex);</b>
+<b class="nc"><i>177</i>&nbsp;            if (lastStoredEntryIdForBookie != LedgerHandle.INVALID_ENTRY_ID) {</b>
+<b class="nc"><i>178</i>&nbsp;                if (lastEntry == LedgerHandle.INVALID_ENTRY_ID) {</b>
+<b class="nc"><i>179</i>&nbsp;                    lastEntry = lastStoredEntryIdForBookie;</b>
+<i>180</i>&nbsp;                } else {
+<b class="nc"><i>181</i>&nbsp;                    lastEntry = Math.max(lastEntry, lastStoredEntryIdForBookie);</b>
+<i>182</i>&nbsp;                }
+<i>183</i>&nbsp;            }
+<b class="nc"><i>184</i>&nbsp;        }</b>
+<b class="nc"><i>185</i>&nbsp;        return lastEntry;</b>
+<i>186</i>&nbsp;    }
+<i>187</i>&nbsp;
+<i>188</i>&nbsp;    /**
+<i>189</i>&nbsp;     * Get the last stored entry id of the fragment in the given failed bookie.
+<i>190</i>&nbsp;     *
+<i>191</i>&nbsp;     * @param bookieIndex
+<i>192</i>&nbsp;     *          the bookie index in the ensemble.
+<i>193</i>&nbsp;     * @return first stored entry id on the bookie.
+<i>194</i>&nbsp;     */
+<i>195</i>&nbsp;    public Long getLastStoredEntryId(int bookieIndex) {
+<b class="nc"><i>196</i>&nbsp;        long lastEntry = lastKnownEntryId;</b>
+<b class="nc"><i>197</i>&nbsp;        for (int i = 0; i &lt; ensemble.size() &amp;&amp; lastEntry &gt;= firstEntryId; i++) {</b>
+<b class="nc"><i>198</i>&nbsp;            if (schedule.hasEntry(lastEntry, bookieIndex)) {</b>
+<b class="nc"><i>199</i>&nbsp;                return lastEntry;</b>
+<i>200</i>&nbsp;            } else {
+<b class="nc"><i>201</i>&nbsp;                lastEntry--;</b>
+<i>202</i>&nbsp;            }
+<i>203</i>&nbsp;        }
+<b class="nc"><i>204</i>&nbsp;        return LedgerHandle.INVALID_ENTRY_ID;</b>
+<i>205</i>&nbsp;    }
+<i>206</i>&nbsp;
+<i>207</i>&nbsp;    public boolean isStoredEntryId(long entryId, int bookieIndex) {
+<b class="nc"><i>208</i>&nbsp;        return schedule.hasEntry(entryId, bookieIndex);</b>
+<i>209</i>&nbsp;    }
+<i>210</i>&nbsp;
+<i>211</i>&nbsp;    /**
+<i>212</i>&nbsp;     * Gets the ensemble of fragment.
+<i>213</i>&nbsp;     *
+<i>214</i>&nbsp;     * @return the ensemble for the segment which this fragment is a part of
+<i>215</i>&nbsp;     */
+<i>216</i>&nbsp;    public List&lt;BookieSocketAddress&gt; getEnsemble() {
+<b class="nc"><i>217</i>&nbsp;        return this.ensemble;</b>
+<i>218</i>&nbsp;    }
+<i>219</i>&nbsp;
+<i>220</i>&nbsp;    @Override
+<i>221</i>&nbsp;    public String toString() {
+<b class="nc"><i>222</i>&nbsp;        return String.format(&quot;Fragment(LedgerID: %d, FirstEntryID: %d[%d], &quot;</b>
+<b class="nc"><i>223</i>&nbsp;                + &quot;LastKnownEntryID: %d[%d], Host: %s, Closed: %s)&quot;, ledgerId, firstEntryId,</b>
+<b class="nc"><i>224</i>&nbsp;                getFirstStoredEntryId(), lastKnownEntryId, getLastStoredEntryId(),</b>
+<b class="nc"><i>225</i>&nbsp;                getAddresses(), isLedgerClosed);</b>
+<i>226</i>&nbsp;    }
+<i>227</i>&nbsp;}
+</div>
+</div>
+
+<div class="footer">
+    
+    <div style="float:right;">generated on 2021-06-28 15:57</div>
+</div>
+</body>
+</html>

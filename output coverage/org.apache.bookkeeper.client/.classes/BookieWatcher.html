@@ -1,0 +1,114 @@
+
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html id="htmlId">
+<head>
+  <title>Coverage Report :: BookieWatcher</title>
+  <style type="text/css">
+    @import "../../.css/coverage.css";
+  </style>
+</head>
+
+<body>
+<div class="header"></div>
+
+<div class="content">
+<div class="breadCrumbs">
+    [ <a href="../../index.html">all classes</a> ]
+    [ <a href="../index.html">org.apache.bookkeeper.client</a> ]
+</div>
+
+<h1>Coverage Summary for Class: BookieWatcher (org.apache.bookkeeper.client)</h1>
+
+<table class="coverageStats">
+<tr>
+  <th class="name">Class</th>
+</tr>
+<tr>
+  <td class="name">BookieWatcher</td>
+</tr>
+
+</table>
+
+<br/>
+<br/>
+
+
+<div class="sourceCode"><i>1</i>&nbsp;/**
+<i>2</i>&nbsp; * Licensed to the Apache Software Foundation (ASF) under one
+<i>3</i>&nbsp; * or more contributor license agreements.  See the NOTICE file
+<i>4</i>&nbsp; * distributed with this work for additional information
+<i>5</i>&nbsp; * regarding copyright ownership.  The ASF licenses this file
+<i>6</i>&nbsp; * to you under the Apache License, Version 2.0 (the
+<i>7</i>&nbsp; * &quot;License&quot;); you may not use this file except in compliance
+<i>8</i>&nbsp; * with the License.  You may obtain a copy of the License at
+<i>9</i>&nbsp; *
+<i>10</i>&nbsp; *     http://www.apache.org/licenses/LICENSE-2.0
+<i>11</i>&nbsp; *
+<i>12</i>&nbsp; * Unless required by applicable law or agreed to in writing, software
+<i>13</i>&nbsp; * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+<i>14</i>&nbsp; * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+<i>15</i>&nbsp; * See the License for the specific language governing permissions and
+<i>16</i>&nbsp; * limitations under the License.
+<i>17</i>&nbsp; */
+<i>18</i>&nbsp;package org.apache.bookkeeper.client;
+<i>19</i>&nbsp;
+<i>20</i>&nbsp;import java.util.List;
+<i>21</i>&nbsp;import java.util.Map;
+<i>22</i>&nbsp;import java.util.Set;
+<i>23</i>&nbsp;
+<i>24</i>&nbsp;import org.apache.bookkeeper.client.BKException.BKNotEnoughBookiesException;
+<i>25</i>&nbsp;import org.apache.bookkeeper.net.BookieSocketAddress;
+<i>26</i>&nbsp;
+<i>27</i>&nbsp;interface BookieWatcher {
+<i>28</i>&nbsp;    Set&lt;BookieSocketAddress&gt; getBookies() throws BKException;
+<i>29</i>&nbsp;    Set&lt;BookieSocketAddress&gt; getAllBookies() throws BKException;
+<i>30</i>&nbsp;    Set&lt;BookieSocketAddress&gt; getReadOnlyBookies() throws BKException;
+<i>31</i>&nbsp;
+<i>32</i>&nbsp;    /**
+<i>33</i>&nbsp;     * Create an ensemble with given &lt;i&gt;ensembleSize&lt;/i&gt; and &lt;i&gt;writeQuorumSize&lt;/i&gt;.
+<i>34</i>&nbsp;     *
+<i>35</i>&nbsp;     * @param ensembleSize
+<i>36</i>&nbsp;     *          Ensemble Size
+<i>37</i>&nbsp;     * @param writeQuorumSize
+<i>38</i>&nbsp;     *          Write Quorum Size
+<i>39</i>&nbsp;     * @return list of bookies for new ensemble.
+<i>40</i>&nbsp;     * @throws BKNotEnoughBookiesException
+<i>41</i>&nbsp;     */
+<i>42</i>&nbsp;    List&lt;BookieSocketAddress&gt; newEnsemble(int ensembleSize, int writeQuorumSize,
+<i>43</i>&nbsp;                                          int ackQuorumSize, Map&lt;String, byte[]&gt; customMetadata)
+<i>44</i>&nbsp;            throws BKNotEnoughBookiesException;
+<i>45</i>&nbsp;
+<i>46</i>&nbsp;    /**
+<i>47</i>&nbsp;     * Choose a bookie to replace bookie &lt;i&gt;bookieIdx&lt;/i&gt; in &lt;i&gt;existingBookies&lt;/i&gt;.
+<i>48</i>&nbsp;     * @param existingBookies
+<i>49</i>&nbsp;     *          list of existing bookies.
+<i>50</i>&nbsp;     * @param bookieIdx
+<i>51</i>&nbsp;     *          index of the bookie in the list to be replaced.
+<i>52</i>&nbsp;     * @return the bookie to replace.
+<i>53</i>&nbsp;     * @throws BKNotEnoughBookiesException
+<i>54</i>&nbsp;     */
+<i>55</i>&nbsp;    BookieSocketAddress replaceBookie(int ensembleSize, int writeQuorumSize, int ackQuorumSize,
+<i>56</i>&nbsp;                                      Map&lt;String, byte[]&gt; customMetadata,
+<i>57</i>&nbsp;                                      List&lt;BookieSocketAddress&gt; existingBookies, int bookieIdx,
+<i>58</i>&nbsp;                                      Set&lt;BookieSocketAddress&gt; excludeBookies)
+<i>59</i>&nbsp;            throws BKNotEnoughBookiesException;
+<i>60</i>&nbsp;
+<i>61</i>&nbsp;
+<i>62</i>&nbsp;    /**
+<i>63</i>&nbsp;     * Quarantine &lt;i&gt;bookie&lt;/i&gt; so it will not be preferred to be chosen for new ensembles.
+<i>64</i>&nbsp;     * @param bookie
+<i>65</i>&nbsp;     */
+<i>66</i>&nbsp;    void quarantineBookie(BookieSocketAddress bookie);
+<i>67</i>&nbsp;}
+</div>
+</div>
+
+<div class="footer">
+    
+    <div style="float:right;">generated on 2021-06-28 15:57</div>
+</div>
+</body>
+</html>

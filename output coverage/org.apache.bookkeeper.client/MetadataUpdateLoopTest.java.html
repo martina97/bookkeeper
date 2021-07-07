@@ -1,0 +1,515 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>MetadataUpdateLoopTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client</a> &gt; <span class="el_source">MetadataUpdateLoopTest.java</span></div><h1>MetadataUpdateLoopTest.java</h1><pre class="source lang-java linenums">/**
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.client;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+
+import com.google.common.collect.Lists;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+
+import java.util.List;
+
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicReference;
+
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+
+import org.apache.bookkeeper.client.api.DigestType;
+import org.apache.bookkeeper.client.api.LedgerMetadata;
+import org.apache.bookkeeper.meta.LedgerManager;
+import org.apache.bookkeeper.meta.MockLedgerManager;
+import org.apache.bookkeeper.net.BookieSocketAddress;
+import org.apache.bookkeeper.versioning.Version;
+import org.apache.bookkeeper.versioning.Versioned;
+import org.apache.commons.lang3.tuple.Triple;
+
+import org.junit.Assert;
+import org.junit.Test;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Test metadata update loop.
+ */
+<span class="nc" id="L63">public class MetadataUpdateLoopTest {</span>
+<span class="nc" id="L64">    static final Logger LOG = LoggerFactory.getLogger(MetadataUpdateLoopTest.class);</span>
+
+    /**
+     * Test that we can update the metadata using the update loop.
+     */
+    @Test
+    public void testBasicUpdate() throws Exception {
+<span class="nc" id="L71">        try (LedgerManager lm = new MockLedgerManager()) {</span>
+<span class="nc" id="L72">            LedgerMetadata initMeta = LedgerMetadataBuilder.create().withEnsembleSize(5)</span>
+<span class="nc" id="L73">                .withDigestType(DigestType.CRC32C).withPassword(new byte[0])</span>
+<span class="nc" id="L74">                .newEnsembleEntry(0L, Lists.newArrayList(</span>
+                                          new BookieSocketAddress(&quot;0.0.0.0:3181&quot;),
+                                          new BookieSocketAddress(&quot;0.0.0.1:3181&quot;),
+                                          new BookieSocketAddress(&quot;0.0.0.2:3181&quot;),
+                                          new BookieSocketAddress(&quot;0.0.0.3:3181&quot;),
+<span class="nc" id="L79">                                          new BookieSocketAddress(&quot;0.0.0.4:3181&quot;))).build();</span>
+<span class="nc" id="L80">            long ledgerId = 1234L;</span>
+<span class="nc" id="L81">            Versioned&lt;LedgerMetadata&gt; writtenMetadata = lm.createLedgerMetadata(ledgerId, initMeta).get();</span>
+
+<span class="nc" id="L83">            AtomicReference&lt;Versioned&lt;LedgerMetadata&gt;&gt; reference = new AtomicReference&lt;&gt;(writtenMetadata);</span>
+
+<span class="nc" id="L85">            BookieSocketAddress newAddress = new BookieSocketAddress(&quot;0.0.0.5:3181&quot;);</span>
+<span class="nc" id="L86">            MetadataUpdateLoop loop = new MetadataUpdateLoop(</span>
+                    lm,
+                    ledgerId,
+                    reference::get,
+<span class="nc" id="L90">                    (currentMetadata) -&gt; true,</span>
+                    (currentMetadata) -&gt; {
+<span class="nc" id="L92">                        List&lt;BookieSocketAddress&gt; ensemble = Lists.newArrayList(currentMetadata.getEnsembleAt(0L));</span>
+<span class="nc" id="L93">                        ensemble.set(0, newAddress);</span>
+<span class="nc" id="L94">                        return LedgerMetadataBuilder.from(currentMetadata).replaceEnsembleEntry(0L, ensemble).build();</span>
+                    },
+                    reference::compareAndSet);
+<span class="nc" id="L97">            loop.run().get();</span>
+
+<span class="nc" id="L99">            Assert.assertNotEquals(reference.get(), writtenMetadata);</span>
+<span class="nc" id="L100">            Assert.assertEquals(reference.get().getValue().getEnsembleAt(0L).get(0), newAddress);</span>
+        }
+<span class="nc" id="L102">    }</span>
+
+    /**
+     * Test that when 2 update loops conflict when making diffent updates to the metadata,
+     * both will eventually succeed, and both updates will be reflected in the final metadata.
+     */
+    @Test
+    public void testConflictOnWrite() throws Exception {
+<span class="nc" id="L110">        try (BlockableMockLedgerManager lm = spy(new BlockableMockLedgerManager())) {</span>
+<span class="nc" id="L111">            lm.blockWrites();</span>
+
+<span class="nc" id="L113">            long ledgerId = 1234L;</span>
+<span class="nc" id="L114">            BookieSocketAddress b0 = new BookieSocketAddress(&quot;0.0.0.0:3181&quot;);</span>
+<span class="nc" id="L115">            BookieSocketAddress b1 = new BookieSocketAddress(&quot;0.0.0.1:3181&quot;);</span>
+<span class="nc" id="L116">            BookieSocketAddress b2 = new BookieSocketAddress(&quot;0.0.0.2:3181&quot;);</span>
+<span class="nc" id="L117">            BookieSocketAddress b3 = new BookieSocketAddress(&quot;0.0.0.3:3181&quot;);</span>
+
+<span class="nc" id="L119">            LedgerMetadata initMeta = LedgerMetadataBuilder.create().withEnsembleSize(2)</span>
+<span class="nc" id="L120">                .withDigestType(DigestType.CRC32C).withPassword(new byte[0])</span>
+<span class="nc" id="L121">                .withWriteQuorumSize(2).newEnsembleEntry(0L, Lists.newArrayList(b0, b1)).build();</span>
+<span class="nc" id="L122">            Versioned&lt;LedgerMetadata&gt; writtenMetadata =</span>
+<span class="nc" id="L123">                lm.createLedgerMetadata(ledgerId, initMeta).get();</span>
+
+<span class="nc" id="L125">            AtomicReference&lt;Versioned&lt;LedgerMetadata&gt;&gt; reference1 = new AtomicReference&lt;&gt;(writtenMetadata);</span>
+<span class="nc" id="L126">            CompletableFuture&lt;Versioned&lt;LedgerMetadata&gt;&gt; loop1 = new MetadataUpdateLoop(</span>
+                    lm,
+                    ledgerId,
+                    reference1::get,
+<span class="nc" id="L130">                    (currentMetadata) -&gt; currentMetadata.getEnsembleAt(0L).contains(b0),</span>
+                    (currentMetadata) -&gt; {
+<span class="nc" id="L132">                        List&lt;BookieSocketAddress&gt; ensemble = Lists.newArrayList(currentMetadata.getEnsembleAt(0L));</span>
+<span class="nc" id="L133">                        ensemble.set(0, b2);</span>
+<span class="nc" id="L134">                        return LedgerMetadataBuilder.from(currentMetadata).replaceEnsembleEntry(0L, ensemble).build();</span>
+                    },
+<span class="nc" id="L136">                    reference1::compareAndSet).run();</span>
+
+<span class="nc" id="L138">            AtomicReference&lt;Versioned&lt;LedgerMetadata&gt;&gt; reference2 = new AtomicReference&lt;&gt;(writtenMetadata);</span>
+<span class="nc" id="L139">            CompletableFuture&lt;Versioned&lt;LedgerMetadata&gt;&gt; loop2 = new MetadataUpdateLoop(</span>
+                    lm,
+                    ledgerId,
+                    reference2::get,
+<span class="nc" id="L143">                    (currentMetadata) -&gt; currentMetadata.getEnsembleAt(0L).contains(b1),</span>
+                    (currentMetadata) -&gt; {
+<span class="nc" id="L145">                        List&lt;BookieSocketAddress&gt; ensemble = Lists.newArrayList(currentMetadata.getEnsembleAt(0L));</span>
+<span class="nc" id="L146">                        ensemble.set(1, b3);</span>
+<span class="nc" id="L147">                        return LedgerMetadataBuilder.from(currentMetadata).replaceEnsembleEntry(0L, ensemble).build();</span>
+                    },
+<span class="nc" id="L149">                    reference2::compareAndSet).run();</span>
+
+<span class="nc" id="L151">            lm.releaseWrites();</span>
+
+<span class="nc" id="L153">            Versioned&lt;LedgerMetadata&gt; l1meta = loop1.get();</span>
+<span class="nc" id="L154">            Versioned&lt;LedgerMetadata&gt; l2meta = loop2.get();</span>
+
+<span class="nc" id="L156">            Assert.assertEquals(l1meta, reference1.get());</span>
+<span class="nc" id="L157">            Assert.assertEquals(l2meta, reference2.get());</span>
+
+<span class="nc" id="L159">            Assert.assertEquals(l1meta.getVersion().compare(l2meta.getVersion()), Version.Occurred.BEFORE);</span>
+
+<span class="nc" id="L161">            Assert.assertEquals(l1meta.getValue().getEnsembleAt(0L).get(0), b2);</span>
+<span class="nc" id="L162">            Assert.assertEquals(l1meta.getValue().getEnsembleAt(0L).get(1), b1);</span>
+
+<span class="nc" id="L164">            Assert.assertEquals(l2meta.getValue().getEnsembleAt(0L).get(0), b2);</span>
+<span class="nc" id="L165">            Assert.assertEquals(l2meta.getValue().getEnsembleAt(0L).get(1), b3);</span>
+
+<span class="nc" id="L167">            verify(lm, times(3)).writeLedgerMetadata(anyLong(), any(), any());</span>
+        }
+<span class="nc" id="L169">    }</span>
+
+    /**
+     * Test that when 2 updates loops try to make the same modification, and they
+     * conflict on the write to the store, the one that receives the conflict won't
+     * try to write again, as the value is now correct.
+     */
+    @Test
+    public void testConflictOnWriteBothWritingSame() throws Exception {
+<span class="nc" id="L178">        try (BlockableMockLedgerManager lm = spy(new BlockableMockLedgerManager())) {</span>
+<span class="nc" id="L179">            lm.blockWrites();</span>
+
+<span class="nc" id="L181">            long ledgerId = 1234L;</span>
+<span class="nc" id="L182">            BookieSocketAddress b0 = new BookieSocketAddress(&quot;0.0.0.0:3181&quot;);</span>
+<span class="nc" id="L183">            BookieSocketAddress b1 = new BookieSocketAddress(&quot;0.0.0.1:3181&quot;);</span>
+<span class="nc" id="L184">            BookieSocketAddress b2 = new BookieSocketAddress(&quot;0.0.0.2:3181&quot;);</span>
+
+<span class="nc" id="L186">            LedgerMetadata initMeta = LedgerMetadataBuilder.create().withEnsembleSize(2)</span>
+<span class="nc" id="L187">                .withDigestType(DigestType.CRC32C).withPassword(new byte[0])</span>
+<span class="nc" id="L188">                .withWriteQuorumSize(2).newEnsembleEntry(0L, Lists.newArrayList(b0, b1)).build();</span>
+<span class="nc" id="L189">            Versioned&lt;LedgerMetadata&gt; writtenMetadata = lm.createLedgerMetadata(ledgerId, initMeta).get();</span>
+<span class="nc" id="L190">            AtomicReference&lt;Versioned&lt;LedgerMetadata&gt;&gt; reference = new AtomicReference&lt;&gt;(writtenMetadata);</span>
+
+<span class="nc" id="L192">            CompletableFuture&lt;Versioned&lt;LedgerMetadata&gt;&gt; loop1 = new MetadataUpdateLoop(</span>
+                    lm,
+                    ledgerId,
+                    reference::get,
+<span class="nc" id="L196">                    (currentMetadata) -&gt; currentMetadata.getEnsembleAt(0L).contains(b0),</span>
+                    (currentMetadata) -&gt; {
+<span class="nc" id="L198">                        List&lt;BookieSocketAddress&gt; ensemble = Lists.newArrayList(currentMetadata.getEnsembleAt(0L));</span>
+<span class="nc" id="L199">                        ensemble.set(0, b2);</span>
+<span class="nc" id="L200">                        return LedgerMetadataBuilder.from(currentMetadata).replaceEnsembleEntry(0L, ensemble).build();</span>
+                    },
+<span class="nc" id="L202">                    reference::compareAndSet).run();</span>
+<span class="nc" id="L203">            CompletableFuture&lt;Versioned&lt;LedgerMetadata&gt;&gt; loop2 = new MetadataUpdateLoop(</span>
+                    lm,
+                    ledgerId,
+                    reference::get,
+<span class="nc" id="L207">                    (currentMetadata) -&gt; currentMetadata.getEnsembleAt(0L).contains(b0),</span>
+                    (currentMetadata) -&gt; {
+<span class="nc" id="L209">                        List&lt;BookieSocketAddress&gt; ensemble = Lists.newArrayList(currentMetadata.getEnsembleAt(0L));</span>
+<span class="nc" id="L210">                        ensemble.set(0, b2);</span>
+<span class="nc" id="L211">                        return LedgerMetadataBuilder.from(currentMetadata).replaceEnsembleEntry(0L, ensemble).build();</span>
+                    },
+<span class="nc" id="L213">                    reference::compareAndSet).run();</span>
+
+<span class="nc" id="L215">            lm.releaseWrites();</span>
+
+<span class="nc" id="L217">            Assert.assertEquals(loop1.get(), loop2.get());</span>
+<span class="nc" id="L218">            Assert.assertEquals(loop1.get(), reference.get());</span>
+
+<span class="nc" id="L220">            Assert.assertEquals(reference.get().getValue().getEnsembleAt(0L).get(0), b2);</span>
+<span class="nc" id="L221">            Assert.assertEquals(reference.get().getValue().getEnsembleAt(0L).get(1), b1);</span>
+
+<span class="nc" id="L223">            verify(lm, times(2)).writeLedgerMetadata(anyLong(), any(), any());</span>
+        }
+<span class="nc" id="L225">    }</span>
+
+    /**
+     * Test that when 2 update loops both manage to write, but conflict on
+     * updating the local value.
+     */
+    @Test
+    public void testConflictOnLocalUpdate() throws Exception {
+<span class="nc" id="L233">        try (DeferCallbacksMockLedgerManager lm = spy(new DeferCallbacksMockLedgerManager(1))) {</span>
+<span class="nc" id="L234">            long ledgerId = 1234L;</span>
+<span class="nc" id="L235">            BookieSocketAddress b0 = new BookieSocketAddress(&quot;0.0.0.0:3181&quot;);</span>
+<span class="nc" id="L236">            BookieSocketAddress b1 = new BookieSocketAddress(&quot;0.0.0.1:3181&quot;);</span>
+<span class="nc" id="L237">            BookieSocketAddress b2 = new BookieSocketAddress(&quot;0.0.0.2:3181&quot;);</span>
+<span class="nc" id="L238">            BookieSocketAddress b3 = new BookieSocketAddress(&quot;0.0.0.3:3181&quot;);</span>
+
+<span class="nc" id="L240">            LedgerMetadata initMeta = LedgerMetadataBuilder.create().withEnsembleSize(2)</span>
+<span class="nc" id="L241">                .withDigestType(DigestType.CRC32C).withPassword(new byte[0])</span>
+<span class="nc" id="L242">                .withWriteQuorumSize(2).newEnsembleEntry(0L, Lists.newArrayList(b0, b1)).build();</span>
+<span class="nc" id="L243">            Versioned&lt;LedgerMetadata&gt; writtenMetadata = lm.createLedgerMetadata(ledgerId, initMeta).get();</span>
+<span class="nc" id="L244">            AtomicReference&lt;Versioned&lt;LedgerMetadata&gt;&gt; reference = new AtomicReference&lt;&gt;(writtenMetadata);</span>
+
+<span class="nc" id="L246">            CompletableFuture&lt;Versioned&lt;LedgerMetadata&gt;&gt; loop1 = new MetadataUpdateLoop(</span>
+                    lm,
+                    ledgerId,
+                    reference::get,
+<span class="nc" id="L250">                    (currentMetadata) -&gt; currentMetadata.getEnsembleAt(0L).contains(b0),</span>
+                    (currentMetadata) -&gt; {
+<span class="nc" id="L252">                        List&lt;BookieSocketAddress&gt; ensemble = Lists.newArrayList(currentMetadata.getEnsembleAt(0L));</span>
+<span class="nc" id="L253">                        ensemble.set(0, b2);</span>
+<span class="nc" id="L254">                        return LedgerMetadataBuilder.from(currentMetadata).replaceEnsembleEntry(0L, ensemble).build();</span>
+                    },
+<span class="nc" id="L256">                    reference::compareAndSet).run();</span>
+
+<span class="nc" id="L258">            lm.waitForWriteCount(1);</span>
+<span class="nc" id="L259">            CompletableFuture&lt;Versioned&lt;LedgerMetadata&gt;&gt; loop2 = new MetadataUpdateLoop(</span>
+                    lm,
+                    ledgerId,
+                    reference::get,
+<span class="nc" id="L263">                    (currentMetadata) -&gt; currentMetadata.getEnsembleAt(0L).contains(b1),</span>
+                    (currentMetadata) -&gt; {
+<span class="nc" id="L265">                        List&lt;BookieSocketAddress&gt; ensemble = Lists.newArrayList(currentMetadata.getEnsembleAt(0L));</span>
+<span class="nc" id="L266">                        ensemble.set(1, b3);</span>
+<span class="nc" id="L267">                        return LedgerMetadataBuilder.from(currentMetadata).replaceEnsembleEntry(0L, ensemble).build();</span>
+                    },
+<span class="nc" id="L269">                    reference::compareAndSet).run();</span>
+<span class="nc" id="L270">            Assert.assertEquals(loop2.get(), reference.get());</span>
+
+<span class="nc" id="L272">            lm.runDeferred();</span>
+
+<span class="nc" id="L274">            Assert.assertEquals(loop1.get(), reference.get());</span>
+
+<span class="nc" id="L276">            Assert.assertEquals(reference.get().getValue().getEnsembleAt(0L).get(0), b2);</span>
+<span class="nc" id="L277">            Assert.assertEquals(reference.get().getValue().getEnsembleAt(0L).get(1), b3);</span>
+
+<span class="nc" id="L279">            verify(lm, times(3)).writeLedgerMetadata(anyLong(), any(), any());</span>
+        }
+<span class="nc" id="L281">    }</span>
+
+    private static BookieSocketAddress address(String s) {
+        try {
+<span class="nc" id="L285">            return new BookieSocketAddress(s);</span>
+<span class="nc" id="L286">        } catch (Exception e) {</span>
+<span class="nc" id="L287">            throw new RuntimeException(e);</span>
+        }
+    }
+
+    /**
+     * Hammer test. Kick off a lot of metadata updates concurrently with a ledger manager
+     * that runs callbacks on random threads, and validate all updates complete eventually,
+     * and that the final metadata reflects all the updates.
+     */
+    @Test
+    public void testHammer() throws Exception {
+<span class="nc" id="L298">        try (NonDeterministicMockLedgerManager lm = new NonDeterministicMockLedgerManager()) {</span>
+<span class="nc" id="L299">            long ledgerId = 1234L;</span>
+
+<span class="nc" id="L301">            int ensembleSize = 100;</span>
+<span class="nc" id="L302">            List&lt;BookieSocketAddress&gt; initialEnsemble = IntStream.range(0, ensembleSize)</span>
+<span class="nc" id="L303">                .mapToObj((i) -&gt; address(String.format(&quot;0.0.0.%d:3181&quot;, i)))</span>
+<span class="nc" id="L304">                .collect(Collectors.toList());</span>
+
+<span class="nc" id="L306">            LedgerMetadata initMeta = LedgerMetadataBuilder.create().withEnsembleSize(ensembleSize)</span>
+<span class="nc" id="L307">                .withDigestType(DigestType.CRC32C).withPassword(new byte[0])</span>
+<span class="nc" id="L308">                .newEnsembleEntry(0L, initialEnsemble).build();</span>
+<span class="nc" id="L309">            Versioned&lt;LedgerMetadata&gt; writtenMetadata = lm.createLedgerMetadata(ledgerId, initMeta).get();</span>
+
+<span class="nc" id="L311">            AtomicReference&lt;Versioned&lt;LedgerMetadata&gt;&gt; reference = new AtomicReference&lt;&gt;(writtenMetadata);</span>
+
+<span class="nc" id="L313">            List&lt;BookieSocketAddress&gt; replacementBookies = IntStream.range(0, ensembleSize)</span>
+<span class="nc" id="L314">                .mapToObj((i) -&gt; address(String.format(&quot;0.0.%d.1:3181&quot;, i)))</span>
+<span class="nc" id="L315">                .collect(Collectors.toList());</span>
+
+<span class="nc" id="L317">            List&lt;CompletableFuture&lt;Versioned&lt;LedgerMetadata&gt;&gt;&gt; loops = IntStream.range(0, ensembleSize)</span>
+<span class="nc" id="L318">                .mapToObj((i) -&gt; new MetadataUpdateLoop(</span>
+                    lm,
+                    ledgerId,
+                    reference::get,
+<span class="nc" id="L322">                    (currentMetadata) -&gt; currentMetadata.getEnsembleAt(0L).contains(initialEnsemble.get(i)),</span>
+                    (currentMetadata) -&gt; {
+<span class="nc" id="L324">                        List&lt;BookieSocketAddress&gt; ensemble = Lists.newArrayList(currentMetadata.getEnsembleAt(0L));</span>
+<span class="nc" id="L325">                        ensemble.set(i, replacementBookies.get(i));</span>
+<span class="nc" id="L326">                        return LedgerMetadataBuilder.from(currentMetadata).replaceEnsembleEntry(0L, ensemble).build();</span>
+                    },
+<span class="nc" id="L328">                    reference::compareAndSet).run())</span>
+<span class="nc" id="L329">                .collect(Collectors.toList());</span>
+
+<span class="nc" id="L331">            loops.forEach((l) -&gt; l.join());</span>
+
+<span class="nc" id="L333">            Assert.assertEquals(reference.get().getValue().getEnsembleAt(0L), replacementBookies);</span>
+        }
+<span class="nc" id="L335">    }</span>
+
+    /**
+     * Test that if we have two conflicting updates, only one of the loops will complete.
+     * The other will throw an exception.
+     */
+    @Test
+    public void testNewestValueCannotBeUsedAfterReadBack() throws Exception {
+<span class="nc" id="L343">        try (BlockableMockLedgerManager lm = spy(new BlockableMockLedgerManager())) {</span>
+<span class="nc" id="L344">            lm.blockWrites();</span>
+
+<span class="nc" id="L346">            long ledgerId = 1234L;</span>
+<span class="nc" id="L347">            BookieSocketAddress b0 = new BookieSocketAddress(&quot;0.0.0.0:3181&quot;);</span>
+<span class="nc" id="L348">            BookieSocketAddress b1 = new BookieSocketAddress(&quot;0.0.0.1:3181&quot;);</span>
+
+<span class="nc" id="L350">            LedgerMetadata initMeta = LedgerMetadataBuilder.create().withEnsembleSize(1)</span>
+<span class="nc" id="L351">                .withDigestType(DigestType.CRC32C).withPassword(new byte[0])</span>
+<span class="nc" id="L352">                .withWriteQuorumSize(1).withAckQuorumSize(1)</span>
+<span class="nc" id="L353">                .newEnsembleEntry(0L, Lists.newArrayList(b0)).build();</span>
+<span class="nc" id="L354">            Versioned&lt;LedgerMetadata&gt; writtenMetadata = lm.createLedgerMetadata(ledgerId, initMeta).get();</span>
+
+<span class="nc" id="L356">            AtomicReference&lt;Versioned&lt;LedgerMetadata&gt;&gt; reference = new AtomicReference&lt;&gt;(writtenMetadata);</span>
+<span class="nc" id="L357">            CompletableFuture&lt;Versioned&lt;LedgerMetadata&gt;&gt; loop1 = new MetadataUpdateLoop(</span>
+                    lm,
+                    ledgerId,
+                    reference::get,
+<span class="nc bnc" id="L361" title="All 2 branches missed.">                    (currentMetadata) -&gt; !currentMetadata.isClosed(),</span>
+                    (currentMetadata) -&gt; {
+<span class="nc" id="L363">                        return LedgerMetadataBuilder.from(currentMetadata)</span>
+<span class="nc" id="L364">                            .withClosedState().withLastEntryId(10L).withLength(100L).build();</span>
+                    },
+<span class="nc" id="L366">                    reference::compareAndSet).run();</span>
+<span class="nc" id="L367">            CompletableFuture&lt;Versioned&lt;LedgerMetadata&gt;&gt; loop2 = new MetadataUpdateLoop(</span>
+                    lm,
+                    ledgerId,
+                    reference::get,
+                    (currentMetadata) -&gt; {
+<span class="nc bnc" id="L372" title="All 2 branches missed.">                        if (currentMetadata.isClosed()) {</span>
+<span class="nc" id="L373">                            throw new BKException.BKLedgerClosedException();</span>
+                        } else {
+<span class="nc" id="L375">                            return currentMetadata.getEnsembleAt(0L).contains(b0);</span>
+                        }
+                    },
+                    (currentMetadata) -&gt; {
+<span class="nc" id="L379">                        List&lt;BookieSocketAddress&gt; ensemble = Lists.newArrayList(currentMetadata.getEnsembleAt(0L));</span>
+<span class="nc" id="L380">                        ensemble.set(0, b1);</span>
+<span class="nc" id="L381">                        return LedgerMetadataBuilder.from(currentMetadata).replaceEnsembleEntry(0L, ensemble).build();</span>
+                    },
+<span class="nc" id="L383">                    reference::compareAndSet).run();</span>
+<span class="nc" id="L384">            lm.releaseWrites();</span>
+
+<span class="nc" id="L386">            Versioned&lt;LedgerMetadata&gt; l1meta = loop1.get();</span>
+            try {
+<span class="nc" id="L388">                loop2.get();</span>
+<span class="nc" id="L389">                Assert.fail(&quot;Update loop should have failed&quot;);</span>
+<span class="nc" id="L390">            } catch (ExecutionException ee) {</span>
+<span class="nc" id="L391">                Assert.assertEquals(ee.getCause().getClass(), BKException.BKLedgerClosedException.class);</span>
+<span class="nc" id="L392">            }</span>
+<span class="nc" id="L393">            Assert.assertEquals(l1meta, reference.get());</span>
+<span class="nc" id="L394">            Assert.assertEquals(l1meta.getValue().getEnsembleAt(0L).get(0), b0);</span>
+<span class="nc" id="L395">            Assert.assertTrue(l1meta.getValue().isClosed());</span>
+
+<span class="nc" id="L397">            verify(lm, times(2)).writeLedgerMetadata(anyLong(), any(), any());</span>
+        }
+<span class="nc" id="L399">    }</span>
+
+<span class="nc" id="L401">    static class NonDeterministicMockLedgerManager extends MockLedgerManager {</span>
+<span class="nc" id="L402">        final ExecutorService cbExecutor = Executors.newCachedThreadPool(</span>
+<span class="nc" id="L403">                new ThreadFactoryBuilder().setNameFormat(&quot;non-deter-%d&quot;).build());</span>
+
+        @Override
+        public void executeCallback(Runnable r) {
+<span class="nc" id="L407">            cbExecutor.execute(r);</span>
+<span class="nc" id="L408">        }</span>
+
+        @Override
+        public void close() {
+<span class="nc" id="L412">            cbExecutor.shutdownNow();</span>
+<span class="nc" id="L413">            super.close();</span>
+<span class="nc" id="L414">        }</span>
+    }
+
+    static class DeferCallbacksMockLedgerManager extends MockLedgerManager {
+<span class="nc" id="L418">        int writeCount = 0;</span>
+        final int numToDefer;
+<span class="nc" id="L420">        List&lt;Triple&lt;CompletableFuture&lt;Versioned&lt;LedgerMetadata&gt;&gt;, Versioned&lt;LedgerMetadata&gt;, Throwable&gt;&gt; deferred =</span>
+<span class="nc" id="L421">            Lists.newArrayList();</span>
+
+<span class="nc" id="L423">        DeferCallbacksMockLedgerManager(int numToDefer) {</span>
+<span class="nc" id="L424">            this.numToDefer = numToDefer;</span>
+<span class="nc" id="L425">        }</span>
+
+        synchronized void runDeferred() {
+<span class="nc" id="L428">            deferred.forEach((d) -&gt; {</span>
+<span class="nc" id="L429">                    Throwable t = d.getRight();</span>
+<span class="nc bnc" id="L430" title="All 2 branches missed.">                    if (t != null) {</span>
+<span class="nc" id="L431">                        d.getLeft().completeExceptionally(t);</span>
+                    } else {
+<span class="nc" id="L433">                        d.getLeft().complete(d.getMiddle());</span>
+                    }
+<span class="nc" id="L435">                });</span>
+<span class="nc" id="L436">        }</span>
+
+        synchronized void waitForWriteCount(int count) throws Exception {
+<span class="nc bnc" id="L439" title="All 2 branches missed.">            while (writeCount &lt; count) {</span>
+<span class="nc" id="L440">                wait();</span>
+            }
+<span class="nc" id="L442">        }</span>
+
+        @Override
+        public synchronized CompletableFuture&lt;Versioned&lt;LedgerMetadata&gt;&gt; writeLedgerMetadata(
+                long ledgerId, LedgerMetadata metadata,
+                Version currentVersion) {
+<span class="nc" id="L448">            CompletableFuture&lt;Versioned&lt;LedgerMetadata&gt;&gt; promise = new CompletableFuture&lt;&gt;();</span>
+<span class="nc" id="L449">            super.writeLedgerMetadata(ledgerId, metadata, currentVersion)</span>
+<span class="nc" id="L450">                .whenComplete((written, exception) -&gt; {</span>
+<span class="nc" id="L451">                        synchronized (DeferCallbacksMockLedgerManager.this) {</span>
+<span class="nc bnc" id="L452" title="All 2 branches missed.">                            if (writeCount++ &lt; numToDefer) {</span>
+<span class="nc" id="L453">                                LOG.info(&quot;Added to deferals&quot;);</span>
+<span class="nc" id="L454">                                deferred.add(Triple.of(promise, written, exception));</span>
+                            } else {
+<span class="nc" id="L456">                                LOG.info(&quot;Completing {}&quot;, numToDefer);</span>
+<span class="nc bnc" id="L457" title="All 2 branches missed.">                                if (exception != null) {</span>
+<span class="nc" id="L458">                                    promise.completeExceptionally(exception);</span>
+                                } else {
+<span class="nc" id="L460">                                    promise.complete(written);</span>
+                                }
+                            }
+<span class="nc" id="L463">                            DeferCallbacksMockLedgerManager.this.notifyAll();</span>
+<span class="nc" id="L464">                        }</span>
+<span class="nc" id="L465">                    });</span>
+<span class="nc" id="L466">            return promise;</span>
+        }
+    }
+
+<span class="nc bnc" id="L470" title="All 32 branches missed.">    @Data</span>
+<span class="nc" id="L471">    @AllArgsConstructor</span>
+    static class DeferredUpdate {
+<span class="nc" id="L473">        final CompletableFuture&lt;Versioned&lt;LedgerMetadata&gt;&gt; promise;</span>
+<span class="nc" id="L474">        final long ledgerId;</span>
+<span class="nc" id="L475">        final LedgerMetadata metadata;</span>
+<span class="nc" id="L476">        final Version currentVersion;</span>
+    }
+
+<span class="nc" id="L479">    static class BlockableMockLedgerManager extends MockLedgerManager {</span>
+<span class="nc" id="L480">        boolean blocking = false;</span>
+<span class="nc" id="L481">        List&lt;DeferredUpdate&gt; reqs = Lists.newArrayList();</span>
+
+        synchronized void blockWrites() {
+<span class="nc" id="L484">            blocking = true;</span>
+<span class="nc" id="L485">        }</span>
+
+        synchronized void releaseWrites() {
+<span class="nc" id="L488">            blocking = false;</span>
+<span class="nc" id="L489">            reqs.forEach((r) -&gt; {</span>
+<span class="nc" id="L490">                    super.writeLedgerMetadata(r.getLedgerId(), r.getMetadata(),</span>
+<span class="nc" id="L491">                                              r.getCurrentVersion())</span>
+<span class="nc" id="L492">                        .whenComplete((written, exception) -&gt; {</span>
+<span class="nc bnc" id="L493" title="All 2 branches missed.">                                if (exception != null) {</span>
+<span class="nc" id="L494">                                    r.getPromise().completeExceptionally(exception);</span>
+                                } else {
+<span class="nc" id="L496">                                    r.getPromise().complete(written);</span>
+                                }
+<span class="nc" id="L498">                            });</span>
+<span class="nc" id="L499">                });</span>
+<span class="nc" id="L500">        }</span>
+
+        @Override
+        public synchronized CompletableFuture&lt;Versioned&lt;LedgerMetadata&gt;&gt; writeLedgerMetadata(
+                long ledgerId, LedgerMetadata metadata, Version currentVersion) {
+<span class="nc bnc" id="L505" title="All 2 branches missed.">            if (blocking) {</span>
+<span class="nc" id="L506">                CompletableFuture&lt;Versioned&lt;LedgerMetadata&gt;&gt; promise = new CompletableFuture&lt;&gt;();</span>
+<span class="nc" id="L507">                reqs.add(new DeferredUpdate(promise, ledgerId, metadata, currentVersion));</span>
+<span class="nc" id="L508">                return promise;</span>
+            } else {
+<span class="nc" id="L510">                return super.writeLedgerMetadata(ledgerId, metadata, currentVersion);</span>
+            }
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>

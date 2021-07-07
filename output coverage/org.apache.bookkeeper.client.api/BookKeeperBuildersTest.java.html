@@ -1,0 +1,420 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="it"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>BookKeeperBuildersTest.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">bookkeeper$Bokkeeper2Test.exec</a> &gt; <a href="index.source.html" class="el_package">org.apache.bookkeeper.client.api</a> &gt; <span class="el_source">BookKeeperBuildersTest.java</span></div><h1>BookKeeperBuildersTest.java</h1><pre class="source lang-java linenums">/*
+ *
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * &quot;License&quot;); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * &quot;AS IS&quot; BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ *
+ */
+package org.apache.bookkeeper.client.api;
+
+import static org.apache.bookkeeper.client.api.WriteFlag.DEFERRED_SYNC;
+import static org.apache.bookkeeper.common.concurrent.FutureUtils.result;
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.Map;
+import org.apache.bookkeeper.client.BKException.BKClientClosedException;
+import org.apache.bookkeeper.client.BKException.BKIncorrectParameterException;
+import org.apache.bookkeeper.client.BKException.BKNoSuchLedgerExistsOnMetadataServerException;
+import org.apache.bookkeeper.client.BookKeeper;
+import org.apache.bookkeeper.client.LedgerHandle;
+import org.apache.bookkeeper.client.LedgerMetadataBuilder;
+import org.apache.bookkeeper.client.MockBookKeeperTestCase;
+import org.apache.bookkeeper.conf.ClientConfiguration;
+import org.apache.bookkeeper.proto.BookieProtocol;
+import org.junit.Test;
+
+/**
+ * Unit tests of builders.
+ */
+<span class="nc" id="L45">public class BookKeeperBuildersTest extends MockBookKeeperTestCase {</span>
+
+    private static final int ensembleSize = 3;
+    private static final int writeQuorumSize = 2;
+    private static final int ackQuorumSize = 1;
+    private static final long ledgerId = 12342L;
+<span class="nc" id="L51">    private static final Map&lt;String, byte[]&gt; customMetadata = new HashMap&lt;&gt;();</span>
+<span class="nc" id="L52">    private static final byte[] password = new byte[3];</span>
+<span class="nc" id="L53">    private static final byte[] entryData = new byte[32];</span>
+<span class="nc" id="L54">    private static final EnumSet&lt;WriteFlag&gt; writeFlagsDeferredSync = EnumSet.of(DEFERRED_SYNC);</span>
+
+    @Test
+    public void testCreateLedger() throws Exception {
+<span class="nc" id="L58">        setNewGeneratedLedgerId(ledgerId);</span>
+<span class="nc" id="L59">        WriteHandle writer = newCreateLedgerOp()</span>
+<span class="nc" id="L60">            .withAckQuorumSize(ackQuorumSize)</span>
+<span class="nc" id="L61">            .withEnsembleSize(ensembleSize)</span>
+<span class="nc" id="L62">            .withWriteQuorumSize(writeQuorumSize)</span>
+<span class="nc" id="L63">            .withCustomMetadata(customMetadata)</span>
+<span class="nc" id="L64">            .withPassword(password)</span>
+<span class="nc" id="L65">            .execute()</span>
+<span class="nc" id="L66">            .get();</span>
+<span class="nc" id="L67">        assertEquals(ledgerId, writer.getId());</span>
+<span class="nc" id="L68">        LedgerMetadata metadata = getLedgerMetadata(ledgerId);</span>
+<span class="nc" id="L69">        assertEquals(ensembleSize, metadata.getEnsembleSize());</span>
+<span class="nc" id="L70">        assertEquals(ackQuorumSize, metadata.getAckQuorumSize());</span>
+<span class="nc" id="L71">        assertEquals(writeQuorumSize, metadata.getWriteQuorumSize());</span>
+<span class="nc" id="L72">        assertArrayEquals(password, metadata.getPassword());</span>
+<span class="nc" id="L73">    }</span>
+
+    @Test(expected = BKIncorrectParameterException.class)
+    public void testFailEnsembleSize0() throws Exception {
+<span class="nc" id="L77">        result(newCreateLedgerOp()</span>
+<span class="nc" id="L78">            .withEnsembleSize(0)</span>
+<span class="nc" id="L79">            .withPassword(password)</span>
+<span class="nc" id="L80">            .execute());</span>
+<span class="nc" id="L81">    }</span>
+
+    @Test(expected = BKIncorrectParameterException.class)
+    public void testFailWriteQuorumSize0() throws Exception {
+<span class="nc" id="L85">        result(newCreateLedgerOp()</span>
+<span class="nc" id="L86">            .withEnsembleSize(2)</span>
+<span class="nc" id="L87">            .withWriteQuorumSize(0)</span>
+<span class="nc" id="L88">            .withPassword(password)</span>
+<span class="nc" id="L89">            .execute());</span>
+<span class="nc" id="L90">    }</span>
+
+    @Test(expected = BKIncorrectParameterException.class)
+    public void testFailNullWriteFlags() throws Exception {
+<span class="nc" id="L94">        result(newCreateLedgerOp()</span>
+<span class="nc" id="L95">            .withWriteFlags((EnumSet&lt;WriteFlag&gt;) null)</span>
+<span class="nc" id="L96">            .withPassword(password)</span>
+<span class="nc" id="L97">            .execute());</span>
+<span class="nc" id="L98">    }</span>
+
+    @Test(expected = BKIncorrectParameterException.class)
+    public void testFailAckQuorumSize0() throws Exception {
+<span class="nc" id="L102">        result(newCreateLedgerOp()</span>
+<span class="nc" id="L103">            .withEnsembleSize(2)</span>
+<span class="nc" id="L104">            .withWriteQuorumSize(1)</span>
+<span class="nc" id="L105">            .withAckQuorumSize(0)</span>
+<span class="nc" id="L106">            .withPassword(password)</span>
+<span class="nc" id="L107">            .execute());</span>
+<span class="nc" id="L108">    }</span>
+
+    @Test(expected = BKIncorrectParameterException.class)
+    public void testFailWriteQuorumSizeGreaterThanEnsembleSize() throws Exception {
+<span class="nc" id="L112">        result(newCreateLedgerOp()</span>
+<span class="nc" id="L113">            .withEnsembleSize(1)</span>
+<span class="nc" id="L114">            .withWriteQuorumSize(2)</span>
+<span class="nc" id="L115">            .withAckQuorumSize(1)</span>
+<span class="nc" id="L116">            .withPassword(password)</span>
+<span class="nc" id="L117">            .execute());</span>
+<span class="nc" id="L118">    }</span>
+
+    @Test(expected = BKIncorrectParameterException.class)
+    public void testFailAckQuorumSizeGreaterThanWriteQuorumSize() throws Exception {
+<span class="nc" id="L122">        result(newCreateLedgerOp()</span>
+<span class="nc" id="L123">            .withEnsembleSize(1)</span>
+<span class="nc" id="L124">            .withWriteQuorumSize(1)</span>
+<span class="nc" id="L125">            .withAckQuorumSize(2)</span>
+<span class="nc" id="L126">            .withPassword(password)</span>
+<span class="nc" id="L127">            .execute());</span>
+<span class="nc" id="L128">    }</span>
+
+    @Test(expected = BKIncorrectParameterException.class)
+    public void testFailNoPassword() throws Exception {
+<span class="nc" id="L132">        result(newCreateLedgerOp()</span>
+<span class="nc" id="L133">            .execute());</span>
+<span class="nc" id="L134">    }</span>
+
+    @Test(expected = BKIncorrectParameterException.class)
+    public void testFailPasswordNull() throws Exception {
+<span class="nc" id="L138">        result(newCreateLedgerOp()</span>
+<span class="nc" id="L139">            .withPassword(null)</span>
+<span class="nc" id="L140">            .execute());</span>
+<span class="nc" id="L141">    }</span>
+
+    @Test(expected = BKIncorrectParameterException.class)
+    public void testFailCustomMetadataNull() throws Exception {
+<span class="nc" id="L145">        result(newCreateLedgerOp()</span>
+<span class="nc" id="L146">            .withCustomMetadata(null)</span>
+<span class="nc" id="L147">            .withPassword(password)</span>
+<span class="nc" id="L148">            .execute());</span>
+<span class="nc" id="L149">    }</span>
+
+    @Test(expected = BKIncorrectParameterException.class)
+    public void testFailDigestTypeNullAndAutodetectionTrue() throws Exception {
+<span class="nc" id="L153">        ClientConfiguration config = new ClientConfiguration();</span>
+<span class="nc" id="L154">        config.setEnableDigestTypeAutodetection(true);</span>
+<span class="nc" id="L155">        setBookKeeperConfig(config);</span>
+<span class="nc" id="L156">        result(newCreateLedgerOp()</span>
+<span class="nc" id="L157">            .withDigestType(null)</span>
+<span class="nc" id="L158">            .withPassword(password)</span>
+<span class="nc" id="L159">            .execute());</span>
+<span class="nc" id="L160">    }</span>
+
+    @Test(expected = BKIncorrectParameterException.class)
+    public void testFailDigestTypeNullAndAutodetectionFalse() throws Exception {
+<span class="nc" id="L164">        ClientConfiguration config = new ClientConfiguration();</span>
+<span class="nc" id="L165">        config.setEnableDigestTypeAutodetection(false);</span>
+<span class="nc" id="L166">        setBookKeeperConfig(config);</span>
+<span class="nc" id="L167">        result(newCreateLedgerOp()</span>
+<span class="nc" id="L168">            .withDigestType(null)</span>
+<span class="nc" id="L169">            .withPassword(password)</span>
+<span class="nc" id="L170">            .execute());</span>
+<span class="nc" id="L171">        fail(&quot;shoud not be able to create a ledger with such specs&quot;);</span>
+<span class="nc" id="L172">    }</span>
+
+    @Test(expected = BKClientClosedException.class)
+    public void testFailDigestTypeNullAndBookkKeeperClosed() throws Exception {
+<span class="nc" id="L176">        closeBookkeeper();</span>
+<span class="nc" id="L177">        result(newCreateLedgerOp()</span>
+<span class="nc" id="L178">            .withPassword(password)</span>
+<span class="nc" id="L179">            .execute());</span>
+<span class="nc" id="L180">        fail(&quot;shoud not be able to create a ledger, client is closed&quot;);</span>
+<span class="nc" id="L181">    }</span>
+
+    @Test
+    public void testCreateAdvLedger() throws Exception {
+<span class="nc" id="L185">        setNewGeneratedLedgerId(ledgerId);</span>
+<span class="nc" id="L186">        WriteAdvHandle writer = newCreateLedgerOp()</span>
+<span class="nc" id="L187">            .withAckQuorumSize(ackQuorumSize)</span>
+<span class="nc" id="L188">            .withEnsembleSize(ensembleSize)</span>
+<span class="nc" id="L189">            .withPassword(password)</span>
+<span class="nc" id="L190">            .withWriteQuorumSize(writeQuorumSize)</span>
+<span class="nc" id="L191">            .withCustomMetadata(customMetadata)</span>
+<span class="nc" id="L192">            .makeAdv()</span>
+<span class="nc" id="L193">            .execute()</span>
+<span class="nc" id="L194">            .get();</span>
+<span class="nc" id="L195">        assertEquals(ledgerId, writer.getId());</span>
+<span class="nc" id="L196">        LedgerMetadata metadata = getLedgerMetadata(ledgerId);</span>
+<span class="nc" id="L197">        assertEquals(ensembleSize, metadata.getEnsembleSize());</span>
+<span class="nc" id="L198">        assertEquals(ackQuorumSize, metadata.getAckQuorumSize());</span>
+<span class="nc" id="L199">        assertEquals(writeQuorumSize, metadata.getWriteQuorumSize());</span>
+<span class="nc" id="L200">        assertArrayEquals(password, metadata.getPassword());</span>
+<span class="nc" id="L201">    }</span>
+
+    @Test
+    public void testDefaultWriteFlagsEmpty() throws Exception {
+<span class="nc" id="L205">        setNewGeneratedLedgerId(ledgerId);</span>
+<span class="nc" id="L206">        WriteHandle writer = newCreateLedgerOp()</span>
+<span class="nc" id="L207">            .withAckQuorumSize(ackQuorumSize)</span>
+<span class="nc" id="L208">            .withEnsembleSize(ensembleSize)</span>
+<span class="nc" id="L209">            .withPassword(password)</span>
+<span class="nc" id="L210">            .withWriteQuorumSize(writeQuorumSize)</span>
+<span class="nc" id="L211">            .withCustomMetadata(customMetadata)</span>
+<span class="nc" id="L212">            .execute()</span>
+<span class="nc" id="L213">            .get();</span>
+<span class="nc" id="L214">        assertEquals(ledgerId, writer.getId());</span>
+<span class="nc" id="L215">        LedgerMetadata metadata = getLedgerMetadata(ledgerId);</span>
+<span class="nc" id="L216">        assertEquals(ensembleSize, metadata.getEnsembleSize());</span>
+<span class="nc" id="L217">        assertEquals(ackQuorumSize, metadata.getAckQuorumSize());</span>
+<span class="nc" id="L218">        assertEquals(writeQuorumSize, metadata.getWriteQuorumSize());</span>
+<span class="nc" id="L219">        assertArrayEquals(password, metadata.getPassword());</span>
+<span class="nc" id="L220">        LedgerHandle lh = (LedgerHandle) writer;</span>
+<span class="nc" id="L221">        assertEquals(WriteFlag.NONE, lh.getWriteFlags());</span>
+<span class="nc" id="L222">    }</span>
+
+    @Test
+    public void testCreateAdvLedgerWriteFlags() throws Exception {
+<span class="nc" id="L226">        setNewGeneratedLedgerId(ledgerId);</span>
+<span class="nc" id="L227">        WriteAdvHandle writer = newCreateLedgerOp()</span>
+<span class="nc" id="L228">            .withWriteFlags(writeFlagsDeferredSync)</span>
+<span class="nc" id="L229">            .withAckQuorumSize(ackQuorumSize)</span>
+<span class="nc" id="L230">            .withEnsembleSize(ensembleSize)</span>
+<span class="nc" id="L231">            .withPassword(password)</span>
+<span class="nc" id="L232">            .withWriteQuorumSize(writeQuorumSize)</span>
+<span class="nc" id="L233">            .withCustomMetadata(customMetadata)</span>
+<span class="nc" id="L234">            .makeAdv()</span>
+<span class="nc" id="L235">            .execute()</span>
+<span class="nc" id="L236">            .get();</span>
+<span class="nc" id="L237">        assertEquals(ledgerId, writer.getId());</span>
+<span class="nc" id="L238">        LedgerMetadata metadata = getLedgerMetadata(ledgerId);</span>
+<span class="nc" id="L239">        assertEquals(ensembleSize, metadata.getEnsembleSize());</span>
+<span class="nc" id="L240">        assertEquals(ackQuorumSize, metadata.getAckQuorumSize());</span>
+<span class="nc" id="L241">        assertEquals(writeQuorumSize, metadata.getWriteQuorumSize());</span>
+<span class="nc" id="L242">        assertArrayEquals(password, metadata.getPassword());</span>
+<span class="nc" id="L243">        LedgerHandle lh = (LedgerHandle) writer;</span>
+<span class="nc" id="L244">        assertEquals(writeFlagsDeferredSync, lh.getWriteFlags());</span>
+<span class="nc" id="L245">    }</span>
+
+    @Test
+    public void testCreateLedgerWriteFlags() throws Exception {
+<span class="nc" id="L249">        setNewGeneratedLedgerId(ledgerId);</span>
+<span class="nc" id="L250">        WriteHandle writer = newCreateLedgerOp()</span>
+<span class="nc" id="L251">            .withWriteFlags(writeFlagsDeferredSync)</span>
+<span class="nc" id="L252">            .withAckQuorumSize(ackQuorumSize)</span>
+<span class="nc" id="L253">            .withEnsembleSize(ensembleSize)</span>
+<span class="nc" id="L254">            .withPassword(password)</span>
+<span class="nc" id="L255">            .withWriteQuorumSize(writeQuorumSize)</span>
+<span class="nc" id="L256">            .withCustomMetadata(customMetadata)</span>
+<span class="nc" id="L257">            .execute()</span>
+<span class="nc" id="L258">            .get();</span>
+<span class="nc" id="L259">        assertEquals(ledgerId, writer.getId());</span>
+<span class="nc" id="L260">        LedgerMetadata metadata = getLedgerMetadata(ledgerId);</span>
+<span class="nc" id="L261">        assertEquals(ensembleSize, metadata.getEnsembleSize());</span>
+<span class="nc" id="L262">        assertEquals(ackQuorumSize, metadata.getAckQuorumSize());</span>
+<span class="nc" id="L263">        assertEquals(writeQuorumSize, metadata.getWriteQuorumSize());</span>
+<span class="nc" id="L264">        assertArrayEquals(password, metadata.getPassword());</span>
+<span class="nc" id="L265">        LedgerHandle lh = (LedgerHandle) writer;</span>
+<span class="nc" id="L266">        assertEquals(writeFlagsDeferredSync, lh.getWriteFlags());</span>
+<span class="nc" id="L267">    }</span>
+
+    @Test
+    public void testCreateLedgerWriteFlagsVarargs() throws Exception {
+<span class="nc" id="L271">        setNewGeneratedLedgerId(ledgerId);</span>
+<span class="nc" id="L272">        WriteHandle writer = newCreateLedgerOp()</span>
+<span class="nc" id="L273">            .withWriteFlags(DEFERRED_SYNC)</span>
+<span class="nc" id="L274">            .withAckQuorumSize(ackQuorumSize)</span>
+<span class="nc" id="L275">            .withEnsembleSize(ensembleSize)</span>
+<span class="nc" id="L276">            .withPassword(password)</span>
+<span class="nc" id="L277">            .withWriteQuorumSize(writeQuorumSize)</span>
+<span class="nc" id="L278">            .withCustomMetadata(customMetadata)</span>
+<span class="nc" id="L279">            .execute()</span>
+<span class="nc" id="L280">            .get();</span>
+<span class="nc" id="L281">        assertEquals(ledgerId, writer.getId());</span>
+<span class="nc" id="L282">        LedgerMetadata metadata = getLedgerMetadata(ledgerId);</span>
+<span class="nc" id="L283">        assertEquals(ensembleSize, metadata.getEnsembleSize());</span>
+<span class="nc" id="L284">        assertEquals(ackQuorumSize, metadata.getAckQuorumSize());</span>
+<span class="nc" id="L285">        assertEquals(writeQuorumSize, metadata.getWriteQuorumSize());</span>
+<span class="nc" id="L286">        assertArrayEquals(password, metadata.getPassword());</span>
+<span class="nc" id="L287">        LedgerHandle lh = (LedgerHandle) writer;</span>
+<span class="nc" id="L288">        assertEquals(writeFlagsDeferredSync, lh.getWriteFlags());</span>
+<span class="nc" id="L289">    }</span>
+
+    @Test(expected = BKIncorrectParameterException.class)
+    public void testFailCreateAdvLedgerBadFixedLedgerIdMinus1() throws Exception {
+<span class="nc" id="L293">        result(newCreateLedgerOp()</span>
+<span class="nc" id="L294">            .withPassword(password)</span>
+<span class="nc" id="L295">            .makeAdv()</span>
+<span class="nc" id="L296">            .withLedgerId(-1)</span>
+<span class="nc" id="L297">            .execute());</span>
+<span class="nc" id="L298">    }</span>
+
+    @Test(expected = BKIncorrectParameterException.class)
+    public void testFailCreateAdvLedgerBadFixedLedgerIdNegative() throws Exception {
+<span class="nc" id="L302">        result(newCreateLedgerOp()</span>
+<span class="nc" id="L303">            .withPassword(password)</span>
+<span class="nc" id="L304">            .makeAdv()</span>
+<span class="nc" id="L305">            .withLedgerId(-2)</span>
+<span class="nc" id="L306">            .execute());</span>
+<span class="nc" id="L307">        fail(&quot;shoud not be able to create a ledger with such specs&quot;);</span>
+<span class="nc" id="L308">    }</span>
+
+    @Test(expected = BKNoSuchLedgerExistsOnMetadataServerException.class)
+    public void testOpenLedgerNoId() throws Exception {
+<span class="nc" id="L312">        result(newOpenLedgerOp().execute());</span>
+<span class="nc" id="L313">    }</span>
+
+    @Test(expected = BKNoSuchLedgerExistsOnMetadataServerException.class)
+    public void testOpenLedgerBadId() throws Exception {
+<span class="nc" id="L317">        result(newOpenLedgerOp()</span>
+<span class="nc" id="L318">            .withPassword(password)</span>
+<span class="nc" id="L319">            .withLedgerId(ledgerId)</span>
+<span class="nc" id="L320">            .execute());</span>
+<span class="nc" id="L321">    }</span>
+
+    @Test(expected = BKClientClosedException.class)
+    public void testOpenLedgerClientClosed() throws Exception {
+<span class="nc" id="L325">        closeBookkeeper();</span>
+<span class="nc" id="L326">        result(newOpenLedgerOp()</span>
+<span class="nc" id="L327">            .withPassword(password)</span>
+<span class="nc" id="L328">            .withLedgerId(ledgerId)</span>
+<span class="nc" id="L329">            .execute());</span>
+<span class="nc" id="L330">    }</span>
+
+    @Test
+    public void testOpenLedgerNoRecovery() throws Exception {
+<span class="nc" id="L334">        LedgerMetadata ledgerMetadata = generateLedgerMetadata(ensembleSize,</span>
+            writeQuorumSize, ackQuorumSize, password, customMetadata);
+<span class="nc" id="L336">        registerMockLedgerMetadata(ledgerId, ledgerMetadata);</span>
+
+<span class="nc" id="L338">        ledgerMetadata.getAllEnsembles().values().forEach(bookieAddressList -&gt; {</span>
+<span class="nc" id="L339">            bookieAddressList.forEach(bookieAddress -&gt; {</span>
+<span class="nc" id="L340">                    registerMockEntryForRead(ledgerId, BookieProtocol.LAST_ADD_CONFIRMED, bookieAddress, entryData, -1);</span>
+<span class="nc" id="L341">                    registerMockEntryForRead(ledgerId, 0, bookieAddress, entryData, -1);</span>
+<span class="nc" id="L342">            });</span>
+<span class="nc" id="L343">        });</span>
+
+<span class="nc" id="L345">        result(newOpenLedgerOp()</span>
+<span class="nc" id="L346">            .withPassword(ledgerMetadata.getPassword())</span>
+<span class="nc" id="L347">            .withDigestType(DigestType.CRC32)</span>
+<span class="nc" id="L348">            .withLedgerId(ledgerId)</span>
+<span class="nc" id="L349">            .withRecovery(false)</span>
+<span class="nc" id="L350">            .execute());</span>
+<span class="nc" id="L351">    }</span>
+
+    @Test
+    public void testOpenLedgerRecovery() throws Exception {
+<span class="nc" id="L355">        LedgerMetadata ledgerMetadata = generateLedgerMetadata(ensembleSize,</span>
+            writeQuorumSize, ackQuorumSize, password, customMetadata);
+<span class="nc" id="L357">        registerMockLedgerMetadata(ledgerId, ledgerMetadata);</span>
+
+<span class="nc" id="L359">        ledgerMetadata.getAllEnsembles().values().forEach(bookieAddressList -&gt; {</span>
+<span class="nc" id="L360">            bookieAddressList.forEach(bookieAddress -&gt; {</span>
+<span class="nc" id="L361">                registerMockEntryForRead(ledgerId, BookieProtocol.LAST_ADD_CONFIRMED, bookieAddress, entryData, -1);</span>
+<span class="nc" id="L362">                registerMockEntryForRead(ledgerId, 0, bookieAddress, entryData, -1);</span>
+<span class="nc" id="L363">            });</span>
+<span class="nc" id="L364">        });</span>
+<span class="nc" id="L365">        result(newOpenLedgerOp()</span>
+<span class="nc" id="L366">            .withPassword(ledgerMetadata.getPassword())</span>
+<span class="nc" id="L367">            .withDigestType(DigestType.CRC32)</span>
+<span class="nc" id="L368">            .withLedgerId(ledgerId)</span>
+<span class="nc" id="L369">            .withRecovery(true)</span>
+<span class="nc" id="L370">            .execute());</span>
+<span class="nc" id="L371">    }</span>
+
+    @Test(expected = BKIncorrectParameterException.class)
+    public void testDeleteLedgerNoLedgerId() throws Exception {
+<span class="nc" id="L375">        result(newDeleteLedgerOp()</span>
+<span class="nc" id="L376">            .execute());</span>
+<span class="nc" id="L377">    }</span>
+
+    @Test(expected = BKIncorrectParameterException.class)
+    public void testDeleteLedgerBadLedgerId() throws Exception {
+<span class="nc" id="L381">        result(newDeleteLedgerOp()</span>
+<span class="nc" id="L382">            .withLedgerId(-1)</span>
+<span class="nc" id="L383">            .execute());</span>
+<span class="nc" id="L384">    }</span>
+
+    @Test
+    public void testDeleteLedger() throws Exception {
+<span class="nc" id="L388">        LedgerMetadata ledgerMetadata = generateLedgerMetadata(ensembleSize,</span>
+            writeQuorumSize, ackQuorumSize, password, customMetadata);
+<span class="nc" id="L390">        registerMockLedgerMetadata(ledgerId, ledgerMetadata);</span>
+
+<span class="nc" id="L392">        result(newDeleteLedgerOp()</span>
+<span class="nc" id="L393">            .withLedgerId(ledgerId)</span>
+<span class="nc" id="L394">            .execute());</span>
+<span class="nc" id="L395">    }</span>
+
+    @Test(expected = BKClientClosedException.class)
+    public void testDeleteLedgerBookKeeperClosed() throws Exception {
+<span class="nc" id="L399">        closeBookkeeper();</span>
+<span class="nc" id="L400">        result(newDeleteLedgerOp()</span>
+<span class="nc" id="L401">            .withLedgerId(ledgerId)</span>
+<span class="nc" id="L402">            .execute());</span>
+<span class="nc" id="L403">    }</span>
+
+    protected LedgerMetadata generateLedgerMetadata(int ensembleSize,
+        int writeQuorumSize, int ackQuorumSize, byte[] password,
+        Map&lt;String, byte[]&gt; customMetadata) {
+<span class="nc" id="L408">        return LedgerMetadataBuilder.create()</span>
+<span class="nc" id="L409">            .withEnsembleSize(ensembleSize)</span>
+<span class="nc" id="L410">            .withWriteQuorumSize(writeQuorumSize)</span>
+<span class="nc" id="L411">            .withAckQuorumSize(ackQuorumSize)</span>
+<span class="nc" id="L412">            .withPassword(password)</span>
+<span class="nc" id="L413">            .withDigestType(BookKeeper.DigestType.CRC32.toApiDigestType())</span>
+<span class="nc" id="L414">            .withCustomMetadata(customMetadata)</span>
+<span class="nc" id="L415">            .withCreationTime(System.currentTimeMillis())</span>
+<span class="nc" id="L416">            .newEnsembleEntry(0, generateNewEnsemble(ensembleSize)).build();</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.2.201808211720</span></div></body></html>
