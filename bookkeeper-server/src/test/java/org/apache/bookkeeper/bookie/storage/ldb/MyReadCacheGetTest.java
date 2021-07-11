@@ -57,7 +57,7 @@ public class MyReadCacheGetTest {
             cache.put(ledgerIdPut, entryIdPut, entry);
             result = cache.get(ledgerIdGet, entryIdGet).equals(entry);
         }catch (Exception e){    // se entro nell'eccezione vuol dire che ho inserito una entry del ledger = -1
-            e.printStackTrace();
+            //e.printStackTrace();
             /* entro nell'eccezione se
             --> la put non e' valida, ossia ledgerIdPut = -1
             --> sto tentando di fare una get di un qualcosa di cui prima non ho fatto la put

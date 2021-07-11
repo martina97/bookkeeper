@@ -18,13 +18,6 @@ import java.util.List;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.Assert.fail;
 
-/**
- * LedgerEntriesImpl Tester. 
- *
- * @author <Authors name> 
- * @since <pre>lug 1, 2021</pre> 
- * @version 1.0
- */
 
 @RunWith(value = Parameterized.class)
 public class MyLedgerEntriesImplGetTest {
@@ -64,7 +57,7 @@ public class MyLedgerEntriesImplGetTest {
     }
 
     @After
-    public void tearDown() throws Exception {
+    public void tearDown()  {
         ledgerEntriesImpl.close();
         try {
             ledgerEntriesImpl.getEntry(entryId);
@@ -89,115 +82,35 @@ public class MyLedgerEntriesImplGetTest {
                 {true, 1}, //true perche' entry id = 1 esiste (infatti nel setup l'indice arriva a  i = 6)
                 {false, -1},
                 {false, 7},
-
-
         });
 
     }
 
     /**
-     *
      * Method: getEntry(long entryId)
-     *
      */
     @Test
-    public void testGetEntry() throws Exception {
-//TODO: Test goes here...
+    public void getEntryTest() {
         try {
             LedgerEntry entry = ledgerEntriesImpl.getEntry(entryId);
             if (ledgerId < entryNumber || ledgerId > 0) {
                 Assert.assertEquals(entry, entryList.get((int) entryId));
             }
-        }
-        catch (IndexOutOfBoundsException e) {
-            e.printStackTrace();
+        } catch (IndexOutOfBoundsException e) {
+            //e.printStackTrace();
             if (entryId == -1) {
                 Assert.assertEquals(e.getMessage(), "required index: -1 is out of bounds: [ 0, 6 ].");
-            }
-            else {
+            } else {
                 Assert.assertEquals(e.getMessage(), "required index: 7 is out of bounds: [ 0, 6 ].");
             }
         }
-       // Assert.assertEquals();
     }
+}
 
 
 
 
 
 
-    /**
-     *
-     * Method: create(List<LedgerEntry> entries) 
-     *
-     */
-  //  @Test
-  //  public void testCreate() throws Exception {
-//TODO: Test goes here... 
-    }
 
-
-
-    /**
-     *
-     * Method: iterator() 
-     *
-     */
-  //  @Test
-   // public void testIterator() throws Exception {
-//TODO: Test goes here... 
-   // }
-
-    /**
-     *
-     * Method: close() 
-     *
-     */
-   // @Test
-    //public void testClose() throws Exception {
-//TODO: Test goes here... 
-   // }
-
-
-    /**
-     *
-     * Method: recycle() 
-     *
-     */
-   // @Test
-   // public void testRecycle() throws Exception {
-//TODO: Test goes here... 
-/* 
-try { 
-   Method method = LedgerEntriesImpl.getClass().getMethod("recycle"); 
-   method.setAccessible(true); 
-   method.invoke(<Object>, <Parameters>); 
-} catch(NoSuchMethodException e) { 
-} catch(IllegalAccessException e) { 
-} catch(InvocationTargetException e) { 
-} 
-*/
-  //  }
-
-    /**
-     *
-     * Method: releaseByteBuf() 
-     *
-     */
-    //@Test
-    //public void testReleaseByteBuf() throws Exception {
-//TODO: Test goes here... 
-/* 
-try { 
-   Method method = LedgerEntriesImpl.getClass().getMethod("releaseByteBuf"); 
-   method.setAccessible(true); 
-   method.invoke(<Object>, <Parameters>); 
-} catch(NoSuchMethodException e) { 
-} catch(IllegalAccessException e) { 
-} catch(InvocationTargetException e) { 
-} 
-*/
- //   }
-
-//}
 

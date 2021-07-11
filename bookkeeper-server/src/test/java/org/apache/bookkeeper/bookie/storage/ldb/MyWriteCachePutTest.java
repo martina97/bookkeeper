@@ -82,7 +82,7 @@ public class MyWriteCachePutTest {
             result = cache.put(ledgerId, entryId, entry);
 
         } catch (Exception e) {
-            e.printStackTrace();
+            //e.printStackTrace();
             result = false;
         }
 
