@@ -13,7 +13,7 @@ import java.util.Arrays;
 import java.util.Collection;
 
 @RunWith(value = Parameterized.class)
-public class myReadCacheGetTest {
+public class MyReadCacheGetTest {
 
     private boolean expectedResult;
     private long ledgerIdGet;
@@ -23,7 +23,7 @@ public class myReadCacheGetTest {
     private ByteBuf entry = Unpooled.wrappedBuffer(new byte[1024]);
     private ReadCache cache = null;
 
-    public myReadCacheGetTest(boolean expectedResult, long ledgerIdGet, long entryIdGet, long ledgerIdPut, long entryIdPut) {
+    public MyReadCacheGetTest(boolean expectedResult, long ledgerIdGet, long entryIdGet, long ledgerIdPut, long entryIdPut) {
         this.expectedResult = expectedResult;
         this.ledgerIdGet = ledgerIdGet;
         this.entryIdGet = entryIdGet;
@@ -36,9 +36,7 @@ public class myReadCacheGetTest {
         return Arrays.asList(new Object[][]{
 
                 {false, -1, 0, -1, 0}, //false perche' la put di -1 fallisce
-                {false, 1, 0, 0, 1}, //false perche' faccio put(1,1) e get(1,0) (anche solo uno tra ledgerID e entryID diverso porta a una get = null)
-                //{false, 0, 1 , 0, 3},
-               // {true, 1, 0, 1, 0},
+                {false, 1, 0, 0, 1}, //false perche' faccio put(1,0) e get(0,1) (anche solo uno tra ledgerID e entryID diverso porta a una get = null)
                 {true, 1, -1, 1, -1},
 
         });
@@ -52,32 +50,8 @@ public class myReadCacheGetTest {
     }
 
 
-    /*
     @Test
-    public void readCacheGetTest() {
-        boolean result;
-        ByteBuf buf = null;
-        try {
-            cache.put(ledgerIdPut, ledgerIdGet, entry);
-            result = true;
-        }catch (IllegalArgumentException e){    // se entro nell'eccezione vuol dire che ho inserito una entry del ledger = -1
-            e.printStackTrace();
-            result = false;
-        }
-        if(ledgerIdPut != ledgerIdGet) {    // cerco di fare il get di un qualcosa che non e' mai stato inserito
-            result = false;
-        }
-        else {
-            buf = cache.get(ledgerIdGet, ledgerIdPut);
-        }
-        Assert.assertEquals(result, expectedResult);
-    }
-
-     */
-
-
-    @Test
-    public void readCacheGetTest() {
+    public void getTest() {
         boolean result;
         try {
             cache.put(ledgerIdPut, entryIdPut, entry);

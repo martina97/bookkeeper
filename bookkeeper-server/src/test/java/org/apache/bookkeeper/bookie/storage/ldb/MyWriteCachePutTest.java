@@ -18,13 +18,6 @@ import java.util.Collection;
 @RunWith(Parameterized.class)
 public class MyWriteCachePutTest {
 
-    private static final ByteBufAllocator allocator = UnpooledByteBufAllocator.DEFAULT;
-    private static final int entrySize = 1024;
-    private static final int cacheCapability = 10 * 1024;
-    private static final int maxSegmentSize = 2*1024;
-
-
-
     private WriteCache cache;
     private ByteBuf entry;
 
@@ -48,7 +41,7 @@ public class MyWriteCachePutTest {
 
         return Arrays.asList(new Object[][] {
                 {false, 0, -1, null, false}, //null pointer exc
-                {false, -1, 0, UnpooledByteBufAllocator.DEFAULT.buffer(1024), false},
+                {false, -1, 1, UnpooledByteBufAllocator.DEFAULT.buffer(1024), false},
                 {true, 0, 0,  UnpooledByteBufAllocator.DEFAULT.buffer(1024), false},
                 {false, 0, 0 , UnpooledByteBufAllocator.DEFAULT.buffer(11 * 1024), false} ,  //buffer oversize
                 {false, 0, 0, UnpooledByteBufAllocator.DEFAULT.buffer(2 * 1024 + 2), true},
@@ -64,7 +57,6 @@ public class MyWriteCachePutTest {
         }
         else {
             cache = new WriteCache(UnpooledByteBufAllocator.DEFAULT, 10 * 1024, 2*1024);
-            //entry = UnpooledByteBufAllocator.DEFAULT.buffer((2*1024)+1);
         }
         if(entry != null) {
             entry.writerIndex(entry.capacity());
@@ -83,7 +75,7 @@ public class MyWriteCachePutTest {
 
 
     @Test
-    public void getTest() {
+    public void putTest() {
         boolean result;
 
         try {

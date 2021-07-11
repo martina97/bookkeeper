@@ -16,13 +16,6 @@ import java.util.*;
 @RunWith(Parameterized.class)
 public class MyWriteCacheGetTest {
 
-    private static final ByteBufAllocator allocator = UnpooledByteBufAllocator.DEFAULT;
-    private static final int entrySize = 1024;
-    private static final int cacheCapability = 10 * 1024;
-    private static final int maxSegmentSize = 2*1024;
-
-
-
     private WriteCache cache = null;
     private ByteBuf entry;
     private long ledgerIdGet;
@@ -30,7 +23,6 @@ public class MyWriteCacheGetTest {
     private long ledgerIdPut;
     private long entryIdPut;
     private boolean expectedResult;
-    private boolean isAtEnd;
 
     public MyWriteCacheGetTest(boolean expectedResult, long ledgerIdGet, long entryIdGet, long ledgerIdPut, long entryIdPut) {
         this.expectedResult = expectedResult;
@@ -45,8 +37,8 @@ public class MyWriteCacheGetTest {
 
         return Arrays.asList(new Object[][] {
                 {true, 0, 0, 0, 0}, //corretto
-                {false, -1, 0, -1, 0}, //false perche' la put di -1 fallisce
-                {false, 1, 0, 0, 1}, //false perche' faccio put(1,1) e get(1,0) (anche solo uno tra ledgerID e entryID diverso porta a una get = null)
+                {false, -1, -1, -1, -1}, //false perche' la put di -1 fallisce
+                {false, 1, 0, 0, 1}, //false perche' faccio put(1,0) e get(0,1) (anche solo uno tra ledgerID e entryID diverso porta a una get = null)
 
         });
     }
