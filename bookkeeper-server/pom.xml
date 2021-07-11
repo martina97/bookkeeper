@@ -170,6 +170,12 @@
       <version>${project.parent.version}</version>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.pitest</groupId>
+      <artifactId>pitest-maven</artifactId>
+      <version>1.5.1</version>
+      <type>maven-plugin</type>
+    </dependency>
   </dependencies>
   <build>
     <plugins>
@@ -214,6 +220,7 @@
         <groupId>com.github.spotbugs</groupId>
         <artifactId>spotbugs-maven-plugin</artifactId>
       </plugin>
+
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
@@ -251,6 +258,38 @@
           </execution>
         </executions>
       </plugin>
+      <!-- PIT plugin -->
+      <plugin>
+        <groupId>org.pitest</groupId>
+        <artifactId>pitest-maven</artifactId>
+        <version>1.5.1</version>
+        <configuration>
+          <maxMutationsPerClass>25</maxMutationsPerClass>
+          <targetClasses>
+
+            <param>org.apache.bookkeeper.bookie.storage.ldb.ReadCache</param>
+            <param>org.apache.bookkeeper.bookie.storage.ldb.WriteCache</param>
+            <param>org.apache.bookkeeper.client.impl.LedgerEntriesImpl</param>
+            <param>org.apache.bookkeeper.client.BookKeeper</param>
+
+          </targetClasses>
+          <targetTests>
+
+            <param>org.apache.bookkeeper.bookie.storage.ldb.MyReadCacheGetTest</param>
+            <param>org.apache.bookkeeper.bookie.storage.ldb.MyWriteCacheGetTest</param>
+            <param>org.apache.bookkeeper.bookie.storage.ldb.MyWriteCachePutTest</param>
+            <param>org.apache.bookkeeper.client.impl.MyLedgerEntriesImplCreateTest</param>
+            <param>org.apache.bookkeeper.client.impl.MyLedgerEntriesImplGetTest</param>
+            <param>org.apache.bookkeeper.client.MyBookkeeperOpenLedgerTest</param>
+
+          </targetTests>
+        </configuration>
+      </plugin>
+
+
+
+
+
     </plugins>
   </build>
   <profiles>
